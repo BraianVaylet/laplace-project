@@ -1,15 +1,15 @@
-# [LAPLACE - Dashboard For Super Admin] — Spec
+# [LAPLACE - Dashboard For Suscriptor Managers] — Spec
 
 ## 1. Resumen
 
-El DFSA (Dashboard for Super Admin) es un dashboard de gestion para el proyecto Laplace, sera utilizado por el creador del proyecto desde el cual podra gestionar el negocio.
+El DFSM (Dashboard for Suscriptor Managers) es un dashboard de gestion para los suscriptores, sera utilizado por el suscriptor que contrata el servicio y le servira para gestionar su centro deportivo.
 
 ## 2. Objetivo / Éxito
 
-- [ ] Criterio 1: Debe poder iniciar sesion dentro del Dashboard for Super Admin, debe poder cambiar la contraseña en caso de olvidarla.
-- [ ] Criterio 2: Debe poder gestionar las suscripciones. Cambiar el nombre de los packs, los precios y el acceso a los modulos.
-- [ ] Criterio 3: Debe poder gestionar los suscriptores, dar de alta, baja y editar sus datos.
-- [ ] Criterio 4: Debe poder gestionar las notificaciones, poder notificar a los suscriptores sobre determinados cambios en la plataforma.
+- [ ] Criterio 1: Debe poder iniciar sesion dentro del Dashboard como Admin o como Suscriptor Manager, debe poder cambiar la contraseña en caso de olvidarla via email.
+- [ ] Criterio 2: Debe poder gestionar los usuarios administradores (instructores o administradores de la cuenta), dar alta, baja y modificacion de usuarios administradores.
+- [ ] Criterio 3: Debe poder gestionar sus Salas (en caso de que el administrador tenga mas de un centro deportivo en el cual usar la plataforma), dar de alta, baja y editar sus salas.
+- [ ] Criterio 4: Debe poder gestionar sus clientes (los usuarios), 
 - [ ] Criterio 5: Debe poder acceder a estadisticas, cantidad de suscriptores, ingresos, gastos, uso, etc.
 - [ ] Criterio 6: Debe poder acceder a un panel de logs en caso de que algun aplicativo falle y sea un error mapeado y logueado en el codigo.
 
@@ -59,13 +59,12 @@ El Modulo de Suscriptores debe contar con:
 - Listado de suscriptores en formato tabla
 - CRUD para suscriptores (alta, baja y modificacion)
 
+El Modulo Ingresos no se desarrolla en esta etapa.
+
 EL Modulo Planes debe contar con:
 - Informacion de cada uno de los 3 planes. Posibilidad de editarlos
 - CRUD para crear nuevos planes personalizados.
 
-El Modulo Ingresos no se desarrolla en esta etapa.
-El Modulo Logs no se desarrolla en esta etapa.
-El Modulo de Notificaciones no se desarrolla en esta etapa.
 
 ## 8. Casos borde
 
