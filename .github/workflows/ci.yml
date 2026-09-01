@@ -72,3 +72,48 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm audit --audit-level=high
+
+  # Despliegue a staging: solo desde `main` y solo si el CI paso entero.
+  # Requiere el secreto RAILWAY_TOKEN en el repositorio.
+  deploy-staging:
+    name: deploy a staging
+    needs: [verify, audit]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Las migraciones van ANTES del deploy y desde un solo lugar: si las
+      # corriera el arranque del proceso, dos instancias las correrian a la vez.
+      - name: Migraciones
+        run: pnpm exec migrate-mongo up
+        env:
+          MONGODB_URI: ${{ secrets.STAGING_MONGODB_URI }}
+          MONGODB_DB_NAME: ${{ secrets.STAGING_MONGODB_DB_NAME }}
+
+      - name: Desplegar servicios
+        run: |
+          npm i -g @railway/cli
+          for service in laplace-api laplace-dfsa laplace-dfsm laplace-wafm laplace-landing; do
+            railway up --service "$service" --environment staging --ci
+          done
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Smoke contra staging
+        run: |
+          # `/ready` y no `/health`: verifica que ademas haya conexion a Mongo.
+          curl --fail --retry 10 --retry-delay 6 --retry-all-errors "${{ vars.STAGING_API_URL }}/ready"
+          curl --fail --retry 5 --retry-delay 3 "${{ vars.STAGING_LANDING_URL }}/"
