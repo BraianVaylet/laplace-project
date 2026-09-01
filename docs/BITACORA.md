@@ -23,6 +23,41 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-10: migraciones e índices obligatorios
+
+- **Módulo:** `infra`
+- **Tipo:** infra
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/yQOG1Nw9 (F0-10)
+- **Qué cambió:** los índices de §5.2.3 se crean por migración versionada y reversible, nunca a mano
+  en Atlas. Se agregan también los de la infraestructura de Fase 0 (`loginAttempt`, `jobLock`,
+  `jobRun`) y los TTL de retención. Hay un archivo con los nombres canónicos de colección para que
+  modelos y migraciones no se desincronicen.
+- **Por qué:** §6 lo exige, y un índice mal puesto no se nota hasta que la colección crece — momento
+  en el que ya es tarde y caro.
+- **Impacto:** 40 índices sobre 25 colecciones. El único de `bookings` sobre
+  `{ tenantId, sessionId, memberId }` y el de `payments` sobre `{ tenantId, idempotencyKey }` son
+  los que sostienen la no-sobreventa y la idempotencia de los webhooks.
+- **Decisiones que vale la pena registrar:**
+  - 🔴 **Los únicos compuestos son PARCIALES, no sparse.** Escribir el test destapó un error real:
+    en un índice compuesto, `sparse` solo omite el documento si faltan **todos** los campos
+    indexados. Como `tenantId` siempre está, un socio sin DNI igual se indexaba con `docId: null`, y
+    el segundo socio sin DNI chocaba contra el primero. Con `partialFilterExpression:
+{ docId: { $type: 'string' } }` el índice solo mira a los que efectivamente cargaron documento.
+    Lo mismo para `idempotencyKey`, donde el caso "pago manual sin clave" es el más común de todos.
+    Sin esto, el segundo cobro en efectivo del día habría fallado.
+  - **El único de `publicId` sí es sparse** y alcanza, porque es de un solo campo.
+  - **`tenantId` va primero en todo índice compuesto de negocio**, y hay un test que lo recorre y lo
+    verifica índice por índice. Si va segundo, Mongo no puede acotar por tenant con el índice y
+    termina leyendo documentos de otros centros para después descartarlos.
+  - **Los índices se declaran como datos, no como llamadas sueltas.** Eso permite que el test los
+    recorra y verifique que cada uno existe de verdad en Mongo, con sus llaves y su unicidad.
+  - **`down` no borra datos y se puede correr dos veces.** Revertir un índice no puede costar
+    información, y `dropIndex` sobre un índice que no existe tira error.
+  - **Los nombres de colección viven en un solo archivo**, con un test que verifica que la migración
+    y el código digan lo mismo. Un índice creado sobre `classsessions` mientras el modelo escribe en
+    `classSessions` no protege nada y no da ningún síntoma.
+
 ## 2026-09-01 — F0-09: OpenAPI generado desde los schemas Zod
 
 - **Módulo:** `infra`
