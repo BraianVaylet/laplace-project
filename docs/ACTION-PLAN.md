@@ -17,7 +17,7 @@
 
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |     12 |
+| Fase 0 — Fundaciones    |       16 |           89 |     13 |
 | Fase 1 — MVP vendible   |       32 |          186 |      0 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
@@ -302,7 +302,7 @@ Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisione
 - **error-codes:** ninguno
 - **data-model-impact:** Todos los índices de §5.2.3.
 
-## [ ] F0-11 · Fundaciones de front
+## [x] F0-11 · Fundaciones de front
 
 - **module:** infra
 - **description:** El stack de las cuatro apps: Tanstack Query/Router/Form/Table, Zustand, Nuqs,

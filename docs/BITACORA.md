@@ -23,6 +23,50 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-11: fundaciones de front y el paquete `@laplace/client`
+
+- **Módulo:** `infra`
+- **Tipo:** feature
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/cWVGBQKo (F0-11)
+- **Qué cambió:** las cuatro apps tienen su stack: Tanstack Query/Router/Form/Table, Zustand, Nuqs,
+  Motion y Fontsource instalados, y un paquete nuevo `@laplace/client` con lo que comparten — el
+  cliente de API tipado, los defaults de Query, el catálogo i18n es-AR, los helpers de fecha y
+  dinero, y el store de UI. 72 tests, 98% de cobertura.
+- **Por qué:** sin esto, cada app resuelve por su cuenta cómo llama a la API, cómo muestra una fecha
+  y dónde guarda el Venue activo, y las cuatro lo resuelven un poco distinto.
+- **Impacto:** un paquete nuevo. ADR-003 lista `schemas · ui · types · config`; `client` es una
+  extensión de esa lista para el runtime del front. La alternativa era meterlo en `@laplace/ui`, que
+  por definición no puede tener lógica de negocio ni saber de la API.
+- **Decisiones que vale la pena registrar:**
+  - **El cliente manda un `requestId` en cada pedido y lo devuelve en el error.** Es la mitad del
+    circuito de §11.3: el backend ya lo loguea, y sin que el front lo mande y lo muestre, soporte no
+    puede encontrar nada.
+  - **El envelope de error se traduce a un error tipado en un solo lugar.** Sin eso cada pantalla
+    parsea el JSON a mano, y alguna lo parsea mal justo el día que falla algo. Si la respuesta ni
+    siquiera trae el envelope — un 502 del proxy, un HTML de error — igual sale un `ApiRequestError`
+    con código genérico: la pantalla no tiene por qué distinguir esos casos.
+  - **Un abort no es un fallo de red.** Lo pidió el propio cliente al cambiar de pantalla, así que
+    no dispara el `onError` global ni le muestra un cartel a nadie.
+  - 🔴 **Las mutaciones no se reintentan solas.** Un reintento automático puede duplicar una reserva
+    o un cobro. El reintento es decisión de quien la llama, con su `Idempotency-Key`.
+  - **Las queries no reintentan un 409 ni un 403.** La clase va a seguir llena la segunda vez y los
+    permisos no cambian por insistir: reintentar solo hace esperar al usuario para el mismo error.
+    Un 500, un 429 y un corte de red sí se reintentan.
+  - **Las fechas se calculan en la TZ del Venue y en días de calendario.** Hay un test que cruza el
+    cambio de horario de verano y muestra que contar en horas fijas da una hora distinta — lo
+    suficiente para que un pack venza el día equivocado. Es el test que §Testing.6 declara
+    obligatorio, ahora también del lado del front.
+  - **La semana arranca el lunes.** El default de `es-AR` en algunos runtimes es domingo, y una
+    agenda de gimnasio que empieza el domingo se lee mal.
+  - **La frontera de estado la aplica el lint, no la buena voluntad:** un archivo bajo `state/` no
+    puede importar `@tanstack/react-query`. Es la forma concreta en que el estado de servidor se
+    filtra a Zustand y genera dos fuentes de verdad para el mismo dato.
+  - **i18n desde el día 1 sin traer una librería de i18n.** Agregarlo después obliga a revisar cada
+    string de las cuatro apps; traer una librería completa para un solo idioma es la otra
+    exageración. Una clave que falta devuelve la clave: un texto feo se ve y se arregla, una pantalla
+    en blanco no.
+
 ## 2026-09-01 — F0-12: la librería de componentes, con la accesibilidad verificada
 
 - **Módulo:** `ui`

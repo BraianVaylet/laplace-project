@@ -64,4 +64,31 @@ export default [
       ],
     },
   },
+
+  {
+    /*
+     * La frontera de estado de §6, aplicada por lint y no por buena voluntad:
+     * **Query = servidor · Zustand = UI · Nuqs = filtros urleables.**
+     *
+     * Duplicar estado de servidor en Zustand genera bugs de sincronizacion
+     * imposibles de rastrear: dos fuentes de verdad para el mismo dato y ninguna
+     * forma de saber cual quedo vieja. La forma en que eso pasa en la practica
+     * es alguien importando Query adentro de un store, asi que se corta ahi.
+     */
+    files: ['**/state/**/*.{ts,tsx}', '**/stores/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@tanstack/react-query',
+              message:
+                'Estado de servidor va en Query, no en Zustand. Zustand es solo estado de UI (spec §6).',
+            },
+          ],
+        },
+      ],
+    },
+  },
 ];
