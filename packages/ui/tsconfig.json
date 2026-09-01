@@ -1,0 +1,7 @@
+{
+  "extends": "@laplace/config/tsconfig/react.json",
+  "compilerOptions": {
+    "types": []
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vitest.config.ts", "vitest.setup.ts"]
+}

@@ -1,0 +1,42 @@
+@import 'tailwindcss';
+
+/* Tokens de Laplace. Dark-first (spec §6): el default es dark, light se activa
+   con [data-theme='light'] o con prefers-color-scheme: light sin override. */
+@theme {
+  --color-brand-500: oklch(0.68 0.16 250);
+  --color-brand-600: oklch(0.6 0.17 250);
+  --color-brand-700: oklch(0.52 0.16 250);
+
+  --color-danger-600: oklch(0.58 0.19 25);
+  --color-danger-700: oklch(0.5 0.19 25);
+
+  --color-bg: oklch(0.17 0.01 250);
+  --color-surface-2: oklch(0.22 0.012 250);
+  --color-surface-3: oklch(0.27 0.014 250);
+  --color-fg: oklch(0.96 0.005 250);
+  --color-fg-muted: oklch(0.72 0.01 250);
+}
+
+:root[data-theme='light'] {
+  --color-bg: oklch(0.99 0.002 250);
+  --color-surface-2: oklch(0.96 0.004 250);
+  --color-surface-3: oklch(0.92 0.006 250);
+  --color-fg: oklch(0.2 0.01 250);
+  --color-fg-muted: oklch(0.45 0.01 250);
+}
+
+body {
+  background-color: var(--color-bg);
+  color: var(--color-fg);
+}
+
+/* Spec §6: prefers-reduced-motion respetado en todas las animaciones. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
