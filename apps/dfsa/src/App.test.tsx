@@ -15,7 +15,13 @@ describe('shell del DFSA', () => {
   it('estan los modulos del SAU', () => {
     render(<App />);
 
-    for (const label of ['Suscriptores', 'Planes', 'Ejercicios', 'Textos legales', 'Salud del sistema']) {
+    for (const label of [
+      'Suscriptores',
+      'Planes',
+      'Ejercicios',
+      'Textos legales',
+      'Salud del sistema',
+    ]) {
       expect(screen.getByRole('link', { name: label }), label).toBeDefined();
     }
   });

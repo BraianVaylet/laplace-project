@@ -11,7 +11,9 @@ describe('shell de la WAFM', () => {
     render(<App />);
 
     expect(screen.getByRole('banner')).toBeDefined();
-    expect(screen.getAllByRole('navigation', { name: 'Navegación principal' }).length).toBeGreaterThan(0);
+    expect(
+      screen.getAllByRole('navigation', { name: 'Navegación principal' }).length,
+    ).toBeGreaterThan(0);
   });
 
   it('la navegacion existe dos veces: bottom nav en mobile, barra superior desde 768px', () => {

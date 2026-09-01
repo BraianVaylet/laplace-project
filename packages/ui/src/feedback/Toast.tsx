@@ -100,7 +100,7 @@ export function ToastRegion({
           <button
             type="button"
             onClick={() => onDismiss(toast.id)}
-            className="text-fg-muted hover:text-fg focus-visible:focus-ring absolute top-2 right-2 size-11 rounded"
+            className="text-fg-muted hover:text-fg focus-visible:focus-ring absolute right-2 top-2 size-11 rounded"
             aria-label="Cerrar aviso"
           >
             ×

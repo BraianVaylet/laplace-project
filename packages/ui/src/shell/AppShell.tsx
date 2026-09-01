@@ -40,7 +40,12 @@ export function AppShell({
   renderLink,
 }: AppShellProps) {
   const defaultLink = (item: NavItem, className: string, active: boolean) => (
-    <a key={item.id} href={item.href} className={className} aria-current={active ? 'page' : undefined}>
+    <a
+      key={item.id}
+      href={item.href}
+      className={className}
+      aria-current={active ? 'page' : undefined}
+    >
       {item.icon ? <span aria-hidden="true">{item.icon}</span> : null}
       <span className={cn(collapsed && 'sr-only')}>{item.label}</span>
     </a>
@@ -91,7 +96,9 @@ export function AppShell({
                     item,
                     cn(
                       'focus-visible:focus-ring flex h-11 items-center gap-3 rounded-md px-3 text-sm',
-                      active ? 'bg-surface-3 text-fg font-medium' : 'text-fg-muted hover:bg-surface-2',
+                      active
+                        ? 'bg-surface-3 text-fg font-medium'
+                        : 'text-fg-muted hover:bg-surface-2',
                       collapsed && 'justify-center px-0',
                     ),
                     active,
@@ -126,7 +133,9 @@ export function ThemeToggle() {
       className="focus-visible:focus-ring hover:bg-surface-2 text-fg-muted h-11 rounded-md px-3 text-sm"
     >
       <span aria-hidden="true">{theme === 'light' ? '☀' : theme === 'dark' ? '☾' : '◐'}</span>
-      <span className="sr-only">Tema: {label[theme]}. Cambiar a {label[next[theme]]}.</span>
+      <span className="sr-only">
+        Tema: {label[theme]}. Cambiar a {label[next[theme]]}.
+      </span>
     </button>
   );
 }

@@ -14,7 +14,13 @@ interface ChoiceBaseProps extends Omit<InputHTMLAttributes<HTMLInputElement>, 't
   description?: string;
 }
 
-function Choice({ type, label, description, className, ...props }: ChoiceBaseProps & { type: 'checkbox' | 'radio' }) {
+function Choice({
+  type,
+  label,
+  description,
+  className,
+  ...props
+}: ChoiceBaseProps & { type: 'checkbox' | 'radio' }) {
   const id = useId();
   const descriptionId = description ? `${id}-description` : undefined;
 
@@ -34,7 +40,7 @@ function Choice({ type, label, description, className, ...props }: ChoiceBasePro
         )}
         {...props}
       />
-      <label htmlFor={id} className="min-h-11 cursor-pointer py-1 text-sm select-none">
+      <label htmlFor={id} className="min-h-11 cursor-pointer select-none py-1 text-sm">
         <span className="text-fg block">{label}</span>
         {description ? (
           <span id={descriptionId} className="text-fg-muted block text-sm">

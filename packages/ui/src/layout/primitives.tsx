@@ -40,10 +40,7 @@ export interface CardProps extends HTMLAttributes<HTMLDivElement> {
 
 export function Card({ title, actions, className, children, ...props }: CardProps) {
   return (
-    <section
-      className={cn('bg-surface border-border rounded-lg border p-4', className)}
-      {...props}
-    >
+    <section className={cn('bg-surface border-border rounded-lg border p-4', className)} {...props}>
       {title || actions ? (
         /*
          * Un `div`, no un `<header>`: dentro de un `<section>` el header no es

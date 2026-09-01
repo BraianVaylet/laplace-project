@@ -41,7 +41,13 @@ export {
 export { TBody, TD, TH, THead, TR, Table } from './data/Table.js';
 export { Tabs, type TabItem, type TabsProps } from './data/Tabs.js';
 
-export { Badge, Card, type BadgeProps, type BadgeTone, type CardProps } from './layout/primitives.js';
+export {
+  Badge,
+  Card,
+  type BadgeProps,
+  type BadgeTone,
+  type CardProps,
+} from './layout/primitives.js';
 
 export { ThemeProvider, resolveTheme, useTheme, type Theme } from './theme.js';
 

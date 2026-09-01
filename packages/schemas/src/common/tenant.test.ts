@@ -16,7 +16,13 @@ describe('ObjectId', () => {
   });
 
   it('rechaza lo que no lo es', () => {
-    for (const invalid of ['', 'abc', '68b5f1a2c3d4e5f6a7b8c9d', '68b5f1a2c3d4e5f6a7b8c9d00', 'zzzzzzzzzzzzzzzzzzzzzzzz']) {
+    for (const invalid of [
+      '',
+      'abc',
+      '68b5f1a2c3d4e5f6a7b8c9d',
+      '68b5f1a2c3d4e5f6a7b8c9d00',
+      'zzzzzzzzzzzzzzzzzzzzzzzz',
+    ]) {
       expect(() => objectIdSchema.parse(invalid), invalid).toThrow();
     }
   });

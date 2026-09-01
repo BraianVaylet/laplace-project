@@ -51,9 +51,7 @@ export function createEventBus(logger: Logger): DomainEventBus {
             module: 'events',
             action: event,
             errorCode: 'LP-SYS-500-004',
-            ...(context
-              ? { requestId: context.requestId, tenantId: context.tenantId }
-              : {}),
+            ...(context ? { requestId: context.requestId, tenantId: context.tenantId } : {}),
             meta: { payload },
           },
           result.reason instanceof Error ? result.reason.message : String(result.reason),

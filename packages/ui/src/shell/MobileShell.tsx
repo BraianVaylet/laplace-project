@@ -30,7 +30,12 @@ export function MobileShell({
   renderLink,
 }: MobileShellProps) {
   const defaultLink = (item: NavItem, className: string, active: boolean) => (
-    <a key={item.id} href={item.href} className={className} aria-current={active ? 'page' : undefined}>
+    <a
+      key={item.id}
+      href={item.href}
+      className={className}
+      aria-current={active ? 'page' : undefined}
+    >
       {item.icon ? <span aria-hidden="true">{item.icon}</span> : null}
       <span>{item.label}</span>
     </a>
@@ -51,7 +56,9 @@ export function MobileShell({
 
         {/* Barra superior solo desde tablet: en mobile la navegacion va abajo. */}
         <nav aria-label="Navegación principal" className="ml-4 hidden gap-1 md:flex">
-          {nav.map((item) => link(item, itemClass(item.id === activeNavId, 'top'), item.id === activeNavId))}
+          {nav.map((item) =>
+            link(item, itemClass(item.id === activeNavId, 'top'), item.id === activeNavId),
+          )}
         </nav>
 
         <div className="ml-auto flex items-center gap-2">
@@ -67,7 +74,9 @@ export function MobileShell({
         aria-label="Navegación principal"
         className="border-border bg-surface fixed inset-x-0 bottom-0 flex border-t px-2 py-1 md:hidden"
       >
-        {nav.map((item) => link(item, itemClass(item.id === activeNavId, 'bottom'), item.id === activeNavId))}
+        {nav.map((item) =>
+          link(item, itemClass(item.id === activeNavId, 'bottom'), item.id === activeNavId),
+        )}
       </nav>
     </div>
   );

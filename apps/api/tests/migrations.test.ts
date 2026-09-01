@@ -63,7 +63,11 @@ describe('creacion de indices', () => {
   });
 
   it('el tenantId va PRIMERO en todo indice compuesto de negocio (ADR-000 regla 4)', async () => {
-    const infra = new Set<string>([COLLECTIONS.loginAttempt, COLLECTIONS.jobLock, COLLECTIONS.jobRun]);
+    const infra = new Set<string>([
+      COLLECTIONS.loginAttempt,
+      COLLECTIONS.jobLock,
+      COLLECTIONS.jobRun,
+    ]);
     // El RM es del atleta, no del centro, y el ejercicio global tampoco tiene tenant.
     const notTenantScoped = new Set<string>([
       COLLECTIONS.rmRecord,
