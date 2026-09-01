@@ -23,6 +23,41 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — Traducir la spec a un backlog ejecutable y cerrar las decisiones abiertas
+
+- **Módulo:** `docs`
+- **Tipo:** decisión
+- **Commit/PR:** `528e2f0` (rama `feat/action-plan-and-phase-0`)
+- **Trello:** las 65 tarjetas de https://trello.com/b/8QrgU6Cc/laplace, lista "Sin iniciar"
+- **Qué cambió:** la spec pasa a tener un plan de acción ejecutable en `docs/ACTION-PLAN.md`: 16
+  tareas de Fase 0 y 32 de Fase 1 con el formato ampliado de §5.0 (criterios Given/When/Then,
+  ejemplo, story points, dependencias, riesgo, test plan, códigos de error e impacto en el modelo),
+  más 17 épicas para las Fases 2 a 4. Las mismas tareas quedaron cargadas en Trello. Los ADR 004 a
+  006 cierran las decisiones que faltaban y `docs/errors.md` declara los 52 códigos nuevos.
+- **Por qué:** la spec define qué construir pero no en qué orden ni con qué criterio de terminado.
+  Sin eso, cada sesión de trabajo elige su propia prioridad y las tareas arrancan sin cumplir el
+  Definition of Ready (§15): sin criterios verificables y sin códigos de error declarados. Y seis
+  tareas de Fase 1 estaban directamente bloqueadas por las decisiones abiertas de §13.2.
+- **Impacto:** ninguno sobre el modelo de datos todavía. Se agregaron 52 códigos de error
+  (`AUTH-004` a `011`, todo `ACCT`, `SUSC`, `SUBS`, `SCHD`, `MEMB`, `PROD`, `ATTD`, `CRM`, y las
+  ampliaciones de `BOOK`, `CTRT`, `BILL`, `ENTL`, `HLTH`, `NOTF`, `SYS`). La tabla "Semilla del
+  diccionario" se reemplazó por un diccionario por módulo, para que no haya dos listas que se
+  desincronicen.
+- **Decisiones cerradas (ADR-004, con las propuestas de la propia spec):** reservar con deuda
+  configurable por Venue con default `no` · trial de 14 días sin tarjeta · precios en ARS con ajuste
+  programado y aviso de 30 días · el SAU no ve datos de miembros salvo impersonación auditada · la
+  WAFM no vende hasta Fase 2 · retención de 90 días tras la baja. Queda abierta a propósito la 9
+  (nombre comercial): es de negocio y no bloquea código.
+- **Decisiones técnicas nuevas:** ADR-005 elige `vite-react-ssg` para la landing, que hoy es una SPA
+  y §5.1.4 exige SSG para rankear. ADR-006 elige cron in-process con lock en Mongo para los jobs, en
+  vez de BullMQ + Redis: sin servicio extra ni costo, con el volumen de Fase 0 y 1.
+- **Conflictos de spec resueltos por la propia spec, anotados para no re-litigarlos:** manda el
+  empaquetado de planes de §2.2.1 (no el de §2.2) · bottom nav en la WAFM mobile · modal de
+  instalación PWA máximo 1 cada 7 días · popup de actualización con escape a los 30 s.
+- **Pendiente:** todo el código de Fase 0 (F0-01 a F0-16) y de Fase 1. El corte de numeración de
+  códigos de error se corrigió sobre la marcha: el `NNN` es correlativo **por módulo**, así que los
+  códigos nuevos de `SYS` arrancan en `003`, no en `002`.
+
 ## 2026-08-31 — Unificar ESLint en un solo config de la raiz
 
 - **Módulo:** `infra`
