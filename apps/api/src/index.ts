@@ -46,7 +46,7 @@ async function main() {
     logger,
     corsOrigins: env.CORS_ORIGINS,
     auth,
-    modules: createModuleRoutes({ events, entitlements }),
+    modules: createModuleRoutes({ events, entitlements, logger }),
     lockoutGuard: createLockoutGuard({ store: createMongoLockoutStore(db as Db) }),
     openapi: {
       version: '1.0.0',

@@ -101,6 +101,14 @@ export class VenueService {
     return updated;
   }
 
+  /**
+   * ¿Existe esa sede en este tenant? Es el puerto que consume Rooms (ADR-003):
+   * la alternativa seria que Rooms importara el modelo de Venues.
+   */
+  async exists(publicId: string): Promise<boolean> {
+    return (await this.venues.findByPublicId(publicId)) !== null;
+  }
+
   /** Lo consume el guard de entitlements. Cuenta activas, no historicas. */
   countActive(): Promise<number> {
     return this.venues.countActive();

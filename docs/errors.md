@@ -126,6 +126,8 @@ se abre.
 | `LP-SCHD-422-004` | 422  | Regla de recurrencia inválida     | La repetición de la clase no es válida.                  |
 | `LP-SCHD-422-005` | 422  | La sesión ya terminó              | No se puede modificar una clase que ya pasó.             |
 | `LP-SCHD-422-006` | 422  | Transición de estado inválida     | No se puede pasar de {estado} a {destino}.               |
+| `LP-SCHD-422-007` | 422  | Cupo mayor al de la sala          | La sala admite {capacidad} personas.                     |
+| `LP-SCHD-404-008` | 404  | La sede no existe                 | No encontramos esa sede.                                 |
 
 ### BOOK — Reservas
 

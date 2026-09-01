@@ -23,6 +23,52 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F1-02: módulo Rooms y la sala que se crea sola
+
+- **Módulo:** `rooms`
+- **Tipo:** feature
+- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/ltW4BpEP (F1-02) — movida a **Completadas**
+- **Qué cambió:** el SMU administra salas por sede desde `/api/v1/rooms`, con capacidad y
+  equipamiento. Al crear una sede se crea sola la sala "Principal": el 90% de los centros tiene una
+  y no debería ver nunca el concepto (§1.1). Borrar una sala con clases programadas se bloquea y
+  ofrece archivarla.
+- **Por qué:** es de donde hereda la capacidad una clase, así que sin Rooms no hay agenda (F1-12) ni
+  reservas (F1-14).
+- **Impacto:** colección `rooms` · siete rutas nuevas en el registro de F0-05, todas con su fixture
+  de ataque · códigos nuevos `LP-SCHD-404-008` y `LP-SCHD-422-007`.
+- **Pendiente:** el contador real de sesiones futuras. Ver abajo.
+
+**Decisiones:**
+
+- **La sala por default se crea por evento, no por llamada directa.** Venues emite `venue.created`
+  y Rooms lo escucha. La alternativa era que Venues creara el modelo de Rooms, que es exactamente lo
+  que ADR-003 prohíbe. El handler es idempotente: si la sede ya tiene salas no hace nada, porque un
+  segundo "Principal" sería peor que ninguno.
+- **Un fallo de la sala automática no tumba el alta de la sede.** El bus aísla los errores de los
+  handlers a propósito. Que no se pueda dar de alta una sede porque su sala automática falló sería
+  peor que una sede sin sala, que el SMU resuelve con un click.
+- **Rooms pregunta por interfaz, no importa a Venues.** El puerto `VenueLookup` tiene un solo
+  método, `exists`. El punto de composición lo conecta con el servicio de Venues. Lo mismo con
+  `FutureSessionCounter`, que hoy contesta 0 y mañana contesta Schedule.
+- **El límite del plan no cuenta salas.** §1.1 es explícito: cuenta Venues activos. Hay un test que
+  crea cinco salas en un centro Basic justamente para que nadie "arregle" esto más adelante.
+- **El override de cupo por sesión puede bajar pero no subir.** La sala es el techo físico: 20
+  personas no entran donde entran 16, y dejarlo pasar convierte la lista de espera en una promesa
+  que no se cumple.
+- **La sede de una sala no se edita.** Mover una sala de Venue dejaría sesiones pasadas apuntando a
+  una sede donde nunca ocurrieron, y las métricas por sede quedarían mal para siempre.
+- **`DELETE` usa el permiso de archivar.** La matriz de F0-02 no tiene `delete` para Room, y el
+  borrado es lógico: vive en el mismo permiso destructivo.
+
+**Deuda declarada:** el bloqueo de borrado está implementado y testeado contra el puerto, pero hasta
+F1-12 nadie cuenta sesiones de verdad. Anotado en la tarea F1-12, que es la que lo conecta.
+
+**Verificación:** 1023 tests verdes (705 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido.
+
+---
+
 ## 2026-09-01 — F1-01: módulo Venues, la primera ruta de negocio
 
 - **Módulo:** `venues`

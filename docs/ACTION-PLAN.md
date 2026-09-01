@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |      1 |
+| Fase 1 — MVP vendible   |       32 |          186 |      2 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -523,12 +523,11 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   `LP-SCHD-422-006` (transición de estado inválida), `LP-ENTL-403-001` (límite de sedes del plan),
   `LP-SYS-404-002`, `LP-SYS-422-006`
 - **data-model-impact:** `Venue` completo de §5.2.2. Índice `{ tenantId, status }`.
-- **cerrada con una salvedad:** la Room por default **no** se crea todavía. `venue.created` ya se
-  emite; el suscriptor que crea la sala entra con F1-02, que es donde vive el módulo Rooms. Un
-  módulo no puede crear el modelo de otro (ADR-003), así que la alternativa era adelantar Rooms
-  entero acá.
+- **salvedad, ya resuelta:** la Room por default no se creaba al cerrar esta tarea porque el
+  suscriptor de `venue.created` vive en Rooms (ADR-003). Entró con F1-02 y el criterio está
+  cumplido.
 
-## [ ] F1-02 · Módulo Rooms
+## [x] F1-02 · Módulo Rooms
 
 - **module:** rooms
 - **description:** El espacio físico con capacidad y equipamiento. Es de donde hereda la capacidad
@@ -551,8 +550,13 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **risk:** low
 - **test_plan:** Integración del CRUD + aislamiento. Test de herencia de capacidad. Test del
   bloqueo de borrado con sesiones futuras.
-- **error-codes:** `LP-SCHD-409-002`
+- **error-codes:** `LP-SCHD-409-002`, `LP-SCHD-404-008` (la sede no existe), `LP-SCHD-422-006`
+  (transición de estado inválida), `LP-SCHD-422-007` (cupo mayor al de la sala)
 - **data-model-impact:** `Room` de §5.2.2. Índice `{ tenantId, venueId }`.
+- **cerrada con una deuda declarada:** el bloqueo de borrado con clases programadas está
+  implementado y testeado contra el puerto `FutureSessionCounter`, pero hasta F1-12 nadie cuenta
+  sesiones de verdad: el default responde 0. F1-12 conecta el contador real y el bloqueo empieza a
+  aplicar sin tocar Rooms.
 
 ## [ ] F1-03 · Módulo Members
 
@@ -842,6 +846,11 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **error-codes:** `LP-SCHD-422-004` (recurrencia inválida), `LP-SCHD-409-003` (sala ocupada)
 - **data-model-impact:** `ClassTemplate` y `ClassSession` de §5.2.2. Índice
   `{ tenantId, venueId, startAt }`.
+- **hereda una deuda de F1-02:** conectar el puerto `FutureSessionCounter` de Rooms con el contador
+  real de sesiones (`apps/api/src/modules/index.ts`). Hasta que se haga, el bloqueo de borrado de
+  una sala con clases programadas está escrito y testeado pero nunca se dispara, porque el default
+  responde 0. También hay que usar `resolveSessionCapacity` del dominio de Rooms para heredar el
+  cupo de la sala (§2.1.5.b).
 
 ## [ ] F1-13 · Schedule: edición, excepciones y cancelación de clase
 
