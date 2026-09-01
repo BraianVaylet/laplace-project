@@ -17,7 +17,7 @@
 
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |     11 |
+| Fase 0 — Fundaciones    |       16 |           89 |     12 |
 | Fase 1 — MVP vendible   |       32 |          186 |      0 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
@@ -332,7 +332,7 @@ Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisione
 - **error-codes:** ninguno nuevo (consume los del backend)
 - **data-model-impact:** ninguno
 
-## [ ] F0-12 · `@laplace/ui`: tokens, tema y primitivas accesibles
+## [x] F0-12 · `@laplace/ui`: tokens, tema y primitivas accesibles
 
 - **module:** ui
 - **description:** La librería de componentes cross de §6, sin lógica de negocio adentro. Tokens de

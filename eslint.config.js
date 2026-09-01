@@ -42,4 +42,26 @@ export default [
       ],
     },
   },
+
+  {
+    /*
+     * `@laplace/ui` es una libreria, no una app: co-locar un provider con su
+     * hook (`ThemeProvider` + `useTheme`) es el patron estandar de React y no
+     * hay Fast Refresh que proteger en un paquete que se consume compilado.
+     *
+     * Se permiten los nombres a proposito, uno por uno, en vez de apagar la
+     * regla: asi sigue avisando si alguien exporta algo por accidente desde un
+     * archivo de componentes.
+     */
+    files: ['packages/ui/**/*.{ts,tsx}'],
+    rules: {
+      'react-refresh/only-export-components': [
+        'error',
+        {
+          allowConstantExport: true,
+          allowExportNames: ['useTheme', 'resolveTheme', 'useToast', 'useFieldProps'],
+        },
+      ],
+    },
+  },
 ];

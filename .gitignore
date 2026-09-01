@@ -3,6 +3,7 @@ dist/
 build/
 .turbo/
 coverage/
+storybook-static/
 *.tsbuildinfo
 
 .env

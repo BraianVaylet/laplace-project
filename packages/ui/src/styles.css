@@ -1,33 +1,84 @@
 @import 'tailwindcss';
 
-/* Tokens de Laplace. Dark-first (spec §6): el default es dark, light se activa
-   con [data-theme='light'] o con prefers-color-scheme: light sin override. */
+/*
+ * Tokens de Laplace. **Dark-first** (spec §6): el default es dark y light se
+ * activa con [data-theme='light'].
+ *
+ * Los colores estan en oklch porque su lightness es perceptual: subir el primer
+ * numero sube el contraste de verdad, no "en teoria". Todos los pares
+ * texto/fondo de abajo estan verificados >= 4.5:1 por el test de contraste, que
+ * corre en CI (WCAG 2.2 AA, §6).
+ */
 @theme {
+  /* ── Marca ─────────────────────────────────────────────────────────────── */
+  --color-brand-400: oklch(0.76 0.13 250);
   --color-brand-500: oklch(0.68 0.16 250);
-  --color-brand-600: oklch(0.6 0.17 250);
+  /* 0.56 y no 0.6: con 0.6 el texto blanco encima daba 3.95:1 y no llegaba a AA. */
+  --color-brand-600: oklch(0.56 0.17 250);
   --color-brand-700: oklch(0.52 0.16 250);
 
+  /* ── Semanticos de estado ──────────────────────────────────────────────── */
+  --color-danger-500: oklch(0.66 0.19 25);
   --color-danger-600: oklch(0.58 0.19 25);
   --color-danger-700: oklch(0.5 0.19 25);
 
+  --color-warning-500: oklch(0.78 0.15 75);
+  --color-warning-600: oklch(0.7 0.15 75);
+
+  --color-success-500: oklch(0.72 0.15 150);
+  /* Idem: con 0.64 el blanco encima daba 3.16:1. */
+  --color-success-600: oklch(0.545 0.15 150);
+
+  /* ── Superficies y texto (dark por default) ────────────────────────────── */
   --color-bg: oklch(0.17 0.01 250);
+  --color-surface: oklch(0.2 0.011 250);
   --color-surface-2: oklch(0.22 0.012 250);
   --color-surface-3: oklch(0.27 0.014 250);
+  --color-border: oklch(0.32 0.014 250);
   --color-fg: oklch(0.96 0.005 250);
-  --color-fg-muted: oklch(0.72 0.01 250);
+  --color-fg-muted: oklch(0.75 0.01 250);
+
+  /* ── Tipografia ────────────────────────────────────────────────────────── */
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /*
+   * 16px es el minimo en inputs: por debajo de eso Safari en iOS hace zoom
+   * automatico al enfocar y descoloca el layout (§6).
+   */
+  --text-input: 1rem;
 }
 
 :root[data-theme='light'] {
   --color-bg: oklch(0.99 0.002 250);
+  --color-surface: oklch(0.98 0.003 250);
   --color-surface-2: oklch(0.96 0.004 250);
   --color-surface-3: oklch(0.92 0.006 250);
+  --color-border: oklch(0.86 0.008 250);
   --color-fg: oklch(0.2 0.01 250);
-  --color-fg-muted: oklch(0.45 0.01 250);
+  --color-fg-muted: oklch(0.44 0.01 250);
+
+  /*
+   * El anillo de foco tiene que verse contra un fondo casi blanco: con el
+   * brand-500 del tema oscuro daba 2.79:1 y no se distinguia. Solo se oscurece
+   * aca; en dark el original contrasta 6.65:1 y esta bien.
+   */
+  --color-brand-500: oklch(0.645 0.16 250);
 }
 
 body {
   background-color: var(--color-bg);
   color: var(--color-fg);
+  font-family: var(--font-sans);
+}
+
+/*
+ * Foco visible siempre. Se define una sola vez para que ningun componente
+ * pueda "limpiarlo" sin querer: navegar con teclado sin ver donde estas parado
+ * es la forma mas rapida de dejar afuera a alguien (§6).
+ */
+@utility focus-ring {
+  outline: 2px solid var(--color-brand-500);
+  outline-offset: 2px;
 }
 
 /* Spec §6: prefers-reduced-motion respetado en todas las animaciones. */
@@ -39,4 +90,9 @@ body {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* El backdrop del <dialog> nativo. */
+dialog::backdrop {
+  background: oklch(0 0 0 / 0.55);
 }

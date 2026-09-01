@@ -23,6 +23,53 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-12: la librería de componentes, con la accesibilidad verificada
+
+- **Módulo:** `ui`
+- **Tipo:** feature
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/QIe4bU1b (F0-12)
+- **Qué cambió:** `@laplace/ui` pasó de un botón a la librería que van a usar las cuatro apps:
+  tokens con dark/light, FormField, Input, Textarea, Select, Checkbox, Radio, RadioGroup, Dialog,
+  Toast, Table, Tabs, Skeleton, EmptyState, ErrorState, Badge, Card y el ThemeProvider. Más
+  Storybook como catálogo visual. 81 tests.
+- **Por qué:** es la base de todo lo que se vea en pantalla, y §6 pide WCAG 2.2 AA como objetivo
+  **verificable**, no como intención.
+- **Impacto:** ninguno sobre el modelo de datos. La regla de lint `react-refresh` se ajustó para
+  `packages/ui`: se permiten por nombre `useTheme`, `resolveTheme`, `useToast` y `useFieldProps`, en
+  vez de apagarla, así sigue avisando si alguien exporta algo por accidente.
+- 🔴 **El test de contraste encontró tres fallas reales en la paleta**, que es exactamente para lo
+  que se escribió:
+  - `brand-600` daba **3.95:1** con texto blanco encima, en los dos temas: el botón primario del
+    producto no llegaba a AA. Corregido a `oklch(0.56 …)`, que da 4.63:1.
+  - `success-600` daba **3.16:1** con blanco. Corregido a `oklch(0.545 …)`.
+  - El anillo de foco (`brand-500`) sobre el fondo casi blanco del tema claro daba **2.79:1** y
+    prácticamente no se veía. Se oscurece solo en light, porque en dark contrasta 6.65:1 y está bien.
+- **Decisiones que vale la pena registrar:**
+  - **El contraste se calcula, no se mide con axe.** axe necesita canvas para leer el color realmente
+    pintado y jsdom no lo implementa: ahí la regla `color-contrast` no corre y **pasa siempre**, que
+    es peor que no tenerla porque da una falsa sensación de cobertura. El test lee `styles.css`,
+    convierte oklch a sRGB lineal y aplica la fórmula de WCAG. Es exacto, es determinista, y falla si
+    alguien toca un token sin mirar el contraste.
+  - **El Dialog usa el `<dialog>` nativo.** `showModal()` da foco atrapado, cierre con Escape, fondo
+    inerte y restauración del foco — las cuatro cosas que un modal hecho a mano suele resolver mal —
+    y sin una sola dependencia. Lo único que hubo que agregar es el cierre por backdrop.
+  - **Las Tabs usan roving tabindex.** Con seis pestañas, el comportamiento ingenuo obliga a apretar
+    Tab seis veces solo para pasar de largo.
+  - **`FormField` existe porque el cableado de accesibilidad es lo que todos olvidan.** Sin
+    `aria-describedby` el lector de pantalla nunca lee el mensaje de error; sin `aria-invalid` ni
+    siquiera sabe que el campo está mal. Cada formulario que lo resuelve por su cuenta lo resuelve un
+    poco distinto, y alguno lo resuelve mal.
+  - **`EmptyState` exige la acción**, no la acepta como opcional: §6 dice que los estados vacíos con
+    acción son el 80% del onboarding percibido, y uno sin acción deja al usuario mirando una pantalla
+    que no le dice qué hacer.
+  - **El error muestra el código y el `requestId`**, en `ErrorState` y en el Toast: es lo que §5 pide
+    para que el usuario pueda pasárselos a soporte.
+  - **`system` es un tercer estado de tema real**, no un sinónimo de dark, y sigue al sistema en vivo.
+- **Pendiente:** Storybook queda como catálogo visual y no corre en CI — el rigor automático (axe y
+  contraste) vive en vitest, que es rápido y no necesita navegador. Los shells que consumen esto son
+  F0-13.
+
 ## 2026-09-01 — F0-15: gate de cobertura por criticidad
 
 - **Módulo:** `ci`
