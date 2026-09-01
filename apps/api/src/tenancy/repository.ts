@@ -125,6 +125,28 @@ export abstract class TenantRepository<TDoc extends Record<string, unknown>> {
     return created.toObject() as TDoc;
   }
 
+  /**
+   * Alta masiva. Existe porque `insertMany` sobre el modelo **no pasa por el
+   * repositorio** y por lo tanto no genera `publicId`, que es obligatorio: la
+   * importacion de un CSV de 143 socios (F1-05) tiene que entrar por aca.
+   */
+  async createMany(rows: Array<Omit<Partial<TDoc>, 'tenantId' | 'publicId'>>): Promise<number> {
+    if (rows.length === 0) return 0;
+    const { tenantId, userId } = requireTenant();
+
+    const docs = rows.map((row) => ({
+      ...row,
+      tenantId,
+      publicId: publicId(this.entity),
+      createdBy: userId,
+      updatedBy: userId,
+      deletedAt: null,
+    }));
+
+    const inserted = await this.model.insertMany(docs as unknown as TDoc[]);
+    return inserted.length;
+  }
+
   async updateByPublicId(id: string, patch: UpdateQuery<TDoc>): Promise<TDoc | null> {
     const { userId } = requireTenant();
 

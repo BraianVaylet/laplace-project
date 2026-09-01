@@ -6,13 +6,21 @@ import type { Logger } from 'pino';
 import { AUTH_BASE_PATH, type Auth } from './auth/auth.js';
 import { createAuthRoutes } from './auth/routes.js';
 import type { MiddlewareHandler } from 'hono';
+import type { OrgEnv } from './auth/organization.js';
 import type { SessionEnv } from './auth/session.js';
 import { createErrorHandler } from './http/error-handler.js';
 import { requestId } from './http/request-id.js';
 import { createOpenApiRoutes } from './openapi/routes.js';
 import { healthRoutes } from './routes/health.js';
 
-export type AppEnv = { Variables: { requestId: string } & SessionEnv['Variables'] };
+/**
+ * Todo lo que los middlewares dejan en el contexto de un pedido. Se declara
+ * junto porque una ruta puede montar cualquier combinacion de guards, y el tipo
+ * tiene que dejar componerlos sin castear.
+ */
+export type AppEnv = {
+  Variables: { requestId: string } & SessionEnv['Variables'] & OrgEnv['Variables'];
+};
 
 export interface AppDeps {
   logger: Logger;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { apiErrorSchema, errorCodeSchema } from './error.js';
+import { z } from 'zod';
+import { apiErrorSchema, apiSuccessSchema, errorCodeSchema } from './error.js';
 
 describe('errorCodeSchema', () => {
   it('acepta los codigos del diccionario de docs/errors.md', () => {
@@ -40,5 +41,37 @@ describe('apiErrorSchema', () => {
       },
     };
     expect(apiErrorSchema.safeParse(payload).success).toBe(false);
+  });
+});
+
+describe('envelope de exito', () => {
+  const memberSchema = z.object({ publicId: z.string(), firstName: z.string() });
+  const ok = apiSuccessSchema(memberSchema);
+
+  it('envuelve el dato con success: true', () => {
+    const parsed = ok.parse({ success: true, data: { publicId: 'mem_1', firstName: 'Micaela' } });
+
+    expect(parsed.success).toBe(true);
+    expect(parsed.data.firstName).toBe('Micaela');
+  });
+
+  it('rechaza un success: false: para eso esta el envelope de error', () => {
+    expect(() =>
+      ok.parse({ success: false, data: { publicId: 'mem_1', firstName: 'Micaela' } }),
+    ).toThrow();
+  });
+
+  it('valida el dato con el schema que se le pasa', () => {
+    expect(() => ok.parse({ success: true, data: { publicId: 'mem_1' } })).toThrow();
+  });
+
+  it('exito y error nunca se confunden: los discrimina el campo success', () => {
+    const errorShaped = {
+      success: false,
+      error: { code: 'LP-SYS-500-001', message: 'x', requestId: 'r', timestamp: 't' },
+    };
+
+    expect(() => ok.parse(errorShaped)).toThrow();
+    expect(apiErrorSchema.parse(errorShaped).success).toBe(false);
   });
 });

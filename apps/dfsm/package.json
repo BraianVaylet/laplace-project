@@ -9,7 +9,8 @@
     "preview": "vite preview --port 5174",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
     "@laplace/schemas": "workspace:*",
@@ -25,6 +26,7 @@
     "@types/react": "^19.0.2",
     "@types/react-dom": "^19.0.2",
     "@vitejs/plugin-react": "^4.3.4",
+    "@vitest/coverage-v8": "^4.1.11",
     "jsdom": "^25.0.1",
     "tailwindcss": "^4.0.0",
     "typescript": "^5.7.2",

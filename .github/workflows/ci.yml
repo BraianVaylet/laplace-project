@@ -39,8 +39,19 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
-      - name: Test
-        run: pnpm test
+      # Corre los tests Y aplica el gate de cobertura por criticidad (§6):
+      # 95% en permisos y plata, 85/70/50 en el resto, >=80 global.
+      - name: Test + cobertura
+        run: pnpm test:coverage
+
+      - name: Publicar reporte de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: '**/coverage/lcov.info'
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Build
         run: pnpm build

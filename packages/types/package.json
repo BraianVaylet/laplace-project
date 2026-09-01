@@ -11,10 +11,12 @@
   "scripts": {
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "test:coverage": "vitest run --coverage"
   },
   "devDependencies": {
     "@laplace/config": "workspace:*",
+    "@vitest/coverage-v8": "^4.1.11",
     "typescript": "^5.7.2",
     "vitest": "^4.0.0"
   }

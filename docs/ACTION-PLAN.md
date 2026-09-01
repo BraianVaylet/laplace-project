@@ -17,7 +17,7 @@
 
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |     10 |
+| Fase 0 — Fundaciones    |       16 |           89 |     11 |
 | Fase 1 — MVP vendible   |       32 |          186 |      0 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
@@ -420,7 +420,7 @@ Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisione
 - **error-codes:** ninguno
 - **data-model-impact:** ninguno
 
-## [ ] F0-15 · Gate de cobertura por criticidad en CI
+## [x] F0-15 · Gate de cobertura por criticidad en CI
 
 - **module:** ci
 - **description:** La estrategia de testing de §6: cobertura por zona según criticidad, no un 90%

@@ -9,7 +9,7 @@ públicos (términos, privacidad).
 
 ## Particularidades
 
-- **Trial sin tarjeta, 14 días** (spec §13.2, decisión abierta 5 — confirmar antes de implementar).
+- **Trial sin tarjeta, 14 días.** Ya no es una decisión abierta: la cierra `docs/adr/004-open-decisions.md`.
 - Precio en ARS. Formato es-AR de moneda y fecha.
 - Es la única app indexable: cuidar metadatos, Open Graph y performance de carga.
 - No consume endpoints autenticados. Lo único que postea es el alta de trial y el formulario de

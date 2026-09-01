@@ -23,6 +23,41 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-15: gate de cobertura por criticidad
+
+- **Módulo:** `ci`
+- **Tipo:** infra
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/tOXKVaOx (F0-15)
+- **Qué cambió:** `pnpm test:coverage` corre en los 8 paquetes y falla si la cobertura de una zona
+  baja de su umbral. El CI lo ejecuta en lugar de `pnpm test` y publica el `lcov` como artefacto.
+- **Por qué:** §6 lo dice sin vueltas — perseguir 90% en todo el código lleva a escribir tests
+  triviales de getters para levantar el número mientras la lógica de reserva concurrente queda sin
+  cubrir. Los umbrales van por criticidad: 95% donde hay permisos, plata y cupos.
+- **Impacto:** ninguno sobre el modelo de datos. `AppEnv` pasa a declarar también el contexto de
+  organización, porque una ruta puede montar cualquier combinación de guards y el tipo tiene que
+  dejar componerlos sin castear.
+- **Lo que encontró el gate al ponerlo** (que es exactamente para lo que sirve):
+  - 🔴 **`tenancy/middleware.ts` estaba al 0%.** Es la pieza que resuelve el `tenantId` desde la
+    sesión, la más sensible del backend, y no tenía un solo test. Ahora tiene once, incluidos los
+    que verifican que un `tenantId` en el body, en la query o en un header **se ignora**.
+  - 🔴 **`insertMany` sobre el modelo no generaba `publicId`**, que es obligatorio, así que un alta
+    masiva fallaba con un ValidationError. Importa porque F1-05 tiene que meter 143 socios de un
+    CSV. Se agregó `createMany` al repositorio, que sí lo genera.
+  - **`config/env.ts` estaba al 0%.** Es lo que impide que la API levante sin sus variables; ahora
+    hay trece tests, incluido uno que verifica que el mensaje nombra **todas** las que faltan y no
+    solo la primera.
+  - **`@laplace/schemas` estaba al 45%.** Es la fuente única de validaciones: lo que se escribe ahí
+    decide qué entra al sistema. `pagination.ts` y `tenant.ts` no tenían ningún test.
+  - `jobs/lock.ts` al 60% (faltaba `heldBy`, que es lo que va a mostrar el panel de salud del DFSA)
+    y varios caminos defensivos de los guards.
+- **Decisión sobre los umbrales:** los de rama van unos 10 puntos por debajo de los de línea, a
+  propósito. Exigir 95% de ramas obliga a testear cada `??` defensivo, que es ruido y no cobertura.
+  Lo que importa es que la línea se ejecute y que el caso de error esté probado.
+- **La verificación del gate no fue teórica:** falló cinco veces durante esta tarea, una por cada
+  hueco de arriba, y recién pasó cuando se cubrieron. Cobertura final de la API: 96% statements,
+  97% líneas, 634 tests.
+
 ## 2026-09-01 — F0-10: migraciones e índices obligatorios
 
 - **Módulo:** `infra`
