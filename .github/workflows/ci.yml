@@ -39,6 +39,12 @@ jobs:
       - name: Typecheck
         run: pnpm typecheck
 
+      # El build va ANTES de los tests a proposito: los tests de la landing
+      # verifican el HTML prerenderizado, que solo existe despues de buildear.
+      # Con el orden al reves se saltean en silencio y el SSG queda sin cubrir.
+      - name: Build
+        run: pnpm build
+
       # Corre los tests Y aplica el gate de cobertura por criticidad (§6):
       # 95% en permisos y plata, 85/70/50 en el resto, >=80 global.
       - name: Test + cobertura
@@ -52,9 +58,6 @@ jobs:
           path: '**/coverage/lcov.info'
           if-no-files-found: ignore
           retention-days: 14
-
-      - name: Build
-        run: pnpm build
 
   audit:
     name: dependencias

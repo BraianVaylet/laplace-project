@@ -23,6 +23,42 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-14: la landing pasa a HTML prerenderizado
+
+- **Módulo:** `landing`
+- **Tipo:** feature
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/3R50AoVN (F0-14)
+- **Qué cambió:** la landing dejó de ser una SPA. `pnpm build` emite tres HTML servibles —
+  `index.html`, `terminos.html`, `privacidad.html` — con el contenido, el título, la meta
+  description y las Open Graph adentro, más `sitemap.xml` y `robots.txt`.
+- **Por qué:** ADR-005. §5.1.4 lo dice sin vueltas: la landing es el canal de adquisición y una SPA
+  sin SSR no rankea. Antes servía un `<div id="root">` vacío.
+- **Impacto:** solo la landing. Las otras tres apps siguen siendo SPA, que es lo correcto: están
+  detrás de login y no hay nada que indexar.
+- **Decisiones que vale la pena registrar:**
+  - **Los tests verifican el HTML generado, no el componente.** Es la diferencia que importa: un test
+    de componente pasa igual aunque el prerender esté roto, y entonces la landing se ve bien en el
+    navegador mientras el buscador recibe una página en blanco. Hay además tests de componente, pero
+    verifican otra cosa —estructura y roles, que es lo que ve un lector de pantalla— así que no
+    duplican.
+  - 🔴 **El build corre ANTES de los tests en el CI.** Las aserciones sobre el HTML necesitan `dist/`;
+    con el orden anterior se salteaban en silencio y el SSG quedaba sin cubrir. Un test que no corre
+    y no avisa es peor que no tenerlo.
+  - **Los metadatos viven como datos, no dentro de cada página.** El sitemap se deriva de la misma
+    lista, así que no puede quedar apuntando a una página que ya no existe. Y una ruta sin SEO
+    declarado hace fallar el build en vez de publicarse sin título.
+  - **Se sacó el `<title>` estático de `index.html`.** El `<Head>` del prerender agrega el suyo, así
+    que quedaban dos en el HTML servido.
+  - **Las páginas legales no van al sitemap.** No aportan al posicionamiento y diluyen.
+  - **`react-router-dom` quedó en v6, no v7.** `vite-react-ssg@0.8` importa
+    `react-router-dom/server.js`, que existe en v6 y desapareció en v7 al fusionarse con
+    `react-router`. Con v7 el build falla en el prerender.
+- **Pendiente:** las nueve secciones completas de §5.1.4 —testimonios, imágenes de las interfaces,
+  precios reales, formulario de contacto— son F1-26, igual que el texto legal de verdad, que se sirve
+  versionado desde `LegalDocument` y no hardcodeado. Lighthouse en CI queda para cuando haya una URL
+  de staging (F0-16).
+
 ## 2026-09-01 — F0-13: los shells de las cuatro aplicaciones
 
 - **Módulo:** `infra`

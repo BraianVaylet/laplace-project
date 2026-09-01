@@ -1,13 +1,9 @@
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
-import { App } from './App.js';
+import { ViteReactSSG } from 'vite-react-ssg';
+import { routes } from './routes.js';
 import './index.css';
 
-const root = document.getElementById('root');
-if (!root) throw new Error('Falta el elemento #root en index.html');
-
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+/**
+ * Entrada de la landing. `ViteReactSSG` hidrata en el navegador y prerenderiza
+ * en el build: el mismo codigo produce HTML servible y una SPA.
+ */
+export const createRoot = ViteReactSSG({ routes });

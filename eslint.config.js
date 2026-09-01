@@ -66,6 +66,18 @@ export default [
   },
 
   {
+    // `routes` es el export que exige `vite-react-ssg` y lleva JSX adentro, asi
+    // que no puede vivir en un `.ts`. Se permite por nombre, no apagando la regla.
+    files: ['apps/landing/src/routes.tsx'],
+    rules: {
+      'react-refresh/only-export-components': [
+        'error',
+        { allowConstantExport: true, allowExportNames: ['routes'] },
+      ],
+    },
+  },
+
+  {
     /*
      * La frontera de estado de §6, aplicada por lint y no por buena voluntad:
      * **Query = servidor · Zustand = UI · Nuqs = filtros urleables.**

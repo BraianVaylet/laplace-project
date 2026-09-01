@@ -1,9 +1,33 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
+import { writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { Temporal } from '@js-temporal/polyfill';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    /**
+     * `sitemap.xml` y `robots.txt` salen del build, derivados de las mismas
+     * paginas que se prerenderizan: no pueden quedar desincronizados con lo que
+     * realmente existe (§5.1.4).
+     */
+    {
+      name: 'laplace:seo-files',
+      apply: 'build',
+      async closeBundle() {
+        const { buildRobots, buildSitemap } = await import('./src/seo.js');
+        const out = resolve(import.meta.dirname, 'dist');
+        // La fecha del sitemap en UTC: no depende de donde se corra el build.
+        const today = Temporal.Now.plainDateISO('UTC').toString();
+
+        writeFileSync(resolve(out, 'sitemap.xml'), buildSitemap(today), 'utf8');
+        writeFileSync(resolve(out, 'robots.txt'), buildRobots(), 'utf8');
+      },
+    },
+  ],
   server: { port: 5176 },
   test: {
     environment: 'jsdom',
