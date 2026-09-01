@@ -5,7 +5,11 @@ import { createApp } from './app.js';
 import { createAuth } from './auth/auth.js';
 import { createLockoutGuard, createMongoLockoutStore } from './auth/lockout-guard.js';
 import { createLoggingEmailSender } from './auth/ports.js';
+import { createEntitlementsLoader } from './entitlements/middleware.js';
+import { createOrganizationPlanReader } from './entitlements/organization-plan-reader.js';
+import { createEventBus } from './events/bus.js';
 import { createJobRunner } from './jobs/runner.js';
+import { createModuleRoutes } from './modules/index.js';
 import { loadEnv } from './config/env.js';
 import { createLogger } from './observability/logger.js';
 
@@ -35,12 +39,20 @@ async function main() {
     }),
   });
 
+  const events = createEventBus(logger);
+  const entitlements = createEntitlementsLoader(createOrganizationPlanReader(db as Db));
+
   const app = createApp({
     logger,
     corsOrigins: env.CORS_ORIGINS,
     auth,
+    modules: createModuleRoutes({ events, entitlements }),
     lockoutGuard: createLockoutGuard({ store: createMongoLockoutStore(db as Db) }),
-    openapi: { version: '1.0.0', requireAuth: env.APP_ENV === 'prod', serverUrl: env.BETTER_AUTH_URL },
+    openapi: {
+      version: '1.0.0',
+      requireAuth: env.APP_ENV === 'prod',
+      serverUrl: env.BETTER_AUTH_URL,
+    },
   });
 
   // Los jobs de §10 se registran en sus modulos; el runner solo los programa.

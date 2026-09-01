@@ -29,6 +29,12 @@ export interface AppDeps {
   auth?: Auth;
   /** Rutas extra montadas en la raiz. Lo usan los tests para sondear middlewares. */
   extraRoutes?: Hono<AppEnv>;
+  /**
+   * Las rutas de los modulos de negocio, ya compuestas (`createModuleRoutes`).
+   * Van por dependencia y no por import directo para que un test pueda montar
+   * un solo modulo sin arrastrar Mongo entero.
+   */
+  modules?: Hono<AppEnv>;
   /** Bloqueo progresivo por cuenta. Se monta solo delante del login (F0-03). */
   lockoutGuard?: MiddlewareHandler;
   /** La doc de la API. Sin esto no se monta: los tests no la necesitan. */
@@ -44,6 +50,7 @@ export function createApp({
   corsOrigins,
   auth,
   extraRoutes,
+  modules,
   lockoutGuard,
   openapi,
 }: AppDeps) {
@@ -79,9 +86,9 @@ export function createApp({
 
   app.route('/', healthRoutes);
 
-  // Spec §5.0: versionado de API con prefijo /api/v1. Sin excepciones.
-  const v1 = new Hono<AppEnv>();
-  app.route('/api/v1', v1);
+  // Spec §5.0: versionado de API con prefijo /api/v1. Sin excepciones. Cada
+  // modulo declara su path completo, asi que se montan en la raiz.
+  if (modules) app.route('/', modules);
 
   if (extraRoutes) app.route('/', extraRoutes);
 

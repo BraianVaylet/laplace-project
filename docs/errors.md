@@ -111,6 +111,7 @@ se abre.
 | `LP-ENTL-403-002` | 403  | Módulo no incluido en el plan  | El módulo {modulo} no está incluido en tu plan {plan}.           |
 | `LP-ENTL-403-003` | 403  | Feature no incluida en el plan | Esta función está disponible desde el plan {planMinimo}.         |
 | `LP-ENTL-409-004` | 409  | Downgrade bloqueado por uso    | No podés bajar a {plan}: tenés {actual} y el máximo es {limite}. |
+| `LP-ENTL-500-005` | 500  | Centro sin plan asignado       | No pudimos identificar tu centro.                                |
 
 > El `403-001` y el `409-004` siempre dicen **qué** excede y **por cuánto**. Un límite sin número
 > concreto obliga al usuario a adivinar (§2.1.22).
@@ -124,6 +125,7 @@ se abre.
 | `LP-SCHD-409-003` | 409  | Sala ocupada en ese horario       | Ya hay una clase en esa sala a esa hora.                 |
 | `LP-SCHD-422-004` | 422  | Regla de recurrencia inválida     | La repetición de la clase no es válida.                  |
 | `LP-SCHD-422-005` | 422  | La sesión ya terminó              | No se puede modificar una clase que ya pasó.             |
+| `LP-SCHD-422-006` | 422  | Transición de estado inválida     | No se puede pasar de {estado} a {destino}.               |
 
 ### BOOK — Reservas
 

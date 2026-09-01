@@ -7,6 +7,16 @@
  * con su propio repositorio, ya acotado a su tenant.
  */
 export interface DomainEvents {
+  /**
+   * Sede creada. Lo escucha Rooms para crear la sala por default: el 90% de los
+   * centros tiene una sola y no deberia tener que crearla a mano (§1.1).
+   */
+  'venue.created': {
+    venueId: string;
+    name: string;
+    timeZone: string;
+  };
+
   'booking.created': {
     bookingId: string;
     sessionId: string;

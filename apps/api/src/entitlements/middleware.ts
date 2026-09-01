@@ -41,9 +41,14 @@ export function createEntitlementsLoader(read: OrganizationPlanReader): Entitlem
 
       const source = await read(organizationId);
       if (!source) {
+        /*
+         * 500 y no 422: el pedido esta bien, la organizacion existe y la sesion
+         * es valida. Que no tenga plan es una inconsistencia nuestra, y decirle
+         * al usuario que "mando algo mal" lo manda a buscar donde no hay nada.
+         */
         throw new AppError({
-          code: 'LP-SUSC-422-001',
-          status: 422,
+          code: 'LP-ENTL-500-005',
+          status: 500,
           message: 'No pudimos identificar tu centro.',
           meta: { organizationId },
         });
