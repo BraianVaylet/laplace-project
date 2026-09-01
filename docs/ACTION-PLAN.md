@@ -442,11 +442,29 @@ Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisione
 - **error-codes:** ninguno
 - **data-model-impact:** ninguno
 
-## [ ] F0-16 · Deploy a staging con backup verificado
+## [~] F0-16 · Deploy a staging con backup verificado — **BLOQUEADA**
 
 - **module:** infra
 - **description:** El ambiente `staging` con datos sintéticos de §6, con health checks, backups
   automáticos y **el restore probado**. Un backup sin restore probado no es un backup.
+- **estado:** 🔴 **Bloqueada.** Lo que no depende de aprovisionar nada ya está hecho y commiteado:
+  los `railway.json` de los cinco servicios, el job `deploy-staging` del CI y
+  `docs/runbook-staging.md` con variables, rotación de secretos, migraciones, el procedimiento de
+  restore con su RPO/RTO y el monitoreo.
+
+  **Lo que falta necesita cuentas y gasta plata, así que lo hace el dueño de la cuenta:**
+  1. Crear el proyecto `laplace` en Railway con los cinco servicios y el ambiente `staging`.
+  2. Cluster de MongoDB Atlas **con replica set** (sin él fallan las transacciones de ADR-001), con
+     backups automáticos y PITR. Anotar la región: §9.2 restringe la transferencia internacional.
+  3. Bucket privado en Backblaze B2 con URLs firmadas de vida corta.
+  4. Cargar los secretos en Railway (`.env.example` los lista) y las variables del CI:
+     `RAILWAY_TOKEN`, `STAGING_MONGODB_URI`, `STAGING_MONGODB_DB_NAME`, `STAGING_API_URL`,
+     `STAGING_LANDING_URL`.
+  5. Correr el restore de verificación del runbook y anotar el resultado en la bitácora.
+
+  Los pasos 1 a 4 desbloquean el deploy automático; el 5 es el que convierte el backup en un
+  backup.
+
 - **acceptance-criteria:**
   - Dado un push a `main`, cuando pasa el CI, entonces se despliega a staging automáticamente.
   - Dado staging levantado, cuando se consulta `/health` y `/ready`, entonces responden 200 y el

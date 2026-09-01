@@ -23,6 +23,61 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-16: infraestructura de staging escrita, aprovisionamiento pendiente
+
+- **Módulo:** `infra`
+- **Tipo:** infra
+- **Commit/PR:** `980c6c5` (rama `feat/action-plan-and-phase-0`)
+- **Trello:** https://trello.com/c/6RAcU5Rt (F0-16) — movida a **Bloqueadas**
+- **Qué cambió:** cada app tiene su `railway.json`, el CI tiene un job `deploy-staging` que corre
+  solo desde `main` y con el pipeline en verde, y `docs/runbook-staging.md` documenta variables,
+  rotación de secretos, migraciones, el procedimiento de restore con su RPO/RTO y el monitoreo.
+- **Por qué queda bloqueada:** el resto crea recursos que cuestan plata en la cuenta del dueño y
+  necesita servicios que no se aprovisionan desde acá (MongoDB Atlas, Backblaze B2). Se consultó y
+  la decisión fue dejarlo para el dueño de la cuenta y seguir con Fase 1.
+- **Lo que falta, en orden:** crear el proyecto en Railway con los cinco servicios · cluster de Atlas
+  **con replica set**, backups y PITR · bucket privado en B2 · cargar secretos en Railway y las
+  variables del CI (`RAILWAY_TOKEN`, `STAGING_MONGODB_URI`, `STAGING_MONGODB_DB_NAME`,
+  `STAGING_API_URL`, `STAGING_LANDING_URL`) · correr el restore de verificación y anotarlo acá.
+- **Decisiones que vale la pena registrar:**
+  - **El health check apunta a `/ready`, no a `/health`.** `/health` responde 200 mientras el proceso
+    viva, aunque Mongo esté caído; un servicio que responde pero no puede leer nada no está listo
+    para recibir tráfico y Railway no debería mandárselo.
+  - **Las migraciones corren antes del deploy y desde un solo lugar.** Si las corriera el arranque
+    del proceso, dos instancias las correrían a la vez.
+  - **La rotación de secretos se documenta como solapamiento de dos claves.** Rotar
+    `BETTER_AUTH_SECRET` de golpe invalida todas las sesiones activas: en un centro, a las 7 de la
+    mañana, son cuarenta personas que no pueden hacer check-in.
+  - 🔴 **El replica set de Atlas no es opcional.** Las transacciones de la cancelación de clase
+    —cancelar reservas y devolver créditos en una sola operación— no existen sin él (ADR-001,
+    §5.2.4), y un cluster standalone hace fallar esos flujos en runtime, no en el build.
+  - **El monitoreo de uptime va afuera.** Si el servicio se cae, un monitor que vive adentro se cae
+    con él.
+
+---
+
+## 2026-09-01 — Cierre de Fase 0
+
+- **Módulo:** `infra`
+- **Tipo:** decisión
+- **Commit/PR:** 19 commits en `feat/action-plan-and-phase-0`
+- **Trello:** 15 tarjetas en Completadas, 1 en Bloqueadas
+- **Estado:** **15 de 16 tareas cerradas, 910 tests en verde**, con lint, typecheck, build y el gate
+  de cobertura por criticidad pasando en los 9 paquetes. La única pendiente es F0-16, bloqueada por
+  aprovisionamiento.
+- **Lo que quedó construido:** identidad con Better Auth y organizaciones · matriz de permisos por
+  recurso y acción, testeada celda por celda · endurecimiento del login · las tres capas de
+  aislamiento de tenant y la suite parametrizada que las verifica · bus de eventos · entitlements con
+  enforcement en el backend · runner de jobs con lock en Mongo · OpenAPI generado desde Zod ·
+  migraciones e índices · las fundaciones de front y `@laplace/client` · la librería de componentes
+  con accesibilidad verificada · los shells de las cuatro apps con la PWA · la landing prerenderizada.
+- **Lo que encontraron los tests, y que es el argumento de por qué se escribieron primero:** el
+  índice único compuesto que necesitaba ser parcial y no sparse · el `publicId` que faltaba en el alta
+  masiva · tres colores de la paleta que no llegaban a AA · el middleware de tenant al 0% de
+  cobertura · el filtro con `tenantId` ajeno que se reescribía en silencio · el hook de Mongoose en
+  `save` en vez de `validate` · el `<header>` de `Card` que producía dos banners.
+- **Pendiente para Fase 1:** las 32 tareas del MVP vendible, empezando por Venues (F1-01).
+
 ## 2026-09-01 — F0-14: la landing pasa a HTML prerenderizado
 
 - **Módulo:** `landing`
