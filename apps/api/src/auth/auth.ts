@@ -1,5 +1,7 @@
 import { betterAuth } from 'better-auth';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
+import { organization } from 'better-auth/plugins/organization';
+import { ORG_ROLES, ac } from './permissions.js';
 import type { Db } from 'mongodb';
 import type { EmailSender } from './ports.js';
 
@@ -45,6 +47,22 @@ export function createAuth({ db, secret, baseURL, trustedOrigins, emailSender }:
         await emailSender.sendVerification({ to: user.email, url, token });
       },
     },
+
+    plugins: [
+      /**
+       * Multi-tenancy sobre el plugin de organizaciones (spec §2.1.1): las
+       * organizaciones, los miembros y las invitaciones ya estan resueltos, no
+       * se reinventan. Lo propio es la matriz de permisos de `permissions.ts`.
+       *
+       * La Organization ES el tenant (ADR-000).
+       */
+      organization({
+        ac,
+        roles: ORG_ROLES,
+        /** Quien crea el centro es su SMU: dueño, sin techo. */
+        creatorRole: 'owner',
+      }),
+    ],
 
     user: { modelName: 'user' },
     session: { modelName: 'session' },

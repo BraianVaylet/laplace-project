@@ -49,6 +49,44 @@ const BY_PROVIDER_CODE: Record<string, MappedAuthError> = {
     action: 'Revisá tu casilla; si no llegó, pedí que te lo reenviemos.',
   },
 
+  // ── Plugin de organizaciones (F0-02) ────────────────────────────────────
+  NO_ACTIVE_ORGANIZATION: {
+    code: 'LP-AUTH-403-011',
+    status: 403,
+    message: 'Elegí un centro para continuar.',
+    action: 'Seleccioná el centro con el que querés operar.',
+  },
+  USER_IS_NOT_A_MEMBER_OF_THE_ORGANIZATION: {
+    code: 'LP-AUTH-403-011',
+    status: 403,
+    message: 'No pertenecés a ese centro.',
+  },
+  YOU_ARE_NOT_ALLOWED_TO_INVITE_USERS_TO_THIS_ORGANIZATION: {
+    code: 'LP-AUTH-403-002',
+    status: 403,
+    message: 'No tenés permisos para esta acción.',
+  },
+  YOU_ARE_NOT_ALLOWED_TO_UPDATE_THIS_ORGANIZATION: {
+    code: 'LP-AUTH-403-002',
+    status: 403,
+    message: 'No tenés permisos para esta acción.',
+  },
+  YOU_ARE_NOT_ALLOWED_TO_DELETE_THIS_ORGANIZATION: {
+    code: 'LP-AUTH-403-002',
+    status: 403,
+    message: 'No tenés permisos para esta acción.',
+  },
+  YOU_ARE_NOT_ALLOWED_TO_DELETE_THIS_MEMBER: {
+    code: 'LP-AUTH-403-002',
+    status: 403,
+    message: 'No tenés permisos para esta acción.',
+  },
+  YOU_ARE_NOT_ALLOWED_TO_INVITE_USER_WITH_THIS_ROLE: {
+    code: 'LP-AUTH-403-002',
+    status: 403,
+    message: 'No podés asignar ese rol.',
+  },
+
   INVALID_TOKEN: {
     code: 'LP-AUTH-422-010',
     status: 422,

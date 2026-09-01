@@ -17,7 +17,7 @@
 
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |      1 |
+| Fase 0 — Fundaciones    |       16 |           89 |      2 |
 | Fase 1 — MVP vendible   |       32 |          186 |      0 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
@@ -60,7 +60,7 @@ Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisione
 - **data-model-impact:** Colecciones de Better Auth (`user`, `session`, `account`, `verification`).
   Migración: índice único en `user.email`.
 
-## [ ] F0-02 · Multi-tenancy con el organization plugin y matriz de permisos
+## [x] F0-02 · Multi-tenancy con el organization plugin y matriz de permisos
 
 - **module:** auth
 - **description:** Un usuario pertenece a una o varias organizaciones con un rol y un set de

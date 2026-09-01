@@ -23,6 +23,44 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-02: organizaciones y matriz de permisos por recurso y acción
+
+- **Módulo:** `auth`
+- **Tipo:** feature
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/PSLTVMa4 (F0-02)
+- **Qué cambió:** un usuario ya puede pertenecer a varios centros con un rol distinto en cada uno.
+  La sesión lleva el centro activo y los permisos que valen son los de **ese** centro. Hay seis
+  roles (`owner`, `manager_assistant`, `head_coach`, `coach`, `front_desk`, `member`) definidos por
+  permiso sobre recurso y acción, no como bloques fijos, y dos guards que los aplican:
+  `requireOrganization` y `requirePermission`.
+- **Por qué:** §1.1 marca que un solo rol `staff` obliga a elegir entre dar de más (recepcionista
+  viendo ingresos) o de menos (coach que no puede tomar asistencia). Y el `organizationId` de acá es
+  el `tenantId` del que va a colgar todo el aislamiento en F0-04 (ADR-000).
+- **Impacto:** colecciones `organization`, `member` e `invitation`, creadas por el plugin. Código de
+  error nuevo en uso: `LP-AUTH-403-011`. Se sumaron al traductor de errores los códigos propios del
+  plugin de organizaciones.
+- **Decisiones que vale la pena registrar:**
+  - 🔴 **El socio del centro se llama `athlete` en la matriz de permisos, no `member`.** Better Auth
+    **reserva** `member` para la pertenencia de un usuario a la organización, y sus propios
+    endpoints chequean `member.create` para invitar staff. Si le hubiéramos puesto `member` al
+    socio, darle `member.create` a un recepcionista para que dé de alta socios le habría dado
+    también permiso para invitar usuarios staff: una escalada de privilegios silenciosa. El modelo
+    de datos sigue llamándose `Member` (§5.2.2); el nombre distinto vive solo en el statement de
+    permisos, con el comentario que lo explica.
+  - **Los permisos se testean como datos.** `src/auth/permissions.test.ts` declara la matriz
+    completa y genera un test por celda: 363 tests. Dos de ellos son de cobertura y son los que
+    hacen que la suite se rompa si alguien agrega un permiso al statement sin decidir quién puede
+    ejercerlo. Escribir la matriz ya encontró un error: tenía al `manager_assistant` con acceso a
+    facturación, y §1.1 dice "todo salvo métricas de negocio **y facturación**".
+  - **El evaluador falla cerrado.** Un rol desconocido no autoriza y no lanza. Con varios roles
+    alcanza con que uno lo permita, y se exigen todas las acciones pedidas, no una.
+  - **El reembolso es del owner**, no del mostrador: `front_desk` cobra y ve el estado de cuenta
+    para poder cobrar, pero no revierte plata.
+- **Pendiente:** los permisos por miembro (`Membership.permissions[]`, §1.1: "personalizables por
+  permiso") y el alcance por Venue son de F3-D; hoy el rol es lo único que decide. El endurecimiento
+  de auth es F0-03.
+
 ## 2026-09-01 — F0-01: identidad con Better Auth y MongoDB
 
 - **Módulo:** `auth`
