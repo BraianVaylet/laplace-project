@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `rooms`
 - **Tipo:** feature
-- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `fb06692` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/ltW4BpEP (F1-02) — movida a **Completadas**
 - **Qué cambió:** el SMU administra salas por sede desde `/api/v1/rooms`, con capacidad y
   equipamiento. Al crear una sede se crea sola la sala "Principal": el 90% de los centros tiene una
