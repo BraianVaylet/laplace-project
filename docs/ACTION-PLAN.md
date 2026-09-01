@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |      0 |
+| Fase 1 — MVP vendible   |       32 |          186 |      1 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -493,9 +493,9 @@ Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisione
 Objetivo de §12: **un box real operando y pagando**. El orden es de dependencia; el corte natural
 de revisión está al cerrar F1-16, con el corazón del producto andando de punta a punta.
 
-## [ ] F1-01 · Módulo Venues
+## [x] F1-01 · Módulo Venues
 
-- **module:** rooms
+- **module:** venues
 - **description:** La sede: unidad de negocio con dirección, marca, zona horaria, moneda, horarios
   de atención, política de reserva propia, caja y métricas independientes (§2.1.6). El límite del
   plan cuenta Venues activos, no Rooms.
@@ -519,8 +519,14 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **risk:** med
 - **test_plan:** Integración del CRUD + aislamiento de tenant. Test del límite de plan por Venue.
   Test de la Room automática. Test de cálculo de fecha en la TZ del Venue cruzando DST.
-- **error-codes:** `LP-SCHD-422-001` (política de reserva inconsistente: cierre antes que apertura)
+- **error-codes:** `LP-SCHD-422-001` (política de reserva inconsistente: cierre antes que apertura),
+  `LP-SCHD-422-006` (transición de estado inválida), `LP-ENTL-403-001` (límite de sedes del plan),
+  `LP-SYS-404-002`, `LP-SYS-422-006`
 - **data-model-impact:** `Venue` completo de §5.2.2. Índice `{ tenantId, status }`.
+- **cerrada con una salvedad:** la Room por default **no** se crea todavía. `venue.created` ya se
+  emite; el suscriptor que crea la sala entra con F1-02, que es donde vive el módulo Rooms. Un
+  módulo no puede crear el modelo de otro (ADR-003), así que la alternativa era adelantar Rooms
+  entero acá.
 
 ## [ ] F1-02 · Módulo Rooms
 
@@ -529,6 +535,9 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   una clase.
 - **acceptance-criteria:**
   - Dado un Venue, cuando se crea una Room, entonces define nombre, capacidad y equipamiento.
+  - Dado el evento `venue.created` (que F1-01 ya emite), cuando llega, entonces Rooms crea la sala
+    "Principal" de esa sede. Es el criterio de F1-01 que quedó abierto: la sala por default la
+    tiene que crear su propio módulo (ADR-003).
   - Dada una clase, cuando se programa en una Room, entonces hereda su capacidad, con posibilidad
     de sobreescribirla por sesión (§2.1.5.b).
   - Dada una Room con sesiones futuras, cuando se intenta borrar, entonces se bloquea con

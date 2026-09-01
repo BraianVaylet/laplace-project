@@ -41,6 +41,35 @@ describe('el dia del centro', () => {
   });
 });
 
+describe('el dia del centro cruzando DST', () => {
+  /*
+   * Argentina no cambia de hora desde 2009, asi que si el unico caso probado
+   * fuera el de Buenos Aires este calculo pareceria correcto para siempre. Un
+   * centro en Santiago o en Madrid lo rompe: el dia de calendario tiene que
+   * salir de la zona del Venue, nunca de restar 24 horas.
+   */
+  const SANTIAGO = { timeZone: 'America/Santiago' };
+
+  it('el dia arranca a la hora local aunque ese dia dure 23 horas', () => {
+    // 2026-09-06: Chile adelanta el reloj a medianoche; ese dia tiene 23 horas.
+    const antes = Temporal.Instant.from('2026-09-06T02:30:00Z'); // 22:30 del 05
+    const despues = Temporal.Instant.from('2026-09-06T05:00:00Z'); // 01:00 del 06
+
+    expect(venueToday(SANTIAGO, antes).toString()).toBe('2026-09-05');
+    expect(venueToday(SANTIAGO, despues).toString()).toBe('2026-09-06');
+  });
+
+  it('sumar dias de calendario no se corre una hora en el salto', () => {
+    const inicio = Temporal.ZonedDateTime.from('2026-09-05T19:00[America/Santiago]');
+
+    // Un pack a 30 dias vence a la misma hora local, no una hora antes.
+    const vence = inicio.add({ days: 30 });
+
+    expect(vence.toPlainTime().toString({ smallestUnit: 'minute' })).toBe('19:00');
+    expect(vence.toPlainDate().toString()).toBe('2026-10-05');
+  });
+});
+
 describe('horarios de atencion', () => {
   const conHorarios = {
     timeZone: BOX_TORO.timeZone,

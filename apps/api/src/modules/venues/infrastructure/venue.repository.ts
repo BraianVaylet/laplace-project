@@ -18,8 +18,4 @@ export class VenueRepository extends TenantRepository<VenueDoc> {
   async countActive(): Promise<number> {
     return this.count({ status: 'active' } as FilterQuery<VenueDoc>);
   }
-
-  async findByName(name: string): Promise<VenueDoc | null> {
-    return this.findOne({ name } as FilterQuery<VenueDoc>);
-  }
 }

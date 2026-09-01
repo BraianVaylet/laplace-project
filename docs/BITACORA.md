@@ -23,6 +23,48 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F1-01: módulo Venues, la primera ruta de negocio
+
+- **Módulo:** `venues`
+- **Tipo:** feature
+- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/vZBLxUY1 (F1-01) — movida a **Completadas**
+- **Qué cambió:** el SMU crea, edita, lista, archiva y reactiva sedes desde `/api/v1/venues`, cada
+  una con su zona horaria, moneda, horarios de atención y política de reserva propia. El límite de
+  sedes del plan se aplica de verdad: el centro Basic no puede crear la segunda.
+- **Por qué:** es la unidad de negocio de la que cuelga todo lo demás (§2.1.6) y la tarea que fija
+  el patrón `domain` / `application` / `infrastructure` para las 31 que faltan de la fase.
+- **Impacto:** colección `venues` · seis rutas nuevas en el registro de F0-05, todas con su fixture
+  de ataque · códigos nuevos `LP-SCHD-422-006` y `LP-ENTL-500-005` · umbral de cobertura nuevo para
+  `src/modules/**` (85%).
+- **Pendiente:** la Room por default. `venue.created` ya se emite; el suscriptor que crea la sala
+  entra con F1-02, que es donde vive Rooms. Adelantarlo acá habría obligado a Venues a importar el
+  modelo de otro módulo (ADR-003).
+
+**Decisiones:**
+
+- **El límite del plan se evalúa antes de escribir.** Crear y después borrar deja huecos en la
+  numeración y ruido en el historial. El contador cuenta sedes **activas**: archivar libera el cupo,
+  porque cerrar una sede no puede seguir costando plata (§2.2.1).
+- **404 y no 403 sobre el recurso de otro centro.** Un 403 confirma que el recurso existe.
+- **Dos códigos de error mal asignados, corregidos.** El Venue es del módulo `SCHD`, no de `SUSC`:
+  la transición inválida pasó a `LP-SCHD-422-006`. Y el "centro sin plan" del loader de entitlements
+  usaba `LP-SUSC-422-001` ("transición de estado inválida"), que no describe lo que pasó: ahora es
+  `LP-ENTL-500-005`, con 500 porque el pedido está bien y el problema es nuestro.
+- **La política de reserva incoherente tiene su propio código.** `validated()` aprendió a mapear
+  issues de Zod a códigos de módulo: es el único error de configuración que el SMU puede cometer en
+  esta pantalla, y merece un mensaje que diga qué arreglar en vez de un "payload inválido".
+- **El plan de un centro se lee por una interfaz, no por una consulta.** Hoy sale del `metadata` de
+  la organización de Better Auth; con F1-25 pasa a ser el documento de suscripción y nada más se
+  entera. Un plan inventado o un JSON roto caen al plan del trial, que es el más restrictivo.
+- **`pnpm format` sobre todo el repo.** 79 archivos nunca habían pasado por Prettier, y el CI corre
+  `format:check` antes que nada: hoy el pipeline habría fallado antes de compilar. Solo reformateo.
+
+**Verificación:** 979 tests verdes (678 en la API), `lint`, `typecheck`, `build` y `format:check` en
+verde, gate de cobertura por criticidad cumplido.
+
+---
+
 ## 2026-09-01 — F0-16: infraestructura de staging escrita, aprovisionamiento pendiente
 
 - **Módulo:** `infra`

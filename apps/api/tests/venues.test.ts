@@ -59,7 +59,9 @@ async function signUp(email: string): Promise<string> {
     body: JSON.stringify({ email, password: 'unaClaveLargaYSegura123', name: email.split('@')[0] }),
   });
   const raw = res.headers.get('set-cookie');
-  if (!raw) throw new Error(`el registro de ${email} no devolvio cookie`);
+  if (!raw) {
+    throw new Error(`el registro de ${email} fallo: ${res.status} ${await res.text()}`);
+  }
 
   return raw
     .split(/,(?=[^;]+?=)/)
@@ -86,10 +88,23 @@ async function createOrganization(cookie: string, name: string, slug: string): P
   return org.id;
 }
 
-/** Un centro listo para operar: usuario registrado, organizacion creada y activa. */
-async function nuevoCentro(email: string, slug: string) {
-  const cookie = await signUp(email);
-  const organizationId = await createOrganization(cookie, `Centro ${slug}`, slug);
+/**
+ * Un centro listo para operar: usuario registrado, organizacion creada y activa.
+ *
+ * El email y el slug llevan un correlativo porque los usuarios y las
+ * organizaciones no se borran entre tests: reusarlos haria fallar el alta por
+ * duplicado y el error se leeria como un bug del modulo.
+ */
+let centrosCreados = 0;
+async function nuevoCentro(nombre: string) {
+  const n = ++centrosCreados;
+  const cookie = await signUp(`${nombre}-${n}@laplace.test`);
+  const organizationId = await createOrganization(
+    cookie,
+    `Centro ${nombre} ${n}`,
+    `${nombre}-${n}`,
+  );
+
   return { cookie, organizationId };
 }
 
@@ -113,6 +128,9 @@ beforeAll(async () => {
     baseURL: 'http://localhost:3000',
     trustedOrigins: ['http://localhost:5174'],
     emailSender,
+    // El rate limit de F0-03 tiene su propia suite. Aca cada caso da de alta un
+    // centro, y con el prendido el test mediria el limite en vez del modulo.
+    rateLimitEnabled: false,
   });
 
   app = createApp({
@@ -136,7 +154,7 @@ beforeEach(async () => {
 
 describe('alta de sede', () => {
   it('crea la sede con los datos del formulario', async () => {
-    const { cookie } = await nuevoCentro('alta@laplace.test', 'alta');
+    const { cookie } = await nuevoCentro('alta');
 
     const res = await crearSede(cookie);
     const body = (await res.json()) as VenueBody;
@@ -148,7 +166,7 @@ describe('alta de sede', () => {
   });
 
   it('completa la politica de reserva con los defaults de §2.1.5.c', async () => {
-    const { cookie } = await nuevoCentro('defaults@laplace.test', 'defaults');
+    const { cookie } = await nuevoCentro('defaults');
 
     const body = (await (await crearSede(cookie)).json()) as VenueBody;
 
@@ -160,7 +178,7 @@ describe('alta de sede', () => {
   });
 
   it('rechaza una politica incoherente con LP-SCHD-422-001, no con el generico', async () => {
-    const { cookie } = await nuevoCentro('politica@laplace.test', 'politica');
+    const { cookie } = await nuevoCentro('politica');
 
     const res = await crearSede(cookie, {
       bookingPolicy: { bookingOpensMinutesBefore: 60, bookingClosesMinutesBefore: 120 },
@@ -173,7 +191,7 @@ describe('alta de sede', () => {
   });
 
   it('rechaza el resto de los datos invalidos con el codigo de payload', async () => {
-    const { cookie } = await nuevoCentro('payload@laplace.test', 'payload');
+    const { cookie } = await nuevoCentro('payload');
 
     const res = await crearSede(cookie, { timeZone: 'America/Inventada' });
     const body = (await res.json()) as ErrorBody;
@@ -196,7 +214,7 @@ describe('alta de sede', () => {
 
 describe('lectura y edicion', () => {
   it('devuelve la sede por su publicId', async () => {
-    const { cookie } = await nuevoCentro('lectura@laplace.test', 'lectura');
+    const { cookie } = await nuevoCentro('lectura');
     const creada = (await (await crearSede(cookie)).json()) as VenueBody;
 
     const res = await app.request(`/api/v1/venues/${creada.publicId}`, json(cookie));
@@ -206,7 +224,7 @@ describe('lectura y edicion', () => {
   });
 
   it('un publicId inexistente da 404 con codigo tipado', async () => {
-    const { cookie } = await nuevoCentro('inexistente@laplace.test', 'inexistente');
+    const { cookie } = await nuevoCentro('inexistente');
 
     const res = await app.request('/api/v1/venues/ven_no_existe', json(cookie));
 
@@ -215,7 +233,7 @@ describe('lectura y edicion', () => {
   });
 
   it('el PATCH cambia solo lo que le mandan', async () => {
-    const { cookie } = await nuevoCentro('patch@laplace.test', 'patch');
+    const { cookie } = await nuevoCentro('patch');
     const creada = (await (await crearSede(cookie)).json()) as VenueBody;
 
     const res = await app.request(`/api/v1/venues/${creada.publicId}`, {
@@ -232,7 +250,7 @@ describe('lectura y edicion', () => {
   });
 
   it('el listado pagina por cursor y trae solo las del centro', async () => {
-    const { cookie } = await nuevoCentro('listado@laplace.test', 'listado');
+    const { cookie } = await nuevoCentro('listado');
     planPorOrg.clear();
     await crearSede(cookie);
 
@@ -247,7 +265,7 @@ describe('lectura y edicion', () => {
 
 describe('archivar y reactivar', () => {
   it('archivar no borra: preserva el historico (§2.1.6)', async () => {
-    const { cookie } = await nuevoCentro('archivar@laplace.test', 'archivar');
+    const { cookie } = await nuevoCentro('archivar');
     const creada = (await (await crearSede(cookie)).json()) as VenueBody;
 
     const res = await app.request(`/api/v1/venues/${creada.publicId}/archive`, json(cookie, {}));
@@ -258,7 +276,7 @@ describe('archivar y reactivar', () => {
   });
 
   it('reactivar la devuelve a activa', async () => {
-    const { cookie } = await nuevoCentro('reactivar@laplace.test', 'reactivar');
+    const { cookie } = await nuevoCentro('reactivar');
     const creada = (await (await crearSede(cookie)).json()) as VenueBody;
     await app.request(`/api/v1/venues/${creada.publicId}/archive`, json(cookie, {}));
 
@@ -269,7 +287,7 @@ describe('archivar y reactivar', () => {
   });
 
   it('archivar dos veces es una transicion invalida, no un no-op silencioso', async () => {
-    const { cookie } = await nuevoCentro('doble@laplace.test', 'doble');
+    const { cookie } = await nuevoCentro('doble');
     const creada = (await (await crearSede(cookie)).json()) as VenueBody;
     await app.request(`/api/v1/venues/${creada.publicId}/archive`, json(cookie, {}));
 
@@ -284,7 +302,7 @@ describe('archivar y reactivar', () => {
 
 describe('limite del plan', () => {
   it('el centro Basic no puede crear la segunda sede', async () => {
-    const { cookie } = await nuevoCentro('limite@laplace.test', 'limite');
+    const { cookie } = await nuevoCentro('limite');
     expect((await crearSede(cookie)).status).toBe(201);
 
     const res = await crearSede(cookie, { name: 'Box Toro Sur' });
@@ -297,7 +315,7 @@ describe('limite del plan', () => {
   });
 
   it('el limite corta ANTES de escribir: no queda una sede a medias', async () => {
-    const { cookie } = await nuevoCentro('sin-huecos@laplace.test', 'sin-huecos');
+    const { cookie } = await nuevoCentro('sin-huecos');
     await crearSede(cookie);
 
     await crearSede(cookie, { name: 'Box Toro Sur' });
@@ -309,7 +327,7 @@ describe('limite del plan', () => {
   });
 
   it('archivar libera el cupo: cerrar una sede no puede seguir costando plata', async () => {
-    const { cookie } = await nuevoCentro('libera@laplace.test', 'libera');
+    const { cookie } = await nuevoCentro('libera');
     const creada = (await (await crearSede(cookie)).json()) as VenueBody;
     await app.request(`/api/v1/venues/${creada.publicId}/archive`, json(cookie, {}));
 
@@ -319,7 +337,7 @@ describe('limite del plan', () => {
   });
 
   it('un plan con mas cupo deja crear mas sedes', async () => {
-    const { cookie, organizationId } = await nuevoCentro('pro@laplace.test', 'pro');
+    const { cookie, organizationId } = await nuevoCentro('pro');
     planPorOrg.set(organizationId, { planId: 'pro' });
     entitlements.invalidateAll();
 
@@ -331,9 +349,9 @@ describe('limite del plan', () => {
 describe('aislamiento de tenant', () => {
   /** Dos centros distintos, cada uno con su sede. */
   async function dosCentros() {
-    const victima = await nuevoCentro('victima@laplace.test', 'victima');
+    const victima = await nuevoCentro('victima');
     const sede = (await (await crearSede(victima.cookie)).json()) as VenueBody;
-    const atacante = await nuevoCentro('atacante@laplace.test', 'atacante');
+    const atacante = await nuevoCentro('atacante');
 
     return { victima, atacante, sedeId: sede.publicId };
   }
@@ -415,8 +433,8 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
   });
 
   it('el fixture de cada ruta ataca de verdad y no filtra nada', async () => {
-    const atacante = await nuevoCentro('fixtures@laplace.test', 'fixtures');
-    const victima = await nuevoCentro('fixtures-victima@laplace.test', 'fixtures-victima');
+    const atacante = await nuevoCentro('fixtures');
+    const victima = await nuevoCentro('fixtures-victima');
 
     for (const route of allRegisteredRoutes()) {
       if (!route.path.startsWith('/api/v1/venues') || !route.isolationFixture) continue;
