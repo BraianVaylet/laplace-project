@@ -17,7 +17,7 @@
 
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |      6 |
+| Fase 0 — Fundaciones    |       16 |           89 |      7 |
 | Fase 1 — MVP vendible   |       32 |          186 |      0 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
@@ -192,7 +192,7 @@ Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisione
 - **error-codes:** `LP-SYS-500-004` (handler de evento fallido)
 - **data-model-impact:** ninguno. En Fase 2, cuando los eventos pasen a cola, la interfaz no cambia.
 
-## [ ] F0-07 · Entitlements: catálogo declarativo y enforcement
+## [x] F0-07 · Entitlements: catálogo declarativo y enforcement
 
 - **module:** entitlements
 - **description:** Lo que hace que Basic, Pro y Max no sean texto en la landing (§2.1.22). Cada

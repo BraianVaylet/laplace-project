@@ -23,6 +23,42 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-07: entitlements con enforcement en el backend
+
+- **Módulo:** `entitlements`
+- **Tipo:** feature
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/GO6UQi5J (F0-07)
+- **Qué cambió:** Basic, Pro y Max dejaron de ser texto en la landing. Hay un catálogo declarativo
+  con sus módulos, features y límites, y tres guards que los aplican: `requireModule`,
+  `requireFeature` y `requireWithinLimit`. Más la validación de downgrade y el aviso al 80%.
+- **Por qué:** §2.1.22 lo dice sin vueltas — sin esto los planes son decorativos, y el enforcement
+  tiene que estar en el backend porque ocultar un botón no es una restricción.
+- **Impacto:** `Organization.planId` y `planLimits` (overrides). Códigos en uso: `LP-ENTL-403-001`,
+  `LP-ENTL-403-002`, `LP-ENTL-403-003`. El catálogo vive en código, no en base: es configuración de
+  producto, no dato de tenant.
+- **Decisiones que vale la pena registrar:**
+  - **Manda el empaquetado de §2.2.1, no el de §2.2.** La spec revisa el suyo y explica por qué: sin
+    Members ni Billing, Basic es inutilizable y Pro pasa a ser el piso real. Así que Basic incluye
+    gestión de miembros y cobro manual, y su límite de staff baja de 10 a 3 — un centro de 60 socios
+    no tiene 10 empleados. Hay un test por cada fila de esa tabla.
+  - **Se distingue módulo de feature.** Basic ve la librería de ejercicios (módulo `training`) pero
+    no la edita (feature `training.write`), y hace check-in básico pero sin QR. Sin esa distinción,
+    las filas de la tabla que dicen "solo lectura" o "básico" no se podían modelar.
+  - **El mensaje del límite dice qué excede y por cuánto.** "Alcanzaste el máximo de 60 miembros
+    activos de tu plan Basic" y no "límite alcanzado": sin el número, el usuario tiene que adivinar
+    qué borrar.
+  - **El downgrade lista TODAS las violaciones, no solo la primera.** Si un centro excede miembros,
+    sedes y staff a la vez, verlas de a una es tres viajes para el mismo problema.
+  - **El contador de uso se inyecta y tiene que contar activos, no históricos.** Archivar a los
+    socios que se fueron no puede costar plata (§2.2.1). El guard no cuenta: exige el contador y lo
+    documenta.
+  - **Los entitlements se cachean por organización** con invalidación explícita al cambiar de plan.
+    Sin cache serían una consulta extra por request; sin invalidación, el centro seguiría con el
+    plan anterior después de pagar el upgrade.
+- **Pendiente:** conectar los guards a rutas reales, que llega con los módulos de Fase 1. El
+  prorrateo del upgrade y el cambio al fin del ciclo son de F1-25.
+
 ## 2026-09-01 — F0-06: bus de eventos de dominio
 
 - **Módulo:** `infra`
