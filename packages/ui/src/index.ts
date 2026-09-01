@@ -44,3 +44,6 @@ export { Tabs, type TabItem, type TabsProps } from './data/Tabs.js';
 export { Badge, Card, type BadgeProps, type BadgeTone, type CardProps } from './layout/primitives.js';
 
 export { ThemeProvider, resolveTheme, useTheme, type Theme } from './theme.js';
+
+export { AppShell, ThemeToggle, type AppShellProps, type NavItem } from './shell/AppShell.js';
+export { MobileShell, type MobileShellProps } from './shell/MobileShell.js';

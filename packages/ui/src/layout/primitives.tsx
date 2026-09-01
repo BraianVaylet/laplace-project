@@ -45,10 +45,16 @@ export function Card({ title, actions, className, children, ...props }: CardProp
       {...props}
     >
       {title || actions ? (
-        <header className="mb-3 flex items-center justify-between gap-2">
+        /*
+         * Un `div`, no un `<header>`: dentro de un `<section>` el header no es
+         * un `banner` segun la spec de HTML, pero mas de una implementacion de
+         * roles lo trata como si lo fuera y entonces la pagina termina con dos
+         * banners. El `<h3>` ya carga el significado.
+         */
+        <div className="mb-3 flex items-center justify-between gap-2">
           {title ? <h3 className="text-fg text-sm font-semibold">{title}</h3> : <span />}
           {actions}
-        </header>
+        </div>
       ) : null}
       {children}
     </section>

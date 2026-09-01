@@ -35,3 +35,25 @@ export {
 } from './time/format.js';
 
 export { createUiStore, useUiStore, type UiState } from './state/store.js';
+
+export {
+  DAYS_BETWEEN_PROMPTS,
+  IOS_INSTALL_STEPS,
+  MAX_DISMISSALS,
+  installSupport,
+  isIos,
+  recordInstallAccepted,
+  recordInstallDismissed,
+  recordInstallPrompted,
+  shouldOfferInstall,
+  type BeforeInstallPromptEvent,
+  type InstallEnvironment,
+  type InstallSupport,
+} from './pwa/install.js';
+
+export {
+  UPDATE_ESCAPE_MS,
+  createUpdateController,
+  type UpdateController,
+  type UpdateState,
+} from './pwa/update.js';

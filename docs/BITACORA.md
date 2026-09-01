@@ -23,6 +23,49 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-13: los shells de las cuatro aplicaciones
+
+- **Módulo:** `infra`
+- **Tipo:** feature
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/3UKJYLVJ (F0-13)
+- **Qué cambió:** las cuatro apps dejaron de ser un "hola mundo". DFSA y DFSM tienen header, panel
+  lateral colapsable y footer; el DFSM además el selector de centro. La WAFM tiene su shell mobile
+  con bottom nav y la PWA completa: manifest, service worker, offline del horario, ofrecimiento de
+  instalación y popup de actualización. La landing tiene su header con las secciones de §5.1.4.
+- **Por qué:** es el esqueleto sobre el que se cuelgan todas las pantallas de Fase 1.
+- **Impacto:** ninguno sobre el modelo de datos. `@laplace/config` gana un export nuevo
+  (`testing/jsdom-dialog`) y `@laplace/ui` los dos shells.
+- **Decisiones que vale la pena registrar:**
+  - **La WAFM tiene las dos navegaciones en el DOM y decide CSS.** §5.1.3 pide barra superior; su
+    `[+]` recomienda bottom nav porque el pulgar no llega arriba en un teléfono grande. Se cumplen
+    las dos: abajo en mobile, arriba desde 768 px. No hubo que elegir.
+  - 🔴 **En iOS se muestran instrucciones, no un botón.** `beforeinstallprompt` no existe en Safari,
+    así que un botón "Instalar" ahí no hace absolutamente nada — en la mitad de los usuarios. Hay un
+    test que verifica que en iOS aparecen los pasos de "Compartir → Agregar a inicio" y que el botón
+    nativo **no** está.
+  - 🔴 **El popup de actualización es bloqueante pero tiene escape a los 30 segundos.** Se cierra
+    cuando el service worker nuevo toma control, y los service workers fallan. Sin el escape, un bug
+    de SW deja al socio encerrado en un cartel, sin poder reservar y sin entender por qué. Con él,
+    ese bug se convierte en una molestia de treinta segundos.
+  - **El modal de instalación no se muestra en cada visita.** La v1 lo pedía así; mostrarlo siempre
+    es la forma más rápida de que lo cierren sin leerlo. Máximo una vez cada 7 días, nunca más tras
+    dos rechazos.
+  - **El service worker se registra en modo `prompt`, no `autoUpdate`.** La app no se cambia abajo
+    de los pies de alguien que está reservando.
+  - **`Card` usa un `div` y no un `<header>` para su encabezado.** Dentro de un `<section>` el
+    `<header>` no es un `banner` según la spec de HTML, pero más de una implementación de roles lo
+    trata como si lo fuera, y la página terminaba con dos banners. Lo encontró un test.
+  - **El patch de `<dialog>` para jsdom vive en `@laplace/config`, compartido.** jsdom no implementa
+    `showModal()`, así que sin él un modal renderiza pero nunca queda `open` y ningún test lo
+    encuentra. Se completa en el entorno de test en vez de cambiar la implementación: en el navegador
+    `showModal()` es justamente lo que da el foco atrapado.
+  - **El cliente de API salió de `providers.tsx` a su propio archivo.** No es un componente, y
+    mezclarlos rompía Fast Refresh además de mezclar responsabilidades.
+- **Pendiente:** los íconos de la PWA (`icon-192.png`, `icon-512.png`) son placeholders del manifest
+  y hay que generarlos con la identidad visual. El routing real con Tanstack Router entra con las
+  pantallas de Fase 1 — hoy cada app tiene una sola vista. El SSG de la landing es F0-14.
+
 ## 2026-09-01 — F0-11: fundaciones de front y el paquete `@laplace/client`
 
 - **Módulo:** `infra`

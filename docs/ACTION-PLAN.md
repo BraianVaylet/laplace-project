@@ -17,7 +17,7 @@
 
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |     13 |
+| Fase 0 — Fundaciones    |       16 |           89 |     14 |
 | Fase 1 — MVP vendible   |       32 |          186 |      0 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
@@ -361,7 +361,7 @@ Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisione
 - **error-codes:** ninguno
 - **data-model-impact:** ninguno
 
-## [ ] F0-13 · Shells de las cuatro aplicaciones
+## [x] F0-13 · Shells de las cuatro aplicaciones
 
 - **module:** infra
 - **description:** El esqueleto navegable de DFSA, DFSM, WAFM y Landing según §5.1, con routing,
