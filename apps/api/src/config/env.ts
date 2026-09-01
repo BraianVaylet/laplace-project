@@ -20,6 +20,9 @@ const envSchema = z.object({
     ),
   MONGODB_URI: z.string().min(1),
   MONGODB_DB_NAME: z.string().min(1).default('laplace_dev'),
+  // Better Auth firma sesiones y tokens con esto. 32 bytes minimo.
+  BETTER_AUTH_SECRET: z.string().min(32, 'Generalo con: openssl rand -base64 32'),
+  BETTER_AUTH_URL: z.string().url(),
 });
 
 export type Env = z.infer<typeof envSchema>;

@@ -71,9 +71,12 @@ se abre.
 | `LP-AUTH-403-007` | 403  | Segundo factor requerido       | Configurá la verificación en dos pasos para entrar.           |
 | `LP-AUTH-401-008` | 401  | Código de 2FA inválido         | El código no es correcto o ya venció.                         |
 | `LP-AUTH-409-009` | 409  | Email ya registrado            | Ese email ya tiene una cuenta. Probá recuperar la contraseña. |
-| `LP-AUTH-422-010` | 422  | Magic link inválido o vencido  | Este enlace ya se usó o venció. Pedí uno nuevo.               |
+| `LP-AUTH-422-010` | 422  | Enlace inválido o vencido      | Este enlace ya se usó o venció. Pedí uno nuevo.               |
 | `LP-AUTH-403-011` | 403  | Sesión sin organización activa | Elegí un centro para continuar.                               |
 
+> El `422-010` cubre tanto el enlace de verificación de email (F0-01) como el magic link (F0-03):
+> para quien recibe el error son el mismo problema y la misma salida.
+>
 > El `401-001` **nunca** revela si el email existe: la respuesta es idéntica para email inexistente
 > y para contraseña incorrecta. Lo mismo vale para el `429-003`.
 

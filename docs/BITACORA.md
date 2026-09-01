@@ -23,6 +23,42 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-01: identidad con Better Auth y MongoDB
+
+- **Módulo:** `auth`
+- **Tipo:** feature
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/Fx2XFiJo (F0-01)
+- **Qué cambió:** la API autentica. Un usuario se registra con email y contraseña, recibe el mail de
+  verificación, entra y su sesión sobrevive a un reinicio porque vive en Mongo. Las rutas protegidas
+  resuelven el usuario desde la sesión con el guard `requireSession`, y las que exigen email
+  verificado, con `requireVerifiedEmail`.
+- **Por qué:** es la base de la que cuelga todo el resto. Sin identidad no hay tenant, y sin tenant
+  no hay una sola consulta segura (ADR-000).
+- **Impacto:** colecciones de Better Auth (`user`, `session`, `account`, `verification`), creadas
+  por su propio adaptador. Dos variables de entorno nuevas y obligatorias: `BETTER_AUTH_SECRET` y
+  `BETTER_AUTH_URL` — ya estaban en `.env.example`, ahora la API no arranca sin ellas. Se agregó
+  `mongodb` como dependencia directa de la API: se importa su tipo `Db`, así que declararla es
+  honesto. Códigos de error nuevos en uso: `LP-AUTH-403-004`, `LP-AUTH-401-005`, `LP-AUTH-409-009`.
+- **Decisiones que vale la pena registrar:**
+  - **El login no exige email verificado.** La spec §2.1.1 pide la verificación antes de
+    **reservar**, no antes de entrar. Bloquear el login habría dejado al usuario afuera de su propia
+    cuenta por un mail que no llegó. El corte lo hace un guard sobre las rutas que lo necesitan.
+  - **Los errores de Better Auth se traducen en el borde.** Responde en inglés y con su propio
+    formato; la spec §5.0 exige el envelope unificado en es-AR. `src/auth/error-mapping.ts` es esa
+    tabla, y un código que no esté mapeado cae en `LP-SYS-500-001` en vez de inventar uno que no
+    existe en `docs/errors.md`.
+  - **"Email inexistente" y "contraseña incorrecta" devuelven exactamente lo mismo**, código y
+    mensaje. Distinguirlos convierte el login en un oráculo de qué emails están registrados (§9.1).
+    Hay un test que lo verifica en las dos capas, unitaria e integración.
+  - **Se reutiliza la conexión de Mongoose** (`mongoose.connection.db`) en vez de abrir un segundo
+    cliente: una sola pool.
+  - `LP-AUTH-422-010` pasa de "magic link inválido" a "enlace inválido o vencido": cubre también el
+    de verificación. Para quien lo recibe son el mismo problema y la misma salida.
+- **Pendiente:** el envío real de mail es un `EmailSender` inyectado que hoy solo loguea el enlace;
+  el proveedor entra con Notifications (F1-21). El rate limit, el bloqueo progresivo, el 2FA y el
+  magic link son F0-03. El OpenAPI de estas rutas queda para F0-09, que es la tarea que lo genera.
+
 ## 2026-09-01 — Traducir la spec a un backlog ejecutable y cerrar las decisiones abiertas
 
 - **Módulo:** `docs`

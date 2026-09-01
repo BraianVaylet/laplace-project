@@ -17,7 +17,7 @@
 
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |      0 |
+| Fase 0 — Fundaciones    |       16 |           89 |      1 |
 | Fase 1 — MVP vendible   |       32 |          186 |      0 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
@@ -33,7 +33,7 @@ error §5.0, logger Pino §11.1, `/health` y `/ready`, harness de Mongo con repl
 
 Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisiones de infraestructura.
 
-## [ ] F0-01 · Integrar Better Auth con MongoDB
+## [x] F0-01 · Integrar Better Auth con MongoDB
 
 - **module:** auth
 - **description:** El backend autentica usuarios con email y contraseña, exige verificación de
