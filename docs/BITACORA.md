@@ -23,6 +23,32 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-06: bus de eventos de dominio
+
+- **Módulo:** `infra`
+- **Tipo:** feature
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/WOIiZu6L (F0-06)
+- **Qué cambió:** los módulos ya tienen por dónde hablarse sin importarse entre sí. Hay un catálogo
+  tipado con los ocho eventos de §6 (`booking.created`, `payment.received`, `contract.expiring`…) y
+  un bus in-process que los entrega.
+- **Por qué:** ADR-003. Es lo que permite que Notifications y Metrics reaccionen a una reserva sin
+  que Booking sepa que existen, y lo que hace posible extraer un módulo el día que haga falta.
+- **Impacto:** ninguno sobre el modelo de datos. En Fase 2, cuando los eventos pasen a una cola, la
+  interfaz no cambia: `emit` pasa a encolar.
+- **Decisiones que vale la pena registrar:**
+  - **Dos garantías que importan más que la entrega:** un handler que falla no rompe al emisor, y
+    tampoco impide que corran los demás. Se usa `allSettled`, no `all`. Si el mail de confirmación
+    no sale, la reserva ya está hecha igual — y al revés sería mucho peor.
+  - **El fallo se loguea con `LP-SYS-500-004`, nunca se traga.** Con el `requestId` y el `tenantId`
+    del contexto que lo originó, que es lo que permite trazarlo de punta a punta cuando alguien
+    reporta que no le llegó un aviso.
+  - **El payload lleva IDs, no documentos.** Quien reacciona consulta lo que necesita con su propio
+    repositorio, ya acotado a su tenant. Pasar el documento entero invitaría a que un handler opere
+    sobre datos que no volvió a verificar.
+  - **El contexto de tenant atraviesa el bus** porque vive en `AsyncLocalStorage`: el handler
+    consulta con el mismo tenant que el emisor sin que nadie lo pase a mano.
+
 ## 2026-09-01 — F0-05: suite parametrizada de aislamiento de tenant
 
 - **Módulo:** `infra`

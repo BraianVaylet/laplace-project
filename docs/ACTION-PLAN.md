@@ -17,7 +17,7 @@
 
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |      5 |
+| Fase 0 — Fundaciones    |       16 |           89 |      6 |
 | Fase 1 — MVP vendible   |       32 |          186 |      0 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
@@ -170,7 +170,7 @@ Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisione
 - **error-codes:** ninguno
 - **data-model-impact:** ninguno
 
-## [ ] F0-06 · Bus de eventos de dominio in-process
+## [x] F0-06 · Bus de eventos de dominio in-process
 
 - **module:** infra
 - **description:** Los módulos se comunican por eventos, no importándose entre sí (ADR-003).
