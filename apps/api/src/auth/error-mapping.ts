@@ -87,6 +87,35 @@ const BY_PROVIDER_CODE: Record<string, MappedAuthError> = {
     message: 'No podés asignar ese rol.',
   },
 
+  // ── Segundo factor (F0-03) ──────────────────────────────────────────────
+  INVALID_TWO_FACTOR_AUTHENTICATION: {
+    code: 'LP-AUTH-401-008',
+    status: 401,
+    message: 'El código no es correcto o ya venció.',
+  },
+  INVALID_TWO_FACTOR_COOKIE: {
+    code: 'LP-AUTH-401-008',
+    status: 401,
+    message: 'El código no es correcto o ya venció.',
+  },
+  OTP_HAS_EXPIRED: {
+    code: 'LP-AUTH-401-008',
+    status: 401,
+    message: 'El código no es correcto o ya venció.',
+  },
+  TOTP_NOT_ENABLED: {
+    code: 'LP-AUTH-403-007',
+    status: 403,
+    message: 'Configurá la verificación en dos pasos para entrar.',
+    action: 'Activala desde tu perfil.',
+  },
+  OTP_NOT_ENABLED: {
+    code: 'LP-AUTH-403-007',
+    status: 403,
+    message: 'Configurá la verificación en dos pasos para entrar.',
+    action: 'Activala desde tu perfil.',
+  },
+
   INVALID_TOKEN: {
     code: 'LP-AUTH-422-010',
     status: 422,

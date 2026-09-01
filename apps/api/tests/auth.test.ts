@@ -24,6 +24,7 @@ const emailSender: EmailSender = {
     sent.push(email);
     return Promise.resolve();
   },
+  sendMagicLink: () => Promise.resolve(),
 };
 
 const logger = createLogger({ env: 'test', level: 'silent', service: 'api' });

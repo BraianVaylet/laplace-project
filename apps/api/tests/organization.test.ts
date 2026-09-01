@@ -20,7 +20,10 @@ let replSet: MongoMemoryReplSet;
 let app: ReturnType<typeof buildTestApp>;
 let auth: Auth;
 
-const emailSender: EmailSender = { sendVerification: () => Promise.resolve() };
+const emailSender: EmailSender = {
+  sendVerification: () => Promise.resolve(),
+  sendMagicLink: () => Promise.resolve(),
+};
 const logger = createLogger({ env: 'test', level: 'silent', service: 'api' });
 
 function buildTestApp(authInstance: Auth) {

@@ -23,6 +23,46 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-03: rate limit, bloqueo progresivo, 2FA y magic link
+
+- **Módulo:** `auth`
+- **Tipo:** feature
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/pwaPjW8n (F0-03)
+- **Qué cambió:** el login dejó de ser gratis de atacar. Hay límite de 5 intentos por minuto y por
+  IP, bloqueo progresivo por cuenta (1 min → 5 → 15 → 60, con techo), TOTP obligatorio para el super
+  admin, y magic link de un solo uso para el socio.
+- **Por qué:** §9.1 lo pide explícitamente y es lo primero que se prueba contra un SaaS que expone
+  un formulario de login público.
+- **Impacto:** colección `loginAttempt` (con `expiresAt` para TTL) y `rateLimit` (la crea Better
+  Auth). Campo `user.isSuperAdmin`. Códigos en uso: `LP-AUTH-403-006`, `LP-AUTH-403-007`,
+  `LP-AUTH-401-008`, `LP-AUTH-422-010`, más los de 2FA en el traductor.
+- **Decisiones que vale la pena registrar:**
+  - **El rate limit por IP y el bloqueo por cuenta son dos defensas distintas y hacen falta las
+    dos.** La IP se rota barato; la cuenta no. El límite por IP frena la ráfaga desde un origen; el
+    bloqueo por cuenta frena el ataque distribuido y lento contra un email concreto.
+  - **El bloqueo también rechaza la contraseña correcta.** Si dejara entrar al acertar, no
+    protegería de nada: el atacante seguiría probando hasta dar.
+  - **El rate limit se persiste en Mongo, no en memoria.** En memoria, reiniciar la API es la forma
+    más fácil de saltearlo, y con más de una instancia cada una llevaría su propia cuenta.
+  - **`isSuperAdmin` se declara con `input: false`.** Si fuera escribible, cualquiera se haría super
+    admin mandando el campo en su propio registro. Hay un test que lo intenta.
+  - **2FA obligatorio solo para el SAU.** El super admin ve el SaaS entero: una sola contraseña
+    filtrada comprometería a todos los centros. Para el SMU queda opcional, como pide §2.1.1.
+  - 🔴 **`magic-link/verify` responde 302 incluso cuando falla**, porque es un endpoint que abre el
+    navegador: redirige a la app o a una URL de error. No pasa por el traductor de errores (que solo
+    actúa sobre 4xx y 5xx) y eso está bien. El test correspondiente verifica lo que de verdad
+    importa — que no cree sesión — y no el status.
+  - **`Date` quedó acorralado en un solo archivo.** El lint prohíbe `Date` (spec §6: Temporal), pero
+    el driver de Mongo persiste fechas como BSON Date y los índices TTL solo funcionan sobre ese
+    tipo. En vez de repartir excepciones, `src/persistence/bson-date.ts` es la única frontera de
+    conversión, con la regla desactivada ahí y el motivo escrito. En cualquier otro archivo el lint
+    sigue cortando, que es lo que queremos.
+- **Pendiente:** el índice TTL de `loginAttempt` sobre `expiresAt` se crea en F0-10, junto con el
+  resto de los índices; hasta entonces los documentos vencidos quedan, sin afectar el
+  comportamiento. La UI de alta de 2FA y el aviso al titular cuando su cuenta se bloquea son de las
+  tareas de front (F0-13) y de Notifications (F1-21).
+
 ## 2026-09-01 — F0-02: organizaciones y matriz de permisos por recurso y acción
 
 - **Módulo:** `auth`

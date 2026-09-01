@@ -7,6 +7,9 @@ export interface AuthUser {
   id: string;
   email: string;
   emailVerified: boolean;
+  /** El SAU (§1.1). Nunca escribible desde el registro. */
+  isSuperAdmin: boolean;
+  twoFactorEnabled: boolean;
 }
 
 export type SessionEnv = {
@@ -46,10 +49,17 @@ export const requireSession = createMiddleware<SessionEnv>(async (c, next) => {
   }
 
   c.set('userId', session.user.id);
+  const user = session.user as typeof session.user & {
+    isSuperAdmin?: boolean;
+    twoFactorEnabled?: boolean | null;
+  };
+
   c.set('authUser', {
-    id: session.user.id,
-    email: session.user.email,
-    emailVerified: session.user.emailVerified,
+    id: user.id,
+    email: user.email,
+    emailVerified: user.emailVerified,
+    isSuperAdmin: user.isSuperAdmin === true,
+    twoFactorEnabled: user.twoFactorEnabled === true,
   });
 
   await next();
@@ -67,6 +77,38 @@ export const requireVerifiedEmail = createMiddleware<SessionEnv>(async (c, next)
       status: 403,
       message: 'Verificá tu email antes de continuar.',
       action: 'Revisá tu casilla; si no llegó, pedí que te lo reenviemos.',
+    });
+  }
+
+  await next();
+});
+
+/** Solo el super admin. Es quien entra al DFSA (spec §5.1.1). */
+export const requireSuperAdmin = createMiddleware<SessionEnv>(async (c, next) => {
+  if (!c.get('authUser')?.isSuperAdmin) {
+    throw new AppError({
+      code: 'LP-AUTH-403-002',
+      status: 403,
+      message: 'No tenés permisos para esta acción.',
+    });
+  }
+
+  await next();
+});
+
+/**
+ * Exige segundo factor configurado. Spec §2.1.1: **obligatorio para el SAU**,
+ * opcional para el SMU. El super admin ve el SaaS entero: sin 2FA, una sola
+ * contraseña filtrada compromete a todos los centros.
+ */
+export const requireTwoFactor = createMiddleware<SessionEnv>(async (c, next) => {
+  const user = c.get('authUser');
+  if (user?.isSuperAdmin && !user.twoFactorEnabled) {
+    throw new AppError({
+      code: 'LP-AUTH-403-007',
+      status: 403,
+      message: 'Configurá la verificación en dos pasos para entrar.',
+      action: 'Activala desde tu perfil.',
     });
   }
 

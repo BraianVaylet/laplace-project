@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 import type { Db } from 'mongodb';
 import { createApp } from './app.js';
 import { createAuth } from './auth/auth.js';
+import { createLockoutGuard, createMongoLockoutStore } from './auth/lockout-guard.js';
 import { createLoggingEmailSender } from './auth/ports.js';
 import { loadEnv } from './config/env.js';
 import { createLogger } from './observability/logger.js';
@@ -33,7 +34,12 @@ async function main() {
     }),
   });
 
-  const app = createApp({ logger, corsOrigins: env.CORS_ORIGINS, auth });
+  const app = createApp({
+    logger,
+    corsOrigins: env.CORS_ORIGINS,
+    auth,
+    lockoutGuard: createLockoutGuard({ store: createMongoLockoutStore(db as Db) }),
+  });
 
   serve({ fetch: app.fetch, port: env.API_PORT }, (info) => {
     logger.info({ module: 'boot', action: 'listen', meta: info }, `API en :${info.port}`);

@@ -1,12 +1,17 @@
 import { betterAuth } from 'better-auth';
 import { mongodbAdapter } from 'better-auth/adapters/mongodb';
+import { magicLink } from 'better-auth/plugins/magic-link';
 import { organization } from 'better-auth/plugins/organization';
-import { ORG_ROLES, ac } from './permissions.js';
+import { twoFactor } from 'better-auth/plugins/two-factor';
 import type { Db } from 'mongodb';
+import { ORG_ROLES, ac } from './permissions.js';
 import type { EmailSender } from './ports.js';
 
 /** Prefijo de las rutas de auth. Spec §5.0: todo cuelga de /api/v1, sin excepciones. */
 export const AUTH_BASE_PATH = '/api/v1/auth';
+
+/** Login: 5 por minuto y por IP (spec §9.1). */
+export const LOGIN_RATE_LIMIT = { window: 60, max: 5 } as const;
 
 export interface AuthDeps {
   /** Se reutiliza la conexion de Mongoose: una sola pool, no dos clientes. */
@@ -15,14 +20,22 @@ export interface AuthDeps {
   baseURL: string;
   trustedOrigins: string[];
   emailSender: EmailSender;
+  /** El rate limit se apaga solo en los tests que no lo estan probando. */
+  rateLimitEnabled?: boolean;
 }
 
 /**
- * Better Auth es la base de identidad del producto (spec §2.1.1). El plugin de
- * organizaciones, el RBAC y el endurecimiento (rate limit, 2FA, magic link)
- * entran en F0-02 y F0-03; esta fabrica queda abierta para recibirlos.
+ * Better Auth es la base de identidad del producto (spec §2.1.1).
+ * La Organization ES el tenant (ADR-000).
  */
-export function createAuth({ db, secret, baseURL, trustedOrigins, emailSender }: AuthDeps) {
+export function createAuth({
+  db,
+  secret,
+  baseURL,
+  trustedOrigins,
+  emailSender,
+  rateLimitEnabled = true,
+}: AuthDeps) {
   return betterAuth({
     database: mongodbAdapter(db),
     secret,
@@ -48,13 +61,41 @@ export function createAuth({ db, secret, baseURL, trustedOrigins, emailSender }:
       },
     },
 
+    /**
+     * Spec §9.1: rate limit en login, registro y recupero. Persistido en Mongo
+     * para que sobreviva a un reinicio y valga para todas las instancias — en
+     * memoria, reiniciar la API es la forma mas facil de saltearlo.
+     */
+    rateLimit: {
+      enabled: rateLimitEnabled,
+      storage: 'database',
+      window: 60,
+      max: 100,
+      customRules: {
+        '/sign-in/email': { ...LOGIN_RATE_LIMIT },
+        '/sign-in/magic-link': { ...LOGIN_RATE_LIMIT },
+        '/sign-up/email': { window: 3600, max: 10 },
+        '/forget-password': { window: 3600, max: 5 },
+        '/two-factor/verify-totp': { window: 60, max: 5 },
+      },
+    },
+
+    user: {
+      modelName: 'user',
+      additionalFields: {
+        /**
+         * El SAU (§1.1). `input: false` es lo importante: si fuera escribible,
+         * cualquiera se haria super admin en el propio registro.
+         */
+        isSuperAdmin: { type: 'boolean', defaultValue: false, input: false },
+      },
+    },
+
     plugins: [
       /**
        * Multi-tenancy sobre el plugin de organizaciones (spec §2.1.1): las
        * organizaciones, los miembros y las invitaciones ya estan resueltos, no
        * se reinventan. Lo propio es la matriz de permisos de `permissions.ts`.
-       *
-       * La Organization ES el tenant (ADR-000).
        */
       organization({
         ac,
@@ -62,9 +103,19 @@ export function createAuth({ db, secret, baseURL, trustedOrigins, emailSender }:
         /** Quien crea el centro es su SMU: dueño, sin techo. */
         creatorRole: 'owner',
       }),
+
+      /** TOTP: opcional para el SMU, obligatorio para el SAU (lo exige `requireTwoFactor`). */
+      twoFactor({ issuer: 'Laplace' }),
+
+      /** Menos friccion en mobile para el socio (§2.1.1). Un solo uso, vida corta. */
+      magicLink({
+        expiresIn: 300,
+        sendMagicLink: async ({ email, url, token }) => {
+          await emailSender.sendMagicLink({ to: email, url, token });
+        },
+      }),
     ],
 
-    user: { modelName: 'user' },
     session: { modelName: 'session' },
     account: { modelName: 'account' },
     verification: { modelName: 'verification' },

@@ -10,8 +10,16 @@ export interface VerificationEmail {
   token: string;
 }
 
+export interface MagicLinkEmail {
+  to: string;
+  /** Enlace de un solo uso y vida corta, ya firmado por Better Auth. */
+  url: string;
+  token: string;
+}
+
 export interface EmailSender {
   sendVerification(email: VerificationEmail): Promise<void>;
+  sendMagicLink(email: MagicLinkEmail): Promise<void>;
 }
 
 /**
@@ -24,6 +32,15 @@ export function createLoggingEmailSender(log: (msg: string, meta: object) => voi
       log('Mail de verificacion (modo dev, no se envio)', {
         module: 'auth',
         action: 'sendVerificationEmail',
+        meta: { to: email.to, url: email.url },
+      });
+      return Promise.resolve();
+    },
+
+    sendMagicLink(email) {
+      log('Magic link (modo dev, no se envio)', {
+        module: 'auth',
+        action: 'sendMagicLink',
         meta: { to: email.to, url: email.url },
       });
       return Promise.resolve();

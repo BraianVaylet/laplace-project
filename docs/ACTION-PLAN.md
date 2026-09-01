@@ -17,7 +17,7 @@
 
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |      2 |
+| Fase 0 — Fundaciones    |       16 |           89 |      3 |
 | Fase 1 — MVP vendible   |       32 |          186 |      0 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
@@ -88,7 +88,7 @@ Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisione
 - **data-model-impact:** `organization`, `member`, `invitation` (Better Auth org plugin).
   `Membership` gana `venueIds[]` y `permissions[]`.
 
-## [ ] F0-03 · Endurecer Auth: rate limit, bloqueo, 2FA y magic link
+## [x] F0-03 · Endurecer Auth: rate limit, bloqueo, 2FA y magic link
 
 - **module:** auth
 - **description:** Las defensas de §9.1 sobre el flujo de autenticación: límite de intentos,
