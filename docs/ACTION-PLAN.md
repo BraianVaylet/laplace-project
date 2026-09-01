@@ -17,7 +17,7 @@
 
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |      3 |
+| Fase 0 — Fundaciones    |       16 |           89 |      4 |
 | Fase 1 — MVP vendible   |       32 |          186 |      0 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
@@ -113,7 +113,7 @@ Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisione
 - **error-codes:** `LP-AUTH-403-006`, `LP-AUTH-403-007`, `LP-AUTH-401-008`, `LP-AUTH-422-010`
 - **data-model-impact:** `loginAttempt { key, count, blockedUntil }` con TTL. `user.twoFactor`.
 
-## [ ] F0-04 · Contexto de tenant, repositorio base y plugin de Mongoose
+## [x] F0-04 · Contexto de tenant, repositorio base y plugin de Mongoose
 
 - **module:** infra
 - **description:** Las tres capas de aislamiento del ADR-000. Middleware que resuelve el `tenantId`

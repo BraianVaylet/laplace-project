@@ -12,6 +12,8 @@ export interface OrgContext {
   organizationId: string;
   memberId: string;
   roles: string[];
+  /** Alcance por sede. Se puebla en F3-D; hoy siempre es toda la organizacion. */
+  venueId?: string;
 }
 
 export type OrgEnv = SessionEnv & { Variables: { org: OrgContext } };

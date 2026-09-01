@@ -23,6 +23,52 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-04: las tres capas de aislamiento de tenant
+
+- **Módulo:** `infra`
+- **Tipo:** feature
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/ZdQ14r8m (F0-04)
+- **Qué cambió:** ya existe la maquinaria que hace que un centro no pueda ver los datos de otro.
+  Middleware que abre el contexto desde la sesión, repositorio base que inyecta el `tenantId` en
+  toda consulta, y plugin de Mongoose que lo vuelve a inyectar por su cuenta. Más soft delete por
+  defecto, campos de auditoría, identificadores públicos con prefijo y paginación por cursor.
+- **Por qué:** es la regla 1 del ADR-000 y el riesgo crítico de §13.1. Todo lo que venga después
+  —miembros, contratos, reservas, plata— se apoya en esto.
+- **Impacto:** transversal. Toda colección de negocio va a llevar `tenantId`, `publicId`,
+  `createdBy`, `updatedBy`, `deletedAt` y timestamps. Código en uso: `LP-SYS-500-003`. La
+  paginación consume `LP-SYS-422-006` cuando el cursor viene manipulado.
+- **Decisiones que vale la pena registrar:**
+  - **El contexto viaja en `AsyncLocalStorage`, no como parámetro.** El plugin de Mongoose corre
+    adentro del driver, lejos del handler de Hono, y necesita ver el tenant para poder ser la
+    segunda red. Pasarlo a mano por cada capa sería exactamente el tipo de disciplina que no
+    queremos que sea lo único que separa a un centro de los datos de otro.
+  - 🔴 **Sin contexto, la consulta falla.** No devuelve todo, no devuelve vacío: lanza
+    `LP-SYS-500-003`. Es la decisión más importante del archivo. Un `find` sin `tenantId` que igual
+    responde es una fuga; un 500 con su código es un bug que se arregla.
+  - 🔴 **Pedir explícitamente el tenant de otro también lanza.** La primera versión reescribía el
+    filtro en silencio, y el test lo cazó: devolvía los datos del centro propio cuando el código
+    había pedido los de otro. Eso esconde el error hasta que aparece en producción. Ahora es un
+    incidente ruidoso.
+  - **El hook de estampado va en `pre('validate')`, no en `pre('save')`.** El ADR-000 dice `save`,
+    pero Mongoose valida antes de guardar: con el hook en `save`, el `required: true` de `tenantId`
+    ganaba de mano y el error que salía era un ValidationError sin código, no nuestro `AppError`.
+    El efecto es el mismo y el error correcto.
+  - **`aggregate` también se cubre.** No pasa por los hooks de query: sin un `$match` antepuesto,
+    la primera agregación de métricas leería la colección entera, de todos los centros.
+  - **La paginación es keyset, nunca `skip`.** Se pide un documento de más para saber si hay página
+    siguiente sin contar el total, y el `_id` va como desempate: sin él, dos documentos con el mismo
+    valor de orden se pierden o se repiten entre páginas. El límite tiene techo de 100.
+  - **Los IDs públicos usan el alfabeto de Crockford en minúscula**, sin `i`, `l`, `o` ni `u`: un
+    socio le dicta el ID a la recepcionista por teléfono y `l` contra `1` no puede ser un problema
+    dos veces.
+  - **`includeDeleted` tuvo que viajar como opción de query hasta el plugin.** El repositorio lo
+    omitía del filtro pero el plugin lo volvía a agregar, así que la opción no hacía nada. Otro que
+    encontró el test.
+- **Pendiente:** los índices (incluido el compuesto con `tenantId` primero) los crea F0-10. La suite
+  parametrizada de aislamiento sobre todas las rutas es F0-05, que es la que convierte esto en una
+  garantía verificada endpoint por endpoint.
+
 ## 2026-09-01 — F0-03: rate limit, bloqueo progresivo, 2FA y magic link
 
 - **Módulo:** `auth`
