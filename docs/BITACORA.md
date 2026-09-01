@@ -23,6 +23,40 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-08: runner de jobs con lock en Mongo
+
+- **Módulo:** `infra`
+- **Tipo:** feature
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/pMBvhDUL (F0-08)
+- **Qué cambió:** existe el motor de los catorce procesos automáticos de §10. Cron in-process, lock
+  atómico en Mongo, registro de cada corrida con su duración y su resultado, y `JOBS_ENABLED` para
+  apagarlos en local.
+- **Por qué:** materializar sesiones, promover la waitlist, marcar no-shows, expirar contratos,
+  avisar de mora y calcular métricas son todas cosas que tienen que pasar sin que nadie apriete
+  nada. Y según ADR-006, sin Redis: el volumen de Fase 0 y 1 no lo justifica.
+- **Impacto:** colecciones `jobLock` y `jobRun`. Código en uso: `LP-SYS-500-005`. Variable de
+  entorno nueva: `JOBS_ENABLED`.
+- **Decisiones que vale la pena registrar:**
+  - **El lock se toma con el mismo patrón atómico que el cupo de una clase**: un
+    `findOneAndUpdate` condicionado por `expiresAt`. La garantía la da Mongo, no la disciplina del
+    código. Hay un test de 20 adquisiciones simultáneas donde gana exactamente una — la misma
+    exigencia que le pone la spec a la reserva concurrente.
+  - **Con `upsert`, el lock tomado se manifiesta como un error de clave duplicada.** Si el lock
+    existe y sigue vigente, el filtro no matchea, Mongo intenta insertar y choca contra el `_id`.
+    Ese `E11000` **es** el caso "está tomado", no un fallo, y hay que tratarlo así explícitamente.
+  - **El TTL importa tanto como el lock.** Si el proceso muere a mitad de un job, el lock se libera
+    solo y la próxima corrida lo retoma. Sin TTL, un crash deja el job colgado para siempre — y
+    nadie se entera hasta que alguien pregunta por qué hace tres días no se marcan los no-shows.
+  - **El lock se libera aunque el job falle** (`finally`). Si no, el fallo de hoy bloquearía la
+    corrida de mañana, que es cuando el problema se vuelve grave.
+  - **Una instancia no puede liberar el lock de otra**: el `delete` filtra por `instanceId`.
+  - **La idempotencia es responsabilidad del handler, no del runner.** El runner garantiza que dos
+    instancias no corran a la vez; no garantiza que un job no corra dos veces. Está escrito en el
+    tipo y hay un test que lo demuestra con un `upsert`.
+- **Pendiente:** los jobs concretos se registran en sus módulos, con Fase 1. El índice TTL de
+  `jobRun` y la alerta externa ante fallo son de F0-10 y F0-16.
+
 ## 2026-09-01 — F0-07: entitlements con enforcement en el backend
 
 - **Módulo:** `entitlements`

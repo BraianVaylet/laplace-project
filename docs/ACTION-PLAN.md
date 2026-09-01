@@ -17,7 +17,7 @@
 
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |      7 |
+| Fase 0 — Fundaciones    |       16 |           89 |      8 |
 | Fase 1 — MVP vendible   |       32 |          186 |      0 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
@@ -226,7 +226,7 @@ Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisione
 - **data-model-impact:** `Organization.planId`, `Organization.planLimits` (overrides). Catálogo de
   planes versionado en código, no en base: es configuración de producto, no dato de tenant.
 
-## [ ] F0-08 · Runner de jobs con lock en Mongo
+## [x] F0-08 · Runner de jobs con lock en Mongo
 
 - **module:** infra
 - **description:** El motor de los catorce procesos automáticos de §10, según ADR-006: cron

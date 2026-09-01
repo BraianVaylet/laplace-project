@@ -23,6 +23,11 @@ const envSchema = z.object({
   // Better Auth firma sesiones y tokens con esto. 32 bytes minimo.
   BETTER_AUTH_SECRET: z.string().min(32, 'Generalo con: openssl rand -base64 32'),
   BETTER_AUTH_URL: z.string().url(),
+  // Se apagan en local para no correr jobs contra la base de desarrollo.
+  JOBS_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
 });
 
 export type Env = z.infer<typeof envSchema>;
