@@ -23,6 +23,35 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-09: OpenAPI generado desde los schemas Zod
+
+- **Módulo:** `infra`
+- **Tipo:** feature
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/Qmqy7tcA (F0-09)
+- **Qué cambió:** la API documenta sola lo que expone. `/api/v1/openapi.json` genera el documento
+  desde el registro de rutas y sus schemas Zod, y `/api/v1/docs` sirve Swagger UI.
+- **Por qué:** ADR-003 lo pide explícitamente: la doc se genera, no se escribe a mano. Escrita a
+  mano se desactualiza siempre, y una doc que miente es peor que no tener doc.
+- **Impacto:** ninguno sobre el modelo de datos. `RouteSpec` gana los campos de documentación
+  (`summary`, `tags`, `request`, `response`, `errorCodes`), así que el registro que ya existía para
+  el aislamiento pasa a ser también la fuente de la doc: un solo lugar donde declarar cada ruta.
+- **Decisiones que vale la pena registrar:**
+  - **No hizo falta ninguna dependencia para el schema.** Zod 4 trae `z.toJSONSchema()` con target
+    `openapi-3.0`. Se evaluó `@hono/zod-openapi`, que habría obligado a reescribir cómo se declaran
+    las rutas y a mantener un segundo registro en paralelo al de F0-05.
+  - **El envelope de error figura como respuesta posible de toda ruta**, con los códigos concretos
+    que esa ruta puede devolver escritos en la descripción. Es lo que le permite a alguien de
+    soporte saber qué esperar sin leer el código.
+  - **El documento se genera en cada pedido, no al arrancar.** Así refleja lo que la app tiene
+    montado ahora. Hay un test que registra una ruta con la app ya levantada y comprueba que
+    aparece.
+  - **En producción la doc pide sesión.** El mapa completo de la API, con cada parámetro y cada
+    código de error, es material de reconocimiento; en dev se sirve libre porque pedirla ahí solo
+    estorba.
+- **Pendiente:** hoy el documento tiene solo las rutas de prueba. Se llena solo con los módulos de
+  Fase 1, porque cada uno declara su `RouteSpec` con sus schemas.
+
 ## 2026-09-01 — F0-08: runner de jobs con lock en Mongo
 
 - **Módulo:** `infra`

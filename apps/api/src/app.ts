@@ -9,6 +9,7 @@ import type { MiddlewareHandler } from 'hono';
 import type { SessionEnv } from './auth/session.js';
 import { createErrorHandler } from './http/error-handler.js';
 import { requestId } from './http/request-id.js';
+import { createOpenApiRoutes } from './openapi/routes.js';
 import { healthRoutes } from './routes/health.js';
 
 export type AppEnv = { Variables: { requestId: string } & SessionEnv['Variables'] };
@@ -22,13 +23,22 @@ export interface AppDeps {
   extraRoutes?: Hono<AppEnv>;
   /** Bloqueo progresivo por cuenta. Se monta solo delante del login (F0-03). */
   lockoutGuard?: MiddlewareHandler;
+  /** La doc de la API. Sin esto no se monta: los tests no la necesitan. */
+  openapi?: { version: string; requireAuth: boolean; serverUrl?: string } | undefined;
 }
 
 /**
  * Fabrica de la app. Se exporta sin levantar el servidor para poder testearla
  * con `app.request()` sin abrir un puerto.
  */
-export function createApp({ logger, corsOrigins, auth, extraRoutes, lockoutGuard }: AppDeps) {
+export function createApp({
+  logger,
+  corsOrigins,
+  auth,
+  extraRoutes,
+  lockoutGuard,
+  openapi,
+}: AppDeps) {
   const app = new Hono<AppEnv>();
 
   app.use('*', requestId);
@@ -44,6 +54,19 @@ export function createApp({ logger, corsOrigins, auth, extraRoutes, lockoutGuard
     // Antes del handler: si la cuenta esta bloqueada, corta sin tocar la base.
     if (lockoutGuard) app.use(`${AUTH_BASE_PATH}/sign-in/email`, lockoutGuard);
     app.route('/', createAuthRoutes(auth, logger));
+  }
+
+  if (openapi) {
+    app.route(
+      '/',
+      createOpenApiRoutes({
+        title: 'Laplace API',
+        version: openapi.version,
+        description: 'API de Laplace. Errores en el formato de docs/errors.md.',
+        requireAuth: openapi.requireAuth,
+        ...(openapi.serverUrl ? { servers: [{ url: openapi.serverUrl }] } : {}),
+      }),
+    );
   }
 
   app.route('/', healthRoutes);

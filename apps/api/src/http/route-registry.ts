@@ -1,3 +1,5 @@
+import type { ZodType } from 'zod';
+import type { ErrorCode } from '@laplace/schemas';
 import type { PermissionRequest } from '../auth/permissions.js';
 
 /**
@@ -28,6 +30,24 @@ export interface RouteSpec {
    * victima y devuelve el path concreto. `null` para las no scoped.
    */
   isolationFixture?: IsolationFixture | undefined;
+
+  // ── Documentacion (F0-09) ────────────────────────────────────────────────
+  /**
+   * El OpenAPI se genera desde estos schemas Zod, no se escribe a mano
+   * (ADR-003): escrito a mano se desactualiza siempre.
+   */
+  summary?: string | undefined;
+  tags?: readonly string[] | undefined;
+  request?:
+    | {
+        params?: ZodType | undefined;
+        query?: ZodType | undefined;
+        body?: ZodType | undefined;
+      }
+    | undefined;
+  response?: { status: number; schema: ZodType } | undefined;
+  /** Codigos de `docs/errors.md` que esta ruta puede devolver. */
+  errorCodes?: readonly ErrorCode[] | undefined;
 }
 
 export interface IsolationSeedContext {

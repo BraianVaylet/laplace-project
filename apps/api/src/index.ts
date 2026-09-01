@@ -40,6 +40,7 @@ async function main() {
     corsOrigins: env.CORS_ORIGINS,
     auth,
     lockoutGuard: createLockoutGuard({ store: createMongoLockoutStore(db as Db) }),
+    openapi: { version: '1.0.0', requireAuth: env.APP_ENV === 'prod', serverUrl: env.BETTER_AUTH_URL },
   });
 
   // Los jobs de §10 se registran en sus modulos; el runner solo los programa.

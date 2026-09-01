@@ -17,7 +17,7 @@
 
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |      8 |
+| Fase 0 — Fundaciones    |       16 |           89 |      9 |
 | Fase 1 — MVP vendible   |       32 |          186 |      0 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
@@ -253,7 +253,7 @@ Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisione
 - **data-model-impact:** `JobLock { name, lockedAt, expiresAt, instanceId }` con índice único en
   `name`. `JobRun { name, startedAt, finishedAt, status, durationMs, error }` con TTL de retención.
 
-## [ ] F0-09 · OpenAPI generado desde los schemas Zod
+## [x] F0-09 · OpenAPI generado desde los schemas Zod
 
 - **module:** infra
 - **description:** La documentación de la API sale de los schemas Zod, no se escribe a mano
