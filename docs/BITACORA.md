@@ -23,6 +23,34 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F0-05: suite parametrizada de aislamiento de tenant
+
+- **Módulo:** `infra`
+- **Tipo:** feature
+- **Commit/PR:** rama `feat/action-plan-and-phase-0`
+- **Trello:** https://trello.com/c/018wiwXF (F0-05)
+- **Qué cambió:** existe un registro de rutas de negocio y una suite que lo recorre entero
+  atacando cada ruta desde otro centro. Una ruta bajo `/api/v1` que no esté registrada rompe el CI,
+  y una registrada como `tenantScoped` sin su fixture de ataque también.
+- **Por qué:** §Testing lo declara no negociable, y §9.1 dice que el ataque real acá es IDOR:
+  cambiar un ID en la URL. El olvido típico no es escribir mal el aislamiento, es agregar un
+  endpoint y no testearlo. Por eso la suite se parametriza sobre el registro en vez de listar rutas
+  a mano.
+- **Impacto:** ninguno sobre el modelo de datos. A partir de ahora, cada ruta de negocio que se
+  agregue tiene que declararse en `src/http/route-registry.ts` con su fixture.
+- **Decisiones que vale la pena registrar:**
+  - **Responde 404, no 403.** Un 403 sobre el recurso de otro centro confirma que ese recurso
+    existe, que es justo lo que el atacante quería averiguar.
+  - 🔴 **Hay un caso trampa que verifica que la suite pueda fallar.** `/api/v1/trap/:id` consulta el
+    driver crudo, sin repositorio ni plugin, y el test comprueba que **sí filtra** los datos del
+    otro centro. Sin ese test, una suite que pasara siempre sería indistinguible de una suite rota,
+    y nos daría una falsa sensación de cobertura.
+  - **Hay un chequeo contra la app real, no solo contra la de prueba.** Hoy pasa solo porque no hay
+    rutas de negocio todavía; el día que alguien agregue `POST /api/v1/members` sin registrarla, ese
+    test la caza.
+- **Pendiente:** la suite recorre lo que hay registrado, que hoy son las rutas de prueba. Se llena
+  sola a medida que entren los módulos de Fase 1.
+
 ## 2026-09-01 — F0-04: las tres capas de aislamiento de tenant
 
 - **Módulo:** `infra`

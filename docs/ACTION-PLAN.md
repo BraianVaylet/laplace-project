@@ -17,7 +17,7 @@
 
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |      4 |
+| Fase 0 — Fundaciones    |       16 |           89 |      5 |
 | Fase 1 — MVP vendible   |       32 |          186 |      0 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
@@ -146,7 +146,7 @@ Bloqueante de todo lo demás. Sin esto, cada tarea de negocio arrastra decisione
 - **data-model-impact:** Plugin transversal: `tenantId`, campos de auditoría y soft delete en toda
   colección de negocio. Identificadores públicos con prefijo (`mem_`, `bkg_`, `pay_`).
 
-## [ ] F0-05 · Suite parametrizada de aislamiento de tenant
+## [x] F0-05 · Suite parametrizada de aislamiento de tenant
 
 - **module:** infra
 - **description:** El test que la spec declara no negociable (§Testing.1): para **cada** ruta
