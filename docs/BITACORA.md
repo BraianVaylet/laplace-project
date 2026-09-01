@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `venues`
 - **Tipo:** feature
-- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `2f4b745` + `992993c` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/vZBLxUY1 (F1-01) — movida a **Completadas**
 - **Qué cambió:** el SMU crea, edita, lista, archiva y reactiva sedes desde `/api/v1/venues`, cada
   una con su zona horaria, moneda, horarios de atención y política de reserva propia. El límite de
