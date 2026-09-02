@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `members`
 - **Tipo:** feature
-- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `e823cf9` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/fRal7oGI (F1-04) — movida a **Completadas**
 - **Qué cambió:** el centro genera códigos con vencimiento y límite de usos, y los revoca. Un
   atleta registrado en la WAFM canjea el código y queda como socio de ese centro. La v1 no definía
