@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `booking`
 - **Tipo:** feature
-- **Commit/PR:** pendiente (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `e11b4f1` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/wzD96bLn (F1-14) — movida a **Completadas**
 - **Qué cambió:** el corazón del producto. Un socio reserva y el crédito se descuenta en la misma
   operación; si la clase está llena entra a la lista de espera sin gastar crédito; si debe plata y
