@@ -3,6 +3,7 @@ import type { Logger } from 'pino';
 import type { AppEnv } from '../app.js';
 import type { EntitlementsLoader } from '../entitlements/middleware.js';
 import type { DomainEventBus } from '../events/bus.js';
+import { createMembersModule } from './members/index.js';
 import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
 import { createVenuesModule } from './venues/index.js';
 
@@ -15,6 +16,8 @@ export interface ModuleDeps {
    * hasta entonces el default responde 0 y el bloqueo de borrado no aplica.
    */
   sessions?: FutureSessionCounter | undefined;
+  /** Hoy en `YYYY-MM-DD`. Se inyecta para poder testear la mayoria de edad. */
+  today?: (() => string) | undefined;
 }
 
 /**
@@ -34,8 +37,11 @@ export function createModuleRoutes(deps: ModuleDeps): Hono<AppEnv> {
     venues: { exists: (venueId) => venues.service.exists(venueId) },
   });
 
+  const members = createMembersModule(deps);
+
   routes.route('/', venues.routes);
   routes.route('/', rooms.routes);
+  routes.route('/', members.routes);
 
   return routes;
 }

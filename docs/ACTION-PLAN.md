@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |      2 |
+| Fase 1 — MVP vendible   |       32 |          186 |      3 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -558,7 +558,7 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   sesiones de verdad: el default responde 0. F1-12 conecta el contador real y el bloqueo empieza a
   aplicar sin tocar Rooms.
 
-## [ ] F1-03 · Módulo Members
+## [x] F1-03 · Módulo Members
 
 - **module:** members
 - **description:** El alta y la gestión del socio, con su máquina de estados, sus etiquetas y las
@@ -590,7 +590,11 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **error-codes:** `LP-MEMB-409-001`, `LP-MEMB-422-002`, `LP-MEMB-404-003`, `LP-MEMB-422-004`
   (menor sin tutor)
 - **data-model-impact:** `Member` de §5.2.2. Índices `{ tenantId, status, lastAttendanceAt }` y
-  `{ tenantId, docId }` único sparse.
+  `{ tenantId, docId }` único **parcial** (no sparse: en un índice compuesto, `sparse` solo omite
+  el documento si faltan _todos_ los campos, y `tenantId` siempre está).
+- **decisión de diseño:** la respuesta de la API es una **lista blanca**
+  (`memberResponseSchema` + `toMemberResponse`), no un `delete doc.notes`. Un campo sensible que se
+  agregue mañana al documento no se filtra por olvido.
 
 ## [ ] F1-04 · Códigos de invitación
 

@@ -17,6 +17,22 @@ export interface DomainEvents {
     timeZone: string;
   };
 
+  /** Alta de socio. La escuchan Notifications (bienvenida) y Metrics. */
+  'member.created': {
+    memberId: string;
+    status: string;
+    venueIds: string[];
+  };
+  /**
+   * Cambio de estado del socio. Es el que dispara los avisos de reactivacion y
+   * el recalculo de churn, que necesitan saber DE DONDE venia.
+   */
+  'member.status_changed': {
+    memberId: string;
+    from: string;
+    to: string;
+  };
+
   'booking.created': {
     bookingId: string;
     sessionId: string;

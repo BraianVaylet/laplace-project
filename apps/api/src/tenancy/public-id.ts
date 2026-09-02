@@ -10,6 +10,7 @@ export const ID_PREFIXES = {
   venue: 'ven',
   room: 'rom',
   member: 'mem',
+  memberNote: 'mnt',
   product: 'prd',
   contract: 'ctr',
   charge: 'chg',

@@ -23,6 +23,52 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-01 — F1-03: módulo Members, la ficha del socio
+
+- **Módulo:** `members`
+- **Tipo:** feature
+- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/B66fpRsh (F1-03) — movida a **Completadas**
+- **Qué cambió:** el staff da de alta y gestiona socios desde `/api/v1/members`, con máquina de
+  estados, etiquetas, flags de mora y sanción, y notas internas. El límite del plan se aplica de
+  verdad: el socio que excede el cupo recibe `LP-ENTL-403-001`, y archivar libera lugar.
+- **Por qué:** es la entidad sobre la que gira el resto del producto — contratos, reservas,
+  asistencia y cobranza cuelgan de acá.
+- **Impacto:** colección `members` · diez rutas nuevas en el registro de F0-05, todas con su fixture
+  de ataque · dos eventos nuevos (`member.created`, `member.status_changed`) · prefijo de id `mnt`
+  para las notas.
+- **Pendiente:** el consentimiento del tutor de un menor bloquea la **reserva**, no el alta. Eso
+  entra con Waivers (F1-20).
+
+**Decisiones:**
+
+- **La respuesta de la API es una lista blanca, no un `delete doc.notes`.** Las notas internas del
+  staff nunca son visibles para el miembro (§2.1.7). Filtrar por sustracción obliga a acordarse cada
+  vez que se agrega un campo; con lista blanca, el campo sensible que se sume mañana no sale por
+  defecto. Hay un test que pide la ficha y el listado y verifica que el texto de la nota no aparezca
+  en ninguno de los dos.
+- **`debtor` y `suspended` son flags, no estados.** Un socio puede estar `active` y `debtor` a la
+  vez, y es el caso más común del negocio. Modelarlos como estados obligaría a elegir uno.
+- **El documento se normaliza y el vacío se convierte en ausente.** "40.123.456" y "40123456" son la
+  misma persona; sin normalizar, el único por documento no detecta el duplicado y el centro termina
+  con dos fichas. Y dos cadenas vacías chocarían entre sí en el índice.
+- **El E11000 se traduce a `LP-MEMB-409-001`.** El chequeo previo del documento existe para dar un
+  error con nombre, pero entre el `findOne` y el `create` hay una ventana. La cierra el índice — y
+  además hay un caso real que el chequeo previo nunca ve: un socio borrado lógicamente sigue
+  reservando su documento, porque el índice no sabe de borrado lógico. Sin traducir el error, eso
+  sería un 500 y el staff no entendería por qué no puede cargar a esa persona.
+- **El corte del tutor se re-evalúa en el PATCH.** Si solo se validara en el alta, cargar la fecha de
+  nacimiento después sería la forma trivial de saltearlo.
+- **El índice único es PARCIAL, no sparse.** Es la misma trampa que encontró F0-10: en un índice
+  compuesto, `sparse` solo omite el documento si faltan _todos_ los campos indexados, y `tenantId`
+  siempre está. Con `sparse`, dos socios sin documento colisionarían en `null`. El test corre la
+  migración de verdad para probarlo contra el índice que va a existir en producción.
+
+**Verificación:** 1110 tests verdes (765 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido.
+
+---
+
 ## 2026-09-01 — F1-02: módulo Rooms y la sala que se crea sola
 
 - **Módulo:** `rooms`
