@@ -39,7 +39,7 @@ export interface ModuleDeps {
  * implementacion: Rooms pregunta si una sede existe a traves de `VenueLookup`,
  * que hoy contesta Venues y mañana podria contestar otra cosa.
  */
-export function createModuleRoutes(deps: ModuleDeps): Hono<AppEnv> {
+export function createModules(deps: ModuleDeps) {
   const routes = new Hono<AppEnv>();
 
   const venues = createVenuesModule(deps);
@@ -94,5 +94,13 @@ export function createModuleRoutes(deps: ModuleDeps): Hono<AppEnv> {
   routes.route('/', products.routes);
   routes.route('/', contracts.routes);
 
-  return routes;
+  return { routes, venues, rooms, members, products, contracts };
+}
+
+/**
+ * Solo las rutas. Es lo que necesita `createApp`; los modulos enteros los usan
+ * los tests y las tareas que orquestan varios (F1-14 en adelante).
+ */
+export function createModuleRoutes(deps: ModuleDeps): Hono<AppEnv> {
+  return createModules(deps).routes;
 }

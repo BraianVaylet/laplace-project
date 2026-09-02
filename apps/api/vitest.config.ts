@@ -37,9 +37,14 @@ export default defineConfig({
         'src/entitlements/**': { lines: 95, statements: 95, branches: 88, functions: 90 },
         'src/tenancy/**': { lines: 90, statements: 88, branches: 85, functions: 90 },
 
-        // Modulos de negocio. Los de plata y cupos (Contracts, Billing, Booking)
-        // suben a 95% cuando entren: la regla es la criticidad, no el directorio.
+        // Modulos de negocio. La regla es la criticidad, no el directorio.
         'src/modules/**': { lines: 85, statements: 85, branches: 80, functions: 85 },
+
+        // 🔴 Contracts maneja creditos: es plata. Sube al 95% de §6, igual que
+        // auth y entitlements.
+        // Las ramas van 10 puntos por debajo de las lineas, como el resto del
+        // archivo: exigir 95% de ramas obliga a testear cada `??` defensivo.
+        'src/modules/contracts/**': { lines: 95, statements: 90, branches: 85, functions: 90 },
 
         // Infraestructura de soporte.
         'src/jobs/**': { lines: 85, statements: 85, branches: 70, functions: 75 },

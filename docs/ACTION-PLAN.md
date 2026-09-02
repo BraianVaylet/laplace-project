@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |      6 |
+| Fase 1 — MVP vendible   |       32 |          186 |      7 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -742,11 +742,11 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   - `soldCount` y `priceSnapshotCents` los escribe Contracts (F1-08). Acá solo se declara el cupo
     (`maxSales`) y se verifica que archivar no toque nada vendido.
 
-## [ ] F1-08 · Módulo Contracts
+## [x] F1-08 · Módulo Contracts
 
-> **Hereda dos deudas de F1-07:** conectar el puerto `PurchaseHistory` de Products con el historial
-> real de contratos (hasta que se haga, el trial único por persona está escrito y testeado pero
-> nunca se dispara), e incrementar `soldCount` al vender para que el cupo `maxSales` aplique.
+> **Deudas de F1-07, ya saldadas:** el puerto `PurchaseHistory` está conectado al historial real
+> (el trial único por persona se dispara y tiene su test de integración), y la venta incrementa
+> `soldCount`, así que el cupo `maxSales` aplica.
 
 - **module:** contracts
 - **description:** La instancia comprada por un miembro, con su máquina de estados y sus créditos.
@@ -776,8 +776,21 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **test_plan:** Unit del selector FIFO con empates y categorías. Integración del consumo atómico:
   N consumos simultáneos sobre 1 crédito → exactamente 1 gana. Máquina de estados completa.
   Aislamiento. Cobertura mínima 95%.
-- **error-codes:** `LP-CTRT-422-004` (transición de estado inválida), `LP-CTRT-404-005`
+- **error-codes:** `LP-CTRT-402-001`, `LP-CTRT-402-002`, `LP-CTRT-422-003`, `LP-CTRT-422-004`,
+  `LP-CTRT-404-005`
 - **data-model-impact:** `Contract` de §5.2.2. Índice `{ tenantId, memberId, status, endsAt }`.
+  **Colección `auditLogs` en uso** desde acá: el ajuste manual de créditos deja su registro.
+- **decisiones de diseño:**
+  - El contrato guarda una **copia** de las condiciones del producto (tipo, categorías, franjas,
+    topes), no solo el precio. El producto se puede editar mañana y lo vendido tiene que seguir
+    valiendo por lo que se vendió. Es `priceSnapshotCents` extendido al resto.
+  - El vencimiento se calcula en el **calendario del centro** (§2.1.2), no sumando 30×24 horas.
+  - Un producto gratis nace `active`, no `pending_payment`: dejar la clase de prueba esperando un
+    pago de $0 sería una traba inventada en la puerta de entrada del socio.
+  - El consumo intenta con el **siguiente candidato** si el elegido pierde la carrera por su último
+    crédito. Descartar la reserva teniendo otro pack disponible sería un error nuestro.
+  - `expired`, `exhausted` y `cancelled` son terminales. La renovación crea un contrato nuevo, que
+    es lo que mantiene legible el histórico de lo cobrado.
 
 ## [ ] F1-09 · Congelamiento y vencimiento de contratos
 

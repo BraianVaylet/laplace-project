@@ -23,6 +23,61 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-02 — F1-08: módulo Contracts y el orden de consumo
+
+- **Módulo:** `contracts`
+- **Tipo:** feature
+- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/kfiwjNq6 (F1-08) — movida a **Completadas**
+- **Qué cambió:** el staff vende un producto a un socio y queda un contrato con su precio y sus
+  condiciones congeladas, su máquina de estados y sus créditos. El consumo elige el contrato según
+  §2.1.9 y lo descuenta en una sola operación atómica.
+- **Por qué:** es donde vive la regla más delicada del producto. Un consumo mal resuelto le cobra de
+  más al socio o le regala clases al centro, y en los dos casos se descubre tarde.
+- **Impacto:** colección `contracts` · seis rutas nuevas · dos eventos (`contract.sold`,
+  `contract.status_changed`) · **infraestructura de `AuditLog`** nueva en `src/audit/` · umbral de
+  cobertura propio para `src/modules/contracts/**` (95% de líneas, como auth y entitlements).
+- **Pendiente:** el congelamiento y el job de vencimiento son F1-09.
+
+**Decisiones:**
+
+- **El contrato copia las condiciones del producto, no solo el precio.** Tipo, categorías
+  habilitadas, franjas horarias y topes se guardan al vender. El centro puede editar el producto
+  mañana; lo vendido tiene que seguir valiendo por lo que se vendió. Es `priceSnapshotCents`
+  extendido al resto de los términos, y tiene su test: editar el producto después no cambia nada del
+  contrato.
+- **El vencimiento se calcula en el calendario del centro (§2.1.2).** Un pack de 30 días vendido el
+  1 de marzo vence el 31 a la misma hora local, no 720 horas después.
+- **El consumo es una sola operación.** `findOneAndUpdate` con `$expr` sobre
+  `creditsUsed < creditsTotal`: el filtro y el `$inc` suceden juntos. Hay un test que lanza cinco
+  consumos simultáneos sobre un pack de 1 crédito y verifica que gane exactamente uno. Con un read
+  y después un write, los cinco leerían `creditsUsed: 0` y el socio terminaría con 5 clases usadas
+  de un pack de 1.
+- **Si el elegido pierde la carrera, se intenta con el siguiente.** Descartar la reserva porque
+  justo se agotó el pack que el sistema eligió, teniendo otro disponible, sería un error nuestro.
+  Hay un test con dos packs de 1 crédito y dos consumos simultáneos: ganan los dos.
+- **El orden de consumo es explicable.** Vence primero → categoría más específica → más viejo. El
+  tercer criterio no aporta al negocio pero hace el orden determinista, que es lo que permite
+  decirle al socio de qué pack salió el crédito. La respuesta incluye esa explicación.
+- **Gastar primero el más específico es deliberado:** el pack que solo sirve para funcional se
+  pierde si no se usa en funcional; el general sirve para cualquier clase.
+- **Un producto gratis nace `active`.** Dejar la clase de prueba esperando un pago de $0 sería una
+  traba inventada justo en la puerta de entrada del socio.
+- **`expired`, `exhausted` y `cancelled` son terminales.** Un contrato agotado no revive: la
+  renovación crea uno nuevo, que es lo que mantiene legible el histórico de lo cobrado.
+- **El ajuste manual exige motivo y deja registro.** El `AuditLog` guarda antes, después, quién y
+  por qué. Seis meses después alguien pregunta por qué su pack tenía 10 clases, y el log de Pino ya
+  rotó: esto es un dato, no un log.
+
+**Deudas de F1-07 saldadas:** el trial único por persona ahora se dispara contra el historial real, y
+la venta incrementa `soldCount`, así que el cupo `maxSales` aplica. Las dos tienen test de
+integración.
+
+**Verificación:** 1328 tests verdes (938 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido con el umbral nuevo de Contracts.
+
+---
+
 ## 2026-09-02 — F1-07: módulo Products, el catálogo vendible
 
 - **Módulo:** `products`
