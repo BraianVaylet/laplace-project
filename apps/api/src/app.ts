@@ -7,6 +7,7 @@ import { AUTH_BASE_PATH, type Auth } from './auth/auth.js';
 import { createAuthRoutes } from './auth/routes.js';
 import type { MiddlewareHandler } from 'hono';
 import type { OrgEnv } from './auth/organization.js';
+import type { EntitlementsEnv } from './entitlements/middleware.js';
 import type { SessionEnv } from './auth/session.js';
 import { createErrorHandler } from './http/error-handler.js';
 import { requestId } from './http/request-id.js';
@@ -19,7 +20,9 @@ import { healthRoutes } from './routes/health.js';
  * tiene que dejar componerlos sin castear.
  */
 export type AppEnv = {
-  Variables: { requestId: string } & SessionEnv['Variables'] & OrgEnv['Variables'];
+  Variables: { requestId: string } & SessionEnv['Variables'] &
+    OrgEnv['Variables'] &
+    EntitlementsEnv['Variables'];
 };
 
 export interface AppDeps {

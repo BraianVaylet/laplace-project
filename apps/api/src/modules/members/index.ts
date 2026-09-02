@@ -10,10 +10,12 @@ import {
   InviteCodeService,
   type OrganizationMembershipPort,
 } from './application/invite-code-service.js';
+import { MemberImportService } from './application/member-import-service.js';
 import { MemberService, type Today } from './application/member-service.js';
 import type { MemberDoc } from './infrastructure/member.model.js';
 import { InviteCodeRepository } from './infrastructure/invite-code.repository.js';
 import { createInviteCodeRoutes } from './infrastructure/invite-code-routes.js';
+import { createImportRoutes } from './infrastructure/import-routes.js';
 import { MemberRepository } from './infrastructure/member.repository.js';
 import { VICTIM_MEMBER_NAME, createMemberRoutes } from './infrastructure/routes.js';
 
@@ -25,6 +27,7 @@ export interface MembersModule {
   routes: Hono<AppEnv>;
   service: MemberService;
   inviteCodes: InviteCodeService;
+  imports: MemberImportService;
 }
 
 export interface MembersModuleDeps {
@@ -100,11 +103,19 @@ export function createMembersModule(deps: MembersModuleDeps): MembersModule {
     return { id: String(created['publicId']), code: created['code'] as string };
   };
 
+  const imports = new MemberImportService({ members });
+
   const routes = new Hono<AppEnv>();
+  /*
+   * El import va PRIMERO: `/api/v1/members/import` tiene la misma forma que
+   * `/api/v1/members/:id`, y con las rutas de socios adelante el `:id` se
+   * quedaria con el pedido.
+   */
+  routes.route('/', createImportRoutes(imports, deps.entitlements, seedVictimMember));
   routes.route('/', createMemberRoutes(service, deps.entitlements, seedVictimMember));
   routes.route('/', createInviteCodeRoutes(inviteCodes, deps.entitlements, seedVictimCode));
 
-  return { routes, service, inviteCodes };
+  return { routes, service, inviteCodes, imports };
 }
 
 export type { MemberService } from './application/member-service.js';

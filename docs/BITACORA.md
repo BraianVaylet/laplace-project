@@ -23,6 +23,55 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-02 — F1-05: importación masiva por CSV
+
+- **Módulo:** `members`
+- **Tipo:** feature
+- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/V0UQdGSX (F1-05) — movida a **Completadas**
+- **Qué cambió:** el centro sube el padrón exportado de un Excel o de un competidor, lo ve fila por
+  fila con su validación, corrige o saltea lo que haga falta, y recién ahí importa. Al terminar
+  queda un resumen fila por fila con qué se creó, qué se actualizó y qué se salteó.
+- **Por qué:** §2.1.7 lo marca como la fricción número 1 para cambiar de plataforma. Si importar
+  duele, el centro no migra y no hay venta.
+- **Impacto:** dos rutas nuevas (`/members/import/preview` y `/members/import`) · sin cambios en el
+  modelo · permiso propio `athlete.import`, que el `front_desk` **no** tiene.
+
+**Decisiones:**
+
+- **Parser de CSV propio, sin dependencia.** Las reglas que importan son cuatro: comillas, comillas
+  escapadas, saltos de línea adentro de comillas y separador. El archivo viene de un usuario, así
+  que prefiero poder leer exactamente qué hace con una entrada rara. Acepta `;` porque es lo que
+  exporta un Excel en español —la coma es el separador decimal— y saca el BOM que Excel agrega al
+  guardar como UTF-8: sin eso, la primera columna se llama `﻿nombre` y no matchea nunca.
+- **Las fechas entran como `12/04/1999` y como `1999-04-12`.** Aceptar solo la ISO haría fallar el
+  archivo del 90% de los centros por un motivo que no es del centro.
+- **Los alias de columna son generosos.** `dni`, `documento`, `nro documento`; `celular`,
+  `teléfono`, `tel`. Y las columnas que no se reconocen se **avisan**, no hacen fallar el archivo:
+  el export del competidor trae columnas que no usamos, y rechazarlo por eso sería exactamente la
+  fricción que esta tarea existe para sacar.
+- **Dos pasos: previsualizar y confirmar.** Un import que escribe mientras valida deja el padrón a
+  medio migrar y sin forma de saber qué entró. La previsualización no escribe una sola fila.
+- **La confirmación es todo o nada.** Documentos repetidos dentro del archivo, documentos que ya
+  existen y el cupo del plan se resuelven **antes** de escribir. Hay tres tests que verifican que
+  tras un rechazo la colección quedó en cero.
+- **El límite del plan no usa `requireWithinLimit`.** Ese guard corta de a uno; acá hay que poder
+  decir "tu plan admite 2 socios y ya tenés 0; de los 3 del archivo, 1 no entra". Un "no entrás"
+  sin número obliga al centro a borrar filas al azar hasta que entre.
+- **Un duplicado que el chequeo previo no ve igual da 409 con su fila.** Un socio borrado
+  lógicamente sigue reservando su documento y el índice único no sabe de borrado lógico. Con 143
+  filas, "algo falló" no sirve: el error dice cuál.
+
+**Limitación conocida:** la escritura no está en una transacción. Toda la validación ocurre antes,
+así que el único escenario de import parcial es una caída de la base a mitad de la escritura; el
+error dice cuántas filas alcanzaron a entrar. F1-14 es donde las transacciones se vuelven
+obligatorias y donde se va a introducir esa plumbing.
+
+**Verificación:** 1204 tests verdes (836 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido.
+
+---
+
 ## 2026-09-02 — F1-04: códigos de invitación
 
 - **Módulo:** `members`

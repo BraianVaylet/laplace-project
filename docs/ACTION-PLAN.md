@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |      4 |
+| Fase 1 — MVP vendible   |       32 |          186 |      5 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -633,7 +633,7 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   - El permiso es `athlete.create`, no `invitation.create`: `invitation` está reservado por Better
     Auth para invitar **staff** (F0-02).
 
-## [ ] F1-05 · Importación masiva por CSV
+## [x] F1-05 · Importación masiva por CSV
 
 - **module:** members
 - **description:** Migrar el padrón desde Excel o desde un competidor. §2.1.7 lo marca como la
@@ -656,8 +656,20 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **risk:** med
 - **test_plan:** Unit del parser y del validador por fila. Integración: import parcial, duplicados,
   límite de plan alcanzado a mitad del archivo. Test de que un archivo con error no escribe nada.
-- **error-codes:** `LP-MEMB-422-006` (CSV con formato inválido)
+- **error-codes:** `LP-MEMB-422-006` (CSV con formato inválido), `LP-MEMB-409-001` (documento
+  repetido), `LP-ENTL-403-001` (el archivo excede el cupo del plan)
 - **data-model-impact:** ninguno nuevo.
+- **decisiones de diseño:**
+  - Parser de CSV propio, sin dependencia: las reglas que importan son cuatro (comillas, comillas
+    escapadas, saltos adentro de comillas y separador) y el archivo viene de un usuario. Acepta
+    `;` porque es lo que exporta un Excel en es-AR, y saca el BOM que Excel agrega al guardar.
+  - Las fechas entran como `12/04/1999` **y** como `1999-04-12`. Aceptar solo la ISO haría fallar
+    el archivo del 90% de los centros por un motivo que no es del centro.
+  - La confirmación es **todo o nada**: valida documentos repetidos, existentes y el cupo del plan
+    antes de escribir la primera fila. Un import a medias deja el padrón sin forma de saber qué
+    entró.
+  - El límite del plan no usa `requireWithinLimit`: ese guard corta de a uno y acá hay que poder
+    decir "de los 143 del archivo, 12 no entran".
 
 ## [ ] F1-06 · Ficha 360 del miembro en el DFSM
 

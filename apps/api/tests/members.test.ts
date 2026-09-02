@@ -621,8 +621,11 @@ describe('aislamiento de tenant', () => {
 
 describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
   it('las diez rutas de members traen su fixture de ataque', () => {
-    const members = allRegisteredRoutes().filter((route) =>
-      route.path.startsWith('/api/v1/members'),
+    // Las de `/import` son de F1-05 y tienen su propia suite.
+    const members = allRegisteredRoutes().filter(
+      (route) =>
+        route.path.startsWith('/api/v1/members') &&
+        !route.path.startsWith('/api/v1/members/import'),
     );
 
     expect(members.length).toBe(10);
@@ -638,6 +641,7 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
 
     for (const route of allRegisteredRoutes()) {
       if (!route.path.startsWith('/api/v1/members') || !route.isolationFixture) continue;
+      if (route.path.startsWith('/api/v1/members/import')) continue;
 
       const attack = await route.isolationFixture({ victimTenantId: victima.organizationId });
       const res = await app.request(attack.path, {
