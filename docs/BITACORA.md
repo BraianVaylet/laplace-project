@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `contracts`
 - **Tipo:** feature
-- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `de10fbc` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/kfiwjNq6 (F1-08) — movida a **Completadas**
 - **Qué cambió:** el staff vende un producto a un socio y queda un contrato con su precio y sus
   condiciones congeladas, su máquina de estados y sus créditos. El consumo elige el contrato según
