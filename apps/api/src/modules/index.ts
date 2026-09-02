@@ -1,12 +1,14 @@
 import { Hono } from 'hono';
+import { fromBsonDate } from '../persistence/bson-date.js';
 import { createAuditWriter } from '../audit/audit-log.js';
-import type { Temporal } from '@js-temporal/polyfill';
+import { Temporal } from '@js-temporal/polyfill';
 import type { Logger } from 'pino';
 import type { AppEnv } from '../app.js';
 import type { EntitlementsLoader } from '../entitlements/middleware.js';
 import type { DomainEventBus } from '../events/bus.js';
 import { createMembersModule, type OrganizationMembershipPort } from './members/index.js';
 import { createBillingModule } from './billing/index.js';
+import { createBookingModule } from './booking/index.js';
 import { createContractsModule, type FutureBookingReleaser } from './contracts/index.js';
 import { createProductsModule } from './products/index.js';
 import { createScheduleModule, type SessionBookingReleaser } from './schedule/index.js';
@@ -82,7 +84,13 @@ export function createModules(deps: ModuleDeps) {
      * Cancelar una clase devuelve los creditos de sus inscriptos (§2.1.9). Lo
      * contesta Booking (F1-14); hasta entonces no hay reservas que liberar.
      */
-    ...(deps.sessionBookings ? { bookings: deps.sessionBookings } : {}),
+    /*
+     * Salda la deuda de F1-13: cancelar una clase ahora libera de verdad sus
+     * reservas y devuelve los creditos, en una transaccion.
+     */
+    bookings: deps.sessionBookings ?? {
+      releaseSession: (params) => booking.service.releaseSession(params),
+    },
     ...(deps.now ? { now: deps.now } : {}),
   });
 
@@ -127,6 +135,13 @@ export function createModules(deps: ModuleDeps) {
       timeZoneOf: (venueId) => venues.service.timeZoneOf(venueId),
       maxFreezeDaysOf: (venueId) => venues.service.maxFreezeDaysOf(venueId),
     },
+    /*
+     * Salda la deuda de F1-09: congelar o vencer un contrato ahora libera de
+     * verdad las reservas futuras y devuelve sus creditos, en una transaccion.
+     */
+    bookings: deps.bookings ?? {
+      releaseFuture: (params) => booking.service.releaseFuture(params),
+    },
   });
 
   const billing = createBillingModule({
@@ -143,6 +158,35 @@ export function createModules(deps: ModuleDeps) {
     venues: { timeZoneOf: (venueId) => venues.service.timeZoneOf(venueId) },
   });
 
+  /*
+   * Booking orquesta: toma el lugar en Schedule, descuenta el credito en
+   * Contracts y consulta la mora en Billing. Cada pieza la resuelve el modulo
+   * que la conoce, y Booking solo las ordena (ADR-003).
+   */
+  const booking = createBookingModule({
+    entitlements: deps.entitlements,
+    events: deps.events,
+    sessions: {
+      claimSeat: (sessionId) => toClaimed(schedule.service.claimSeat(sessionId), venues.service),
+      releaseSeat: (sessionId) => schedule.service.releaseSeat(sessionId),
+      adjustWaitlist: (sessionId, delta) => schedule.service.adjustWaitlist(sessionId, delta),
+      find: (sessionId) => toClaimed(schedule.service.findSession(sessionId), venues.service),
+    },
+    credits: {
+      consume: (memberId, context) => contracts.service.consume(memberId, context),
+      refund: async (contractId) => {
+        await contracts.service.refund(contractId);
+      },
+    },
+    arrears: {
+      assertCanTransact: (memberId, allowDebt) =>
+        billing.service.assertCanTransact(memberId, allowDebt),
+    },
+    venues: { allowDebtOf: (venueId) => venues.service.allowDebtOf(venueId) },
+    members: (userId) => members.service.findIdByUserId(userId),
+    now: deps.now ?? (() => Temporal.Now.instant()),
+  });
+
   routes.route('/', venues.routes);
   routes.route('/', rooms.routes);
   routes.route('/', members.routes);
@@ -150,11 +194,23 @@ export function createModules(deps: ModuleDeps) {
   routes.route('/', contracts.routes);
   routes.route('/', billing.routes);
   routes.route('/', schedule.routes);
+  routes.route('/', booking.routes);
 
   /** Todo lo que el runner tiene que programar (§10). */
   const jobs = [...contracts.jobs, ...billing.jobs, ...schedule.jobs];
 
-  return { routes, jobs, venues, rooms, members, products, contracts, billing, schedule };
+  return {
+    routes,
+    jobs,
+    venues,
+    rooms,
+    members,
+    products,
+    contracts,
+    billing,
+    schedule,
+    booking,
+  };
 }
 
 /**
@@ -163,4 +219,40 @@ export function createModules(deps: ModuleDeps) {
  */
 export function createModuleRoutes(deps: ModuleDeps): Hono<AppEnv> {
   return createModules(deps).routes;
+}
+
+/**
+ * El documento de la clase a lo que Booking necesita saber de ella.
+ *
+ * La zona horaria se resuelve al vuelo contra el Venue: es contra la hora
+ * **local** que se evalua la franja horaria de un pack (§2.1.9), asi que
+ * resolverla en UTC dejaria pasar reservas que el pack matutino no cubre.
+ */
+async function toClaimed(
+  pending: Promise<{
+    publicId?: unknown;
+    venueId: string;
+    categoryId: string;
+    startAt: Date;
+    endAt: Date;
+    capacity: number;
+    bookedCount: number;
+    status: string;
+  } | null>,
+  venues: { timeZoneOf(venueId: string): Promise<string> },
+) {
+  const session = await pending;
+  if (!session) return null;
+
+  return {
+    publicId: String(session.publicId),
+    venueId: session.venueId,
+    categoryId: session.categoryId,
+    startAt: fromBsonDate(session.startAt),
+    endAt: fromBsonDate(session.endAt),
+    capacity: session.capacity,
+    bookedCount: session.bookedCount,
+    status: session.status,
+    timeZone: await venues.timeZoneOf(session.venueId),
+  };
 }

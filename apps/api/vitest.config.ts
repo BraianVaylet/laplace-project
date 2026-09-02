@@ -46,6 +46,9 @@ export default defineConfig({
         // Las ramas van 10 puntos por debajo de las lineas, como el resto del
         // archivo: exigir 95% de ramas obliga a testear cada `??` defensivo.
         'src/modules/contracts/**': { lines: 95, statements: 90, branches: 85, functions: 90 },
+        // 🔴 Booking reparte los cupos: una sobreventa es una persona parada
+        // en la puerta de una clase llena.
+        'src/modules/booking/**': { lines: 95, statements: 90, branches: 85, functions: 90 },
 
         // Infraestructura de soporte.
         'src/jobs/**': { lines: 85, statements: 85, branches: 70, functions: 75 },

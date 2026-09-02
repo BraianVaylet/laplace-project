@@ -1,7 +1,8 @@
 import type { FilterQuery } from 'mongoose';
 import type { Temporal } from '@js-temporal/polyfill';
 import { toBsonDate } from '../../../persistence/bson-date.js';
-import { TenantRepository } from '../../../tenancy/repository.js';
+import { requireTenant } from '../../../tenancy/context.js';
+import { TenantRepository, sessionOption } from '../../../tenancy/repository.js';
 import { VenueClosureModel, type VenueClosureDoc } from './closure.model.js';
 import {
   ClassSessionModel,
@@ -75,6 +76,60 @@ export class ClassSessionRepository extends TenantRepository<ClassSessionDoc> {
     )
       .lean<ClassSessionDoc[]>()
       .exec();
+  }
+
+  /**
+   * 🔴 Toma un lugar de la clase de forma **atomica** (§2.1.5.e).
+   *
+   * El filtro exige `bookedCount < capacity` y el `$inc` sucede en la misma
+   * operacion. Con un `read` y despues un `write`, cincuenta pedidos a las 6:00
+   * leerian el mismo contador y entrarian los cincuenta: eso es sobreventa, y a
+   * las 6:05 hay diez personas paradas afuera.
+   */
+  async claimSeat(publicId: string): Promise<ClassSessionDoc | null> {
+    const { tenantId } = requireTenant();
+
+    return ClassSessionModel.findOneAndUpdate(
+      {
+        publicId,
+        tenantId,
+        deletedAt: null,
+        status: { $nin: ['cancelled', 'completed'] },
+        $expr: { $lt: ['$bookedCount', '$capacity'] },
+      },
+      { $inc: { bookedCount: 1 } },
+      { new: true, ...sessionOption() },
+    )
+      .lean<ClassSessionDoc>()
+      .exec();
+  }
+
+  /** Devuelve un lugar tomado. Compensa una reserva que fallo despues del claim. */
+  async releaseSeat(publicId: string): Promise<void> {
+    const { tenantId } = requireTenant();
+
+    await ClassSessionModel.updateOne(
+      // El `$gt: 0` evita que una doble devolucion deje el contador negativo.
+      { publicId, tenantId, deletedAt: null, bookedCount: { $gt: 0 } },
+      { $inc: { bookedCount: -1 } },
+      sessionOption(),
+    ).exec();
+  }
+
+  /** Suma o resta de la lista de espera. */
+  async adjustWaitlist(publicId: string, delta: number): Promise<void> {
+    const { tenantId } = requireTenant();
+
+    await ClassSessionModel.updateOne(
+      {
+        publicId,
+        tenantId,
+        deletedAt: null,
+        ...(delta < 0 ? { waitlistCount: { $gt: 0 } } : {}),
+      },
+      { $inc: { waitlistCount: delta } },
+      sessionOption(),
+    ).exec();
   }
 
   /** Cuantas clases futuras tiene una sala. Es lo que Rooms pregunta para poder borrarla. */

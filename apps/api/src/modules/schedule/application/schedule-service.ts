@@ -438,6 +438,27 @@ export class ScheduleService {
     return result;
   }
 
+  /**
+   * Toma un lugar de la clase, de forma atómica. Es el puerto que consume
+   * Booking (F1-14): el módulo que conoce la clase es el que sabe si queda lugar.
+   */
+  async claimSeat(sessionId: string): Promise<ClassSessionDoc | null> {
+    return this.sessions.claimSeat(sessionId);
+  }
+
+  async releaseSeat(sessionId: string): Promise<void> {
+    await this.sessions.releaseSeat(sessionId);
+  }
+
+  async adjustWaitlist(sessionId: string, delta: number): Promise<void> {
+    await this.sessions.adjustWaitlist(sessionId, delta);
+  }
+
+  /** La clase, o `null` si no existe en este tenant. Booking la necesita sin el 404. */
+  async findSession(sessionId: string): Promise<ClassSessionDoc | null> {
+    return this.sessions.findByPublicId(sessionId);
+  }
+
   /** Cuántas clases futuras tiene una sala. Es el puerto que consume Rooms (F1-02). */
   async countFutureSessions(roomId: string): Promise<number> {
     return this.sessions.countFutureOfRoom(roomId, this.now());

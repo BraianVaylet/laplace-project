@@ -81,17 +81,13 @@ export interface FutureBookingReleaser {
   }): Promise<number>;
 }
 
-export const NO_BOOKINGS_YET: FutureBookingReleaser = {
-  releaseFuture: () => Promise.resolve(0),
-};
-
 export interface ContractServiceDeps {
   contracts: ContractRepository;
   products: ProductCatalog;
   venues: VenueClock;
   events: DomainEventBus;
   audit: AuditWriter;
-  bookings?: FutureBookingReleaser | undefined;
+  bookings: FutureBookingReleaser;
   now?: (() => Temporal.Instant) | undefined;
 }
 
@@ -110,7 +106,7 @@ export class ContractService {
     this.venues = deps.venues;
     this.events = deps.events;
     this.audit = deps.audit;
-    this.bookings = deps.bookings ?? NO_BOOKINGS_YET;
+    this.bookings = deps.bookings;
     this.now = deps.now ?? (() => Temporal.Now.instant());
   }
 

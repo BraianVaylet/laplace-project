@@ -1,6 +1,7 @@
-import type { FilterQuery, Model, SortOrder, UpdateQuery } from 'mongoose';
+import type { ClientSession, FilterQuery, Model, SortOrder, UpdateQuery } from 'mongoose';
 import { Temporal } from '@js-temporal/polyfill';
 import { toBsonDate } from '../persistence/bson-date.js';
+import { currentSession } from '../persistence/transaction.js';
 import { requireTenant } from './context.js';
 import { decodeCursor, encodeCursor, keysetFilter, type SortDirection } from './cursor.js';
 import { publicId, type IdEntity } from './public-id.js';
@@ -112,17 +113,25 @@ export abstract class TenantRepository<TDoc extends Record<string, unknown>> {
 
   async create(data: Omit<Partial<TDoc>, 'tenantId' | 'publicId'>): Promise<TDoc> {
     const { tenantId, userId } = requireTenant();
+    const session = currentSession();
 
-    const created = await this.model.create({
-      ...data,
-      tenantId,
-      publicId: publicId(this.entity),
-      createdBy: userId,
-      updatedBy: userId,
-      deletedAt: null,
-    } as unknown as TDoc);
+    const [created] = await this.model.create(
+      [
+        {
+          ...data,
+          tenantId,
+          publicId: publicId(this.entity),
+          createdBy: userId,
+          updatedBy: userId,
+          deletedAt: null,
+        } as unknown as TDoc,
+      ],
+      // `create` solo acepta sesion con la forma de array. Sin esto, la
+      // escritura quedaria fuera de la transaccion sin avisar.
+      session ? { session } : {},
+    );
 
-    return created.toObject() as TDoc;
+    return (created as { toObject(): TDoc }).toObject();
   }
 
   /**
@@ -154,7 +163,7 @@ export abstract class TenantRepository<TDoc extends Record<string, unknown>> {
       .findOneAndUpdate(
         this.scope({ publicId: id } as FilterQuery<TDoc>),
         { ...patch, $set: { ...(patch.$set ?? {}), updatedBy: userId } },
-        { new: true },
+        { new: true, ...sessionOption() },
       )
       .lean<TDoc>()
       .exec();
@@ -168,13 +177,25 @@ export abstract class TenantRepository<TDoc extends Record<string, unknown>> {
     const { userId } = requireTenant();
 
     const result = await this.model
-      .updateOne(this.scope({ publicId: id } as FilterQuery<TDoc>), {
-        $set: { deletedAt: toBsonDate(Temporal.Now.instant()), updatedBy: userId },
-      })
+      .updateOne(
+        this.scope({ publicId: id } as FilterQuery<TDoc>),
+        { $set: { deletedAt: toBsonDate(Temporal.Now.instant()), updatedBy: userId } },
+        sessionOption(),
+      )
       .exec();
 
     return result.modifiedCount === 1;
   }
+}
+
+/**
+ * La sesion de la transaccion en curso, en la forma que esperan las opciones de
+ * Mongoose. Vacio cuando no hay ninguna abierta, que es el caso normal.
+ */
+export function sessionOption(): { session?: ClientSession } {
+  const session = currentSession();
+
+  return session ? { session } : {};
 }
 
 function cursorValueOf(raw: unknown): string | number {

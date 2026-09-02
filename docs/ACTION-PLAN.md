@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     12 |
+| Fase 1 — MVP vendible   |       32 |          186 |     13 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -829,9 +829,10 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   - Los jobs son el **segundo uso legítimo** de `skipTenantScope`: no corren dentro del pedido de
     nadie, así que recorren todos los centros y abren el contexto de cada uno antes de tocar sus
     datos. Está documentado en el plugin de tenancy.
-- **cerrada con una deuda declarada:** cancelar las reservas futuras y devolver esos créditos se
-  pide a través del puerto `FutureBookingReleaser`, que hasta F1-14 responde 0. El pedido sale con
-  su motivo (`frozen` / `expired`) y hay un test que lo verifica; lo que falta es quien lo conteste.
+- **deuda declarada, saldada en F1-14:** cancelar las reservas futuras y devolver esos créditos se
+  pide a través del puerto `FutureBookingReleaser`. El pedido salía con su motivo
+  (`frozen` / `expired`) y con su test desde acá; Booking es quien lo contesta, y el puerto dejó de
+  tener un default: hoy es obligatorio.
 
 ## [x] F1-10 · Billing: cargos, pagos manuales y estado de cuenta
 
@@ -910,8 +911,8 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **decisiones de diseño:**
   - El estado de cobranza (`clear` / `pending` / `overdue` / `credit`) es **derivado**, no un campo:
     guardarlo obligaría a un job que lo mantenga al día y a que ese job no se atrase nunca.
-  - El corte de la mora vive en Billing (`assertCanTransact`) y lo llamará Booking: el módulo que
-    sabe cuánto se debe es el que decide, y el que reserva solo pregunta.
+  - El corte de la mora vive en Billing (`assertCanTransact`) y lo llama Booking desde F1-14: el
+    módulo que sabe cuánto se debe es el que decide, y el que reserva solo pregunta.
   - El día de la caja es **el del centro**, en su zona horaria. Calculado en UTC, la caja de un
     centro argentino cerraría a las 21:00 y los pagos de la última hora caerían en el día siguiente.
   - El efectivo se reporta aparte del resto: es lo único que hay que contar a mano al cerrar el
@@ -1004,24 +1005,20 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
     nadie transiciona la grilla vieja, y reescribirla cambiaría el histórico.
   - Los cierres guardan `from`/`to` como `YYYY-MM-DD`, no como instantes: un feriado es un día del
     calendario del centro, y guardarlo como instante obligaría a elegir una hora arbitraria.
-- **cerrada con una deuda declarada:** el criterio pide que la cancelación y la devolución ocurran
-  **en la misma transacción**. Hoy son dos operaciones ordenadas para que un fallo no deje créditos
-  retenidos, y la devolución se pide por el puerto `SessionBookingReleaser`. F1-14 las mete en una
-  transacción de Mongo, que es donde puede: ahí las reservas y el contador de la sesión viven en el
-  mismo módulo.
+- **deuda declarada, saldada en F1-14:** el criterio pide que la cancelación y la devolución ocurran
+  **en la misma transacción**. Se cerró acá como dos operaciones ordenadas para que un fallo no
+  dejara créditos retenidos; F1-14 las metió en `withTransaction`, que es donde puede: ahí las
+  reservas y el contador de la sesión viven en el mismo módulo.
 
-## [ ] F1-14 · Booking: reserva atómica con descuento de crédito
+## [x] F1-14 · Booking: reserva atómica con descuento de crédito
 
-> **Hereda dos deudas:**
+> **Heredó tres deudas, y las tres quedaron saldadas acá:**
 >
-> - De F1-09: conectar el puerto `FutureBookingReleaser` de Contracts con la cancelación real de
->   reservas futuras y la devolución de sus créditos (ADR-001). Hasta que se haga, congelar y vencer
->   un contrato piden la liberación pero nadie la ejecuta.
-> - De F1-11: llamar a `billing.assertCanTransact(memberId, allowDebt)` antes de reservar. El corte
->   de la mora está implementado y testeado, pero nadie lo invoca desde el flujo de reserva.
-> - De F1-13: conectar el puerto `SessionBookingReleaser` y meter la cancelación de la clase y la
->   devolución de sus créditos en **una transacción de Mongo**. Hoy son dos operaciones ordenadas
->   para que un fallo no deje créditos retenidos.
+> - De F1-09: el puerto `FutureBookingReleaser` de Contracts ya está conectado. Congelar o vencer un
+>   contrato cancela sus reservas futuras y devuelve los créditos, en una transacción.
+> - De F1-11: `billing.assertCanTransact(memberId, allowDebt)` se llama **antes** de tomar el lugar.
+> - De F1-13: cancelar una clase cancela sus reservas y devuelve los créditos dentro de
+>   `withTransaction`, no como dos operaciones ordenadas.
 
 - **module:** booking
 - **description:** El corazón del producto y su condición de carrera clásica: dos personas tomando
@@ -1053,6 +1050,26 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **error-codes:** `LP-BOOK-403-005` (miembro en mora, ADR-004), `LP-BOOK-404-006`
 - **data-model-impact:** `Booking` de §5.2.2. Índice **único** `{ tenantId, sessionId, memberId }`.
   `ClassSession.bookedCount`.
+- **decisiones de diseño:**
+  - El lugar se toma con un `findOneAndUpdate` que exige `bookedCount < capacity` **en la misma
+    operación**, no con un `read` y después un `write`: cincuenta pedidos leerían el mismo contador
+    y entrarían los cincuenta. Es lo que hace imposible la sobreventa, y lo que verifica el test de
+    §Testing.2.
+  - El orden de la reserva es deliberado: idempotencia → clase → reservable → duplicado → **mora** →
+    lugar → crédito → reserva. El corte de la mora va antes de tomar el lugar, porque rechazar
+    después obligaría a devolverlo y por un rato la clase figuraría llena.
+  - Si algo falla después de tomar el lugar, se compensa **hacia atrás** y el error que sube es el
+    original: dejar ganar al error de la compensación mandaría a mirar el lugar equivocado.
+  - El único `{ tenantId, sessionId, memberId }` de F0-10 se reemplaza por uno **parcial** sobre los
+    estados vivos. El de F0-10 bloqueaba para siempre a quien cancelaba y quería volver a anotarse.
+  - La lista de espera **no consume crédito**: todavía no tiene lugar, y cobrárselo por esperar
+    sería cobrarle por nada.
+  - Las transacciones viajan por `AsyncLocalStorage` y no como parámetro: si hubiera que pasarlas a
+    mano, alcanzaría con que un repositorio se la olvidara para que su escritura quedara afuera sin
+    que nadie lo note. Requieren replica set, que el runbook ya declara obligatorio.
+  - `releaseFuture` pregunta por contrato, no por socio: traerse las últimas N reservas del socio y
+    filtrar en memoria dejaría afuera, sin avisar, a quien tuviera más.
+  - El reloj lo inyecta la raíz de composición. El servicio nunca lee la hora sola.
 
 ## [ ] F1-15 · Booking: ventanas de tiempo y devolución de crédito
 

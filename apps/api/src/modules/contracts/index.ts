@@ -34,7 +34,7 @@ export interface ContractsModuleDeps {
   products: ProductCatalog;
   venues: VenueClock;
   /** Lo contesta Booking (F1-14) y Waitlist (F1-16). Hasta entonces no libera nada. */
-  bookings?: FutureBookingReleaser | undefined;
+  bookings: FutureBookingReleaser;
   now?: (() => Temporal.Instant) | undefined;
 }
 
@@ -46,7 +46,7 @@ export function createContractsModule(deps: ContractsModuleDeps): ContractsModul
     venues: deps.venues,
     events: deps.events,
     audit: deps.audit,
-    ...(deps.bookings ? { bookings: deps.bookings } : {}),
+    bookings: deps.bookings,
     ...(deps.now ? { now: deps.now } : {}),
   });
 

@@ -218,6 +218,17 @@ export class MemberService {
     });
   }
 
+  /**
+   * La ficha de socio de una cuenta de la WAFM, o `null` si esa persona todavía
+   * no está asociada al centro. Es el puerto que consume Booking: el `userId` es
+   * de la sesión, el `memberId` es del centro.
+   */
+  async findIdByUserId(userId: string): Promise<string | null> {
+    const member = await this.members.findOne({ userId } as never);
+
+    return member ? String(member['publicId']) : null;
+  }
+
   /** Lo consume el guard de entitlements. Cuenta los que ocupan cupo. */
   countActive(): Promise<number> {
     return this.members.countActive();

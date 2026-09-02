@@ -110,6 +110,16 @@ export class VenueService {
     return (await this.getByPublicId(publicId)).timeZone;
   }
 
+  /**
+   * ¿Este centro deja reservar a quien debe? ADR-004 decision 2: configurable
+   * por Venue, **default `false`**. Es el puerto que consume Booking.
+   */
+  async allowDebtOf(publicId: string): Promise<boolean> {
+    const policy = (await this.getByPublicId(publicId)).bookingPolicy as { allowDebt?: boolean };
+
+    return policy.allowDebt ?? DEFAULT_BOOKING_POLICY.allowDebt;
+  }
+
   /** Tope anual de dias de congelamiento del centro (§2.1.9). */
   async maxFreezeDaysOf(publicId: string): Promise<number> {
     const policy = (await this.getByPublicId(publicId)).bookingPolicy as {

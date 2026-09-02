@@ -23,6 +23,39 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-02 — F1-14: reserva atómica con descuento de crédito
+
+- **Módulo:** `booking`
+- **Tipo:** feature
+- **Commit/PR:** pendiente (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/wzD96bLn (F1-14) — movida a **Completadas**
+- **Qué cambió:** el corazón del producto. Un socio reserva y el crédito se descuenta en la misma
+  operación; si la clase está llena entra a la lista de espera sin gastar crédito; si debe plata y
+  el centro no permite deuda, no reserva. Cancelar devuelve el lugar y el crédito. Y las tres
+  deudas que arrastraban F1-09, F1-11 y F1-13 quedaron saldadas.
+- **Por qué:** sin reserva no hay producto, y una reserva que puede vender el mismo lugar dos veces
+  deja a alguien parado en la puerta de una clase llena.
+- **Impacto:** colección `bookings` · **migración nueva** (`20260902170000`) que reemplaza el único
+  `{ tenantId, sessionId, memberId }` de F0-10 por uno **parcial** sobre los estados vivos, y agrega
+  el único parcial de `idempotencyKey` · cuatro rutas nuevas · evento `booking.created` ·
+  `src/persistence/transaction.ts`, la plomería de transacciones que faltaba (§5.2.4).
+- **Pendiente:** la promoción automática de la lista de espera es F1-16, y las ventanas de tiempo y
+  el late cancel con su matriz de 8 casos son F1-15. `cancel` hoy siempre devuelve el crédito.
+
+### El índice de F0-10 estaba mal y esto lo destapó
+
+El único `{ tenantId, sessionId, memberId }` de la migración de F0-10 no tenía filtro parcial: quien
+cancelaba una clase quedaba **bloqueado para siempre** para volver a anotarse en esa misma clase,
+porque la fila cancelada seguía ocupando la clave. La migración de esta tarea lo baja y lo recrea
+filtrado por `status ∈ {booked, waitlisted, checked_in}`. Hay un test que lo cubre.
+
+### Lo que verifica el test que no se negocia
+
+50 reservas paralelas sobre una clase de 1 cupo: entra **una**, las otras 49 quedan en la fila y
+`bookedCount` termina en 1 (§Testing.2). El lugar se toma con un `findOneAndUpdate` que exige
+`bookedCount < capacity` dentro de la misma operación; con un `read` y después un `write`, las 50
+leerían el mismo contador y entrarían las 50.
+
 ## 2026-09-02 — F1-13: edición, feriados y cancelación de clase
 
 - **Módulo:** `schedule`
