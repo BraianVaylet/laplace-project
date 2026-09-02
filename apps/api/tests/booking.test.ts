@@ -115,12 +115,16 @@ async function post<T>(cookie: string, path: string, body: unknown): Promise<T> 
  * Un centro completo: sede, sala, socio con pack activo y una clase con cupo.
  * Es el escenario mínimo para poder reservar.
  */
-async function centroListo(nombre: string, opciones: { capacity?: number; credits?: number } = {}) {
+async function centroListo(
+  nombre: string,
+  opciones: { capacity?: number; credits?: number; bookingPolicy?: Record<string, unknown> } = {},
+) {
   const centro = await nuevoCentro(nombre);
   const sede = await post<{ publicId: string }>(centro.cookie, '/api/v1/venues', {
     name: 'Box Toro Centro',
     address: 'Alsina 123, Bahía Blanca',
     timeZone: 'America/Argentina/Buenos_Aires',
+    ...(opciones.bookingPolicy ? { bookingPolicy: opciones.bookingPolicy } : {}),
   });
 
   const salas = await app.request(
@@ -882,6 +886,178 @@ describe('liberar las reservas de un contrato (F1-09)', () => {
   });
 });
 
+describe('las ventanas de tiempo (§2.1.5.c)', () => {
+  it('antes de que abra la reserva, no se puede', async () => {
+    // La clase es el martes 3 a las 10:00 AR; con la apertura a 1 hora, el
+    // lunes al mediodía todavía no abre.
+    const centro = await centroListo('ventana-temprano', {
+      bookingPolicy: { bookingOpensMinutesBefore: 60, bookingClosesMinutesBefore: 15 },
+    });
+    await darPack(centro, centro.memberId);
+
+    const res = await reservar(centro, centro.memberId);
+
+    expect(res.status).toBe(422);
+    const body = (await res.json()) as ErrorBody;
+    expect(body.error.code).toBe('LP-BOOK-422-003');
+    expect(body.error.message).toContain('3 de marzo');
+  });
+
+  it('pasado el cierre, tampoco', async () => {
+    const centro = await centroListo('ventana-tarde');
+    await darPack(centro, centro.memberId);
+
+    // La clase empieza 10:00 UTC y cierra 15 minutos antes.
+    ahora = Temporal.Instant.from('2026-03-03T09:50:00Z');
+    const res = await reservar(centro, centro.memberId);
+
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-BOOK-422-003');
+  });
+
+  it('la categoría le pisa la ventana al centro', async () => {
+    const centro = await centroListo('ventana-categoria', {
+      bookingPolicy: {
+        bookingOpensMinutesBefore: 60,
+        bookingClosesMinutesBefore: 15,
+        categoryPolicies: { funcional: { bookingOpensMinutesBefore: 10080 } },
+      },
+    });
+    await darPack(centro, centro.memberId);
+
+    // Con la ventana del centro estaría cerrada; la de la categoría abre 7 días
+    // antes y es la que manda.
+    const res = await reservar(centro, centro.memberId);
+
+    expect(res.status).toBe(201);
+  });
+});
+
+describe('la política que el socio ve antes de confirmar (§2.1.5.d)', () => {
+  it('dice hasta cuándo puede cancelar, en la hora del centro', async () => {
+    const centro = await centroListo('politica-texto');
+
+    const res = await app.request(
+      `/api/v1/booking-policies/${centro.sessionId}`,
+      req(centro.cookie, 'GET'),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      text: string;
+      lateCancelPolicy: string;
+      canBookNow: boolean;
+    };
+    // La clase empieza 10:00 UTC (07:00 en Bahía Blanca) y el corte por default
+    // son 2 horas: 05:00 de la mañana, en la hora del centro y no en UTC.
+    expect(body.text).toContain('05:00');
+    expect(body.text).toContain('no se te devuelve');
+    expect(body.lateCancelPolicy).toBe('no_refund');
+    expect(body.canBookNow).toBe(true);
+  });
+
+  it('una clase que no existe no tiene política', async () => {
+    const centro = await centroListo('politica-inexistente');
+
+    const res = await app.request(
+      '/api/v1/booking-policies/ses_no_existe',
+      req(centro.cookie, 'GET'),
+    );
+
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-BOOK-404-006');
+  });
+});
+
+describe('late cancel (§2.1.9)', () => {
+  it('avisa antes de dejar que el socio pierda el crédito', async () => {
+    const centro = await centroListo('late-aviso');
+    const contractId = await darPack(centro, centro.memberId);
+    const reserva = await reservarOk(centro, centro.memberId);
+
+    // Media hora antes de la clase, con el corte en 2 horas.
+    ahora = Temporal.Instant.from('2026-03-03T09:30:00Z');
+    const res = await app.request(
+      `/api/v1/bookings/${reserva.booking.publicId}/cancel`,
+      req(centro.cookie, 'POST', {}),
+    );
+
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-BOOK-422-004');
+    // Nada se movió: el socio todavía no dijo que sí.
+    expect((await contratoEnBase(contractId))?.creditsUsed).toBe(1);
+    expect((await claseEnBase(centro.sessionId))?.bookedCount).toBe(1);
+  });
+
+  it('confirmado, cancela igual: pierde el crédito pero libera el lugar', async () => {
+    const centro = await centroListo('late-confirmado');
+    const contractId = await darPack(centro, centro.memberId);
+    const reserva = await reservarOk(centro, centro.memberId);
+
+    ahora = Temporal.Instant.from('2026-03-03T09:30:00Z');
+    const res = await app.request(
+      `/api/v1/bookings/${reserva.booking.publicId}/cancel`,
+      req(centro.cookie, 'POST', { acceptsLateCancel: true }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { status: string }).status).toBe('late_cancelled');
+    // El crédito no vuelve (§2.1.9), el lugar sí: otro lo puede tomar.
+    expect((await contratoEnBase(contractId))?.creditsUsed).toBe(1);
+    expect((await claseEnBase(centro.sessionId))?.bookedCount).toBe(0);
+  });
+
+  it('con la política `refund` del centro, el crédito vuelve igual', async () => {
+    const centro = await centroListo('late-generoso', {
+      bookingPolicy: { lateCancelPolicy: 'refund' },
+    });
+    const contractId = await darPack(centro, centro.memberId);
+    const reserva = await reservarOk(centro, centro.memberId);
+
+    ahora = Temporal.Instant.from('2026-03-03T09:30:00Z');
+    await app.request(
+      `/api/v1/bookings/${reserva.booking.publicId}/cancel`,
+      req(centro.cookie, 'POST', { acceptsLateCancel: true }),
+    );
+
+    expect((await contratoEnBase(contractId))?.creditsUsed).toBe(0);
+  });
+
+  it('dentro del plazo no pide confirmación y devuelve el crédito', async () => {
+    const centro = await centroListo('late-en-plazo');
+    const contractId = await darPack(centro, centro.memberId);
+    const reserva = await reservarOk(centro, centro.memberId);
+
+    // Tres horas antes, con el corte en dos.
+    ahora = Temporal.Instant.from('2026-03-03T07:00:00Z');
+    const res = await app.request(
+      `/api/v1/bookings/${reserva.booking.publicId}/cancel`,
+      req(centro.cookie, 'POST', {}),
+    );
+
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { status: string }).status).toBe('cancelled');
+    expect((await contratoEnBase(contractId))?.creditsUsed).toBe(0);
+  });
+
+  it('salir de la lista de espera nunca es tarde: nunca tuvo lugar', async () => {
+    const centro = await centroListo('late-espera', { capacity: 1 });
+    const primero = await socioCon(centro, 'Primero', 8);
+    const segundo = await socioCon(centro, 'Segundo', 8);
+    await reservarOk(centro, primero);
+    const enEspera = await reservarOk(centro, segundo);
+
+    ahora = Temporal.Instant.from('2026-03-03T09:30:00Z');
+    const res = await app.request(
+      `/api/v1/bookings/${enEspera.booking.publicId}/cancel`,
+      req(centro.cookie, 'POST', {}),
+    );
+
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { status: string }).status).toBe('cancelled');
+  });
+});
+
 describe('aislamiento de tenant', () => {
   it('el atacante no ve ni cancela la reserva del otro centro', async () => {
     const victima = await centroListo('bkg-victima');
@@ -922,12 +1098,14 @@ describe('aislamiento de tenant', () => {
 });
 
 describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
-  it('las cuatro rutas traen su fixture de ataque', () => {
-    const rutas = allRegisteredRoutes().filter((route) =>
-      route.path.startsWith('/api/v1/bookings'),
+  it('las cinco rutas traen su fixture de ataque', () => {
+    const rutas = allRegisteredRoutes().filter(
+      (route) =>
+        route.path.startsWith('/api/v1/bookings') ||
+        route.path.startsWith('/api/v1/booking-policies'),
     );
 
-    expect(rutas).toHaveLength(4);
+    expect(rutas).toHaveLength(5);
     for (const route of rutas) {
       expect(route.tenantScoped, `${route.method} ${route.path}`).toBe(true);
       expect(route.isolationFixture, `${route.method} ${route.path}`).toBeDefined();
@@ -939,7 +1117,10 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
     const victima = await nuevoCentro('bkg-fixtures-victima');
 
     for (const route of allRegisteredRoutes()) {
-      if (!route.path.startsWith('/api/v1/bookings') || !route.isolationFixture) continue;
+      const propia =
+        route.path.startsWith('/api/v1/bookings') ||
+        route.path.startsWith('/api/v1/booking-policies');
+      if (!propia || !route.isolationFixture) continue;
 
       const attack = await route.isolationFixture({ victimTenantId: victima.organizationId });
       const res = await app.request(attack.path, {

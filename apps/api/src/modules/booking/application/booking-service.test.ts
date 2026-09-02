@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Temporal } from '@js-temporal/polyfill';
+import { DEFAULT_BOOKING_POLICY } from '@laplace/schemas';
 import { BookingService, type ClaimedSession, type CreditLedger } from './booking-service.js';
 import type { BookingDoc } from '../infrastructure/booking.model.js';
 import type { BookingRepository } from '../infrastructure/booking.repository.js';
@@ -75,7 +76,7 @@ function armar(overrides: {
       refund,
     },
     arrears: { assertCanTransact: () => Promise.resolve() },
-    venues: { allowDebtOf: () => Promise.resolve(false) },
+    venues: { policyOf: () => Promise.resolve(DEFAULT_BOOKING_POLICY) },
     events: { emit: () => Promise.resolve(), on: () => undefined } as never,
     now: () => AHORA,
   });

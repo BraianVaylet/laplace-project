@@ -23,6 +23,39 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-02 — F1-15: ventanas de tiempo y devolución de crédito
+
+- **Módulo:** `booking`
+- **Tipo:** feature
+- **Commit/PR:** pendiente (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/LnUNw1UM (F1-15) — movida a **Completadas**
+- **Qué cambió:** las cinco ventanas de §2.1.5.c se respetan de verdad — abrir, cerrar, cancelar,
+  promover y hacer check-in —, cada categoría puede tener las suyas, y el socio ve el texto de la
+  política **antes** de confirmar. Cancelar fuera de plazo ahora avisa qué se pierde y recién
+  cancela si el socio lo confirma.
+- **Por qué:** es donde se define si el producto se siente justo o arbitrario. La regla de que el
+  late cancel no devuelve el crédito ya existía; lo que faltaba era que se supiera antes.
+- **Impacto:** `bookingPolicy` suma `lateCancelPolicy` y `categoryPolicies` · ruta nueva
+  `GET /api/v1/booking-policies/:sessionId` · el cuerpo de la cancelación acepta
+  `acceptsLateCancel` · sin migración: las sedes viejas toman los defaults.
+- **Pendiente:** la promoción automática de la lista de espera (F1-16) y el job de no-show (F1-17)
+  son los que van a consumir `waitlistPromotionCutoffMinutes` y la fila `no_show` de la matriz.
+
+### La matriz de §2.1.9 ahora tiene un solo lugar
+
+`domain/credit-matrix.ts` responde qué pasa con el crédito en cada uno de los ocho eventos de la
+tabla, y §Testing.5 la recorre fila por fila. La consultan Booking al cancelar, Schedule al cancelar
+una clase y Contracts al congelar; Attendance y el job de no-shows la van a consultar igual. La
+alternativa —la regla escrita en cada servicio— es la que termina cobrándole de más a alguien
+cuando una copia se desactualiza.
+
+### Dos cosas que aparecieron mirando la cobertura
+
+La caja diaria leía "hoy" con `Temporal.Now` en la ruta en vez del reloj inyectado del servicio: era
+lo único del módulo de plata que no se podía testear con un reloj fijo. Y el estado en el que queda
+un cargo después de un reembolso tenía una rama inalcanzable, porque la imputación nunca sobrepaga
+un cargo — lo que sobra queda como saldo a favor.
+
 ## 2026-09-02 — F1-14: reserva atómica con descuento de crédito
 
 - **Módulo:** `booking`

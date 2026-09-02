@@ -182,7 +182,7 @@ export function createModules(deps: ModuleDeps) {
       assertCanTransact: (memberId, allowDebt) =>
         billing.service.assertCanTransact(memberId, allowDebt),
     },
-    venues: { allowDebtOf: (venueId) => venues.service.allowDebtOf(venueId) },
+    venues: { policyOf: (venueId) => venues.service.policyOf(venueId) },
     members: (userId) => members.service.findIdByUserId(userId),
     now: deps.now ?? (() => Temporal.Now.instant()),
   });

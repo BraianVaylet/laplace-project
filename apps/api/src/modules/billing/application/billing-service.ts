@@ -187,7 +187,12 @@ export class BillingService {
       const quita = Math.min(restante, charge.paidCents);
       await this.charges.updateByPublicId(chargeId, {
         $inc: { paidCents: -quita },
-        $set: { status: charge.paidCents - quita >= charge.amountCents ? 'paid' : 'pending' },
+        /*
+         * Vuelve a deber, siempre: la imputacion nunca sobrepaga un cargo — lo
+         * que sobra queda como saldo a favor del socio —, asi que sacarle algo
+         * lo deja por debajo de su importe.
+         */
+        $set: { status: 'pending' },
       } as never);
       restante -= quita;
     }
@@ -302,6 +307,15 @@ export class BillingService {
    * caja de un centro argentino cerraria a las 21:00 y los pagos de la ultima
    * hora entrarian en el dia siguiente.
    */
+  /**
+   * Que dia es hoy **en el centro**. Lo resuelve el servicio y no la ruta
+   * porque el reloj es inyectable aca: leerlo en la ruta haria que la caja de
+   * hoy fuera lo unico del modulo que no se puede testear con un reloj fijo.
+   */
+  todayIn(timeZone: string): string {
+    return this.now().toZonedDateTimeISO(timeZone).toPlainDate().toString();
+  }
+
   async till(venueId: string, date: string, timeZone: string): Promise<TillSummary> {
     const desde = Temporal.PlainDate.from(date).toZonedDateTime({ timeZone });
     const hasta = desde.add({ days: 1 });

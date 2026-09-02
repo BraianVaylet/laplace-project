@@ -24,7 +24,6 @@ import { requireIdempotencyKey } from '../../../http/idempotency.js';
 import { registerRoutes, type IsolationFixture } from '../../../http/route-registry.js';
 import { validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
-import { Temporal } from '@js-temporal/polyfill';
 import type { BillingService } from '../application/billing-service.js';
 import { tillToCsv } from '../domain/billing.js';
 
@@ -229,7 +228,7 @@ export function createBillingRoutes(
       // El dia es el DEL CENTRO: calculado en UTC, la caja de un centro argentino
       // cerraria a las 21:00 y los pagos de la ultima hora caerian en el dia
       // siguiente.
-      const summary = await service.till(venueId, date ?? todayIn(timeZone), timeZone);
+      const summary = await service.till(venueId, date ?? service.todayIn(timeZone), timeZone);
 
       if (format !== 'csv') return c.json(summary);
 
@@ -249,9 +248,4 @@ export function createBillingRoutes(
   );
 
   return routes;
-}
-
-/** Hoy en la zona del centro, `YYYY-MM-DD`. */
-function todayIn(timeZone: string): string {
-  return Temporal.Now.plainDateISO(timeZone).toString();
 }

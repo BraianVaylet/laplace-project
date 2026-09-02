@@ -59,78 +59,111 @@ export type BusinessHours = z.infer<typeof businessHoursSchema>;
  * SMU edita en un formulario: "2 horas antes" es `120`, y eso se suma y se
  * compara sin ambigüedad.
  */
-export const bookingPolicySchema = z
-  .object({
-    /** Cuánto antes se abre la reserva. Default de §2.1.5.c: 7 días. */
-    bookingOpensMinutesBefore: z
-      .number()
-      .int()
-      .min(0)
-      .max(90 * 24 * 60)
-      .default(7 * 24 * 60),
-    /** Cuánto antes se cierra. Default: 15 minutos. */
-    bookingClosesMinutesBefore: z
-      .number()
-      .int()
-      .min(0)
-      .max(7 * 24 * 60)
-      .default(15),
-    /** Hasta cuándo se cancela sin perder el crédito. Default: 2 horas. */
-    cancelCutoffMinutes: z
-      .number()
-      .int()
-      .min(0)
-      .max(7 * 24 * 60)
-      .default(120),
-    /** Desde cuándo ya no se promueve la lista de espera. Default: 30 minutos. */
-    waitlistPromotionCutoffMinutes: z
-      .number()
-      .int()
-      .min(0)
-      .max(24 * 60)
-      .default(30),
-    /** Cuántos minutos antes abre el check-in. Default: 30. */
-    checkInOpensMinutesBefore: z
-      .number()
-      .int()
-      .min(0)
-      .max(24 * 60)
-      .default(30),
-    /** Cuántos minutos después del inicio sigue abierto. Default: 30. */
-    checkInClosesMinutesAfter: z
-      .number()
-      .int()
-      .min(0)
-      .max(24 * 60)
-      .default(30),
-    /**
-     * ¿Puede reservar quien debe? ADR-004 decisión 2: configurable por Venue,
-     * **default `false`**.
-     */
-    allowDebt: z.boolean().default(false),
-    /** Cuántos no-shows habilitan el bloqueo temporal. `0` desactiva la política. */
-    noShowThreshold: z.number().int().min(0).max(20).default(3),
-    /** Cuánto dura ese bloqueo. Default: 48 horas (§2.1.5.d). */
-    noShowBlockMinutes: z
-      .number()
-      .int()
-      .min(0)
-      .max(30 * 24 * 60)
-      .default(48 * 60),
-    /** Tamaño máximo de la lista de espera. */
-    waitlistMaxSize: z.number().int().min(0).max(200).default(20),
-    /**
-     * Tope anual de días de congelamiento por contrato (§2.1.9). Default: 30.
-     * `0` desactiva la función para el centro.
-     */
-    maxFreezeDaysPerYear: z.number().int().min(0).max(365).default(30),
-    /** Cuánto tiene para confirmar quien es promovido. Default: 15 minutos. */
-    waitlistHoldMinutes: z
-      .number()
-      .int()
-      .min(1)
-      .max(24 * 60)
-      .default(15),
+export const bookingPolicyBaseSchema = z.object({
+  /** Cuánto antes se abre la reserva. Default de §2.1.5.c: 7 días. */
+  bookingOpensMinutesBefore: z
+    .number()
+    .int()
+    .min(0)
+    .max(90 * 24 * 60)
+    .default(7 * 24 * 60),
+  /** Cuánto antes se cierra. Default: 15 minutos. */
+  bookingClosesMinutesBefore: z
+    .number()
+    .int()
+    .min(0)
+    .max(7 * 24 * 60)
+    .default(15),
+  /** Hasta cuándo se cancela sin perder el crédito. Default: 2 horas. */
+  cancelCutoffMinutes: z
+    .number()
+    .int()
+    .min(0)
+    .max(7 * 24 * 60)
+    .default(120),
+  /** Desde cuándo ya no se promueve la lista de espera. Default: 30 minutos. */
+  waitlistPromotionCutoffMinutes: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 60)
+    .default(30),
+  /** Cuántos minutos antes abre el check-in. Default: 30. */
+  checkInOpensMinutesBefore: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 60)
+    .default(30),
+  /** Cuántos minutos después del inicio sigue abierto. Default: 30. */
+  checkInClosesMinutesAfter: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 60)
+    .default(30),
+  /**
+   * ¿Puede reservar quien debe? ADR-004 decisión 2: configurable por Venue,
+   * **default `false`**.
+   */
+  allowDebt: z.boolean().default(false),
+  /** Cuántos no-shows habilitan el bloqueo temporal. `0` desactiva la política. */
+  noShowThreshold: z.number().int().min(0).max(20).default(3),
+  /** Cuánto dura ese bloqueo. Default: 48 horas (§2.1.5.d). */
+  noShowBlockMinutes: z
+    .number()
+    .int()
+    .min(0)
+    .max(30 * 24 * 60)
+    .default(48 * 60),
+  /** Tamaño máximo de la lista de espera. */
+  waitlistMaxSize: z.number().int().min(0).max(200).default(20),
+  /**
+   * Tope anual de días de congelamiento por contrato (§2.1.9). Default: 30.
+   * `0` desactiva la función para el centro.
+   */
+  maxFreezeDaysPerYear: z.number().int().min(0).max(365).default(30),
+  /** Cuánto tiene para confirmar quien es promovido. Default: 15 minutos. */
+  waitlistHoldMinutes: z
+    .number()
+    .int()
+    .min(1)
+    .max(24 * 60)
+    .default(15),
+  /**
+   * Qué pasa con el crédito de quien cancela tarde (§2.1.5.d). El default es el
+   * de la tabla de §2.1.9: **no se devuelve**, porque el lugar ya no se puede
+   * revender. `refund_and_notify` devuelve igual pero deja constancia.
+   */
+  lateCancelPolicy: z.enum(['no_refund', 'refund', 'refund_and_notify']).default('no_refund'),
+});
+
+/**
+ * Lo que una categoría puede pisarle al centro (§2.1.5.c: "todas configurables
+ * por Venue **y por categoría**").
+ *
+ * Solo las ventanas y la política de late cancel: la deuda, el tope de freeze y
+ * el bloqueo por no-shows son del centro entero, y dejarlos por categoría haría
+ * que la misma persona debiera plata para spinning y no para funcional.
+ */
+export const categoryBookingPolicySchema = bookingPolicyBaseSchema
+  .pick({
+    bookingOpensMinutesBefore: true,
+    bookingClosesMinutesBefore: true,
+    cancelCutoffMinutes: true,
+    waitlistPromotionCutoffMinutes: true,
+    checkInOpensMinutesBefore: true,
+    checkInClosesMinutesAfter: true,
+    lateCancelPolicy: true,
+  })
+  .partial();
+
+export type CategoryBookingPolicy = z.infer<typeof categoryBookingPolicySchema>;
+
+export const bookingPolicySchema = bookingPolicyBaseSchema
+  .extend({
+    /** Excepciones por categoría, indexadas por `categoryId`. */
+    categoryPolicies: z.record(z.string(), categoryBookingPolicySchema).default({}),
   })
   .refine((policy) => policy.bookingOpensMinutesBefore > policy.bookingClosesMinutesBefore, {
     // Si el cierre fuera antes que la apertura, la clase nunca sería reservable.

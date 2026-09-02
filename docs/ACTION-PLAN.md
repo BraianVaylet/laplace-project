@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     13 |
+| Fase 1 — MVP vendible   |       32 |          186 |     14 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1071,7 +1071,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
     filtrar en memoria dejaría afuera, sin avisar, a quien tuviera más.
   - El reloj lo inyecta la raíz de composición. El servicio nunca lee la hora sola.
 
-## [ ] F1-15 · Booking: ventanas de tiempo y devolución de crédito
+## [x] F1-15 · Booking: ventanas de tiempo y devolución de crédito
 
 - **module:** booking
 - **description:** Las cinco ventanas configurables de §2.1.5.c y la matriz completa de devolución
@@ -1098,6 +1098,29 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   Test de las 5 ventanas con reloj inyectado y TZ del Venue.
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** `Booking.creditConsumed`, `Booking.cancelledAt`.
+- **decisiones de diseño:**
+  - La tabla de §2.1.9 vive en **una función pura** (`domain/credit-matrix.ts`) y no repartida por
+    los servicios que la aplican. La misma regla la consultan Booking, Schedule (clase cancelada),
+    Contracts (congelamiento), Attendance (walk-in) y el job de no-shows: cinco copias de una regla
+    de plata son cinco versiones de la verdad, y la que se desactualiza le cobra de más a alguien.
+  - **El late cancel pide confirmación en vez de rechazar o de cobrar callado.** El primer pedido
+    responde `LP-BOOK-422-004` diciendo qué se pierde; con `acceptsLateCancel: true` cancela igual.
+    Rechazarlo dejaría el lugar tomado por alguien que no va a ir, y cancelarlo sin avisar es lo
+    que hace que el centro parezca arbitrario (§2.1.5.d).
+  - Salir de la lista de espera **nunca es tarde**: nunca tuvo lugar ni crédito, así que no hay
+    nada que penalizar.
+  - Los dos lados de la ventana de reserva devuelven el **mismo código** con mensajes distintos:
+    para quien reserva son el mismo problema, pero "todavía no" sin la fecha desde la que sí no le
+    sirve a nadie.
+  - Las excepciones por categoría solo pisan **ventanas y late cancel**. La deuda, el tope de
+    freeze y el bloqueo por no-shows son del centro entero: por categoría, la misma persona debería
+    plata para spinning y no para funcional.
+  - Booking le pide al Venue la **política entera** y resuelve las ventanas él. Preguntar campo por
+    campo sería un viaje a la base por regla, y todas se evalúan en la misma reserva.
+- **encontrado de paso:** la caja diaria leía "hoy" con el reloj de pared en vez del inyectado, y
+  era lo único del módulo que no se podía testear con un reloj fijo. Ahora lo resuelve el servicio.
+  Y el `status` que dejaba un cargo después de un reembolso tenía una rama muerta: la imputación
+  nunca sobrepaga un cargo, así que sacarle algo siempre lo deja debiendo.
 
 ## [ ] F1-16 · Waitlist con promoción automática
 

@@ -1,9 +1,24 @@
 import { Temporal } from '@js-temporal/polyfill';
-import type { BookingResult, Consumption, CreateBookingInput } from '@laplace/schemas';
+import type {
+  BookingPolicy,
+  BookingPolicyView,
+  BookingResult,
+  Consumption,
+  CreateBookingInput,
+} from '@laplace/schemas';
 import type { DomainEventBus } from '../../../events/bus.js';
 import { AppError } from '../../../http/errors.js';
 import { fromBsonDate } from '../../../persistence/bson-date.js';
 import { withTransaction } from '../../../persistence/transaction.js';
+import { creditEffectOf } from '../domain/credit-matrix.js';
+import {
+  assertWithinBookingWindow,
+  bookingWindowOf,
+  cancelCutoffAt,
+  isLateCancel,
+  policyFor,
+  policyText,
+} from '../domain/windows.js';
 import type { BookingDoc } from '../infrastructure/booking.model.js';
 import type { BookingRepository } from '../infrastructure/booking.repository.js';
 
@@ -51,7 +66,11 @@ export interface ArrearsGate {
 }
 
 export interface VenuePolicy {
-  allowDebtOf(venueId: string): Promise<boolean>;
+  /**
+   * La política completa del centro. Booking pide una sola cosa y resuelve las
+   * ventanas él: preguntar campo por campo sería un viaje a la base por regla.
+   */
+  policyOf(venueId: string): Promise<BookingPolicy>;
 }
 
 export interface BookingServiceDeps {
@@ -114,11 +133,15 @@ export class BookingService {
     if (!session) throw sessionNotFound(input.sessionId);
     this.assertBookable(session);
 
+    // Las cinco ventanas de §2.1.5.c, con la excepción de la categoría encima.
+    const policy = await this.policyOf(session);
+    assertWithinBookingWindow(policy, session.startAt, this.now(), session.timeZone);
+
     if (await this.bookings.liveOf(input.sessionId, memberId)) throw alreadyBooked(input.sessionId);
 
     // El corte de la mora, antes de tocar nada: rechazar después de haber tomado
     // el lugar obligaría a devolverlo, y por un rato la clase figuraría llena.
-    await this.arrears.assertCanTransact(memberId, await this.venues.allowDebtOf(session.venueId));
+    await this.arrears.assertCanTransact(memberId, policy.allowDebt);
 
     const lugar = await this.sessions.claimSeat(input.sessionId);
     if (!lugar) return this.joinWaitlist(session, memberId, idempotencyKey);
@@ -209,33 +232,51 @@ export class BookingService {
    * Cancela una reserva y devuelve su crédito y su lugar, **en una transacción**
    * (§5.2.4). A medias, el socio pierde una clase que pagó o la clase queda con
    * un lugar fantasma que nadie puede usar.
+   *
+   * Fuera del `cancelCutoff` la cancelación **pide confirmación** antes de
+   * hacer nada: la regla de §2.1.9 ya existe igual, pero enterarse de que
+   * perdiste el crédito después de cancelar es lo que la hace sentir
+   * arbitraria (§2.1.5.d).
    */
-  async cancel(
-    id: string,
-    status: 'cancelled' | 'late_cancelled' = 'cancelled',
-  ): Promise<BookingDoc> {
+  async cancel(id: string, options: { acceptsLateCancel?: boolean } = {}): Promise<BookingDoc> {
     return withTransaction(async () => {
       const booking = await this.get(id);
       if (!isLive(booking.status)) throw alreadyClosed(id, booking.status);
 
-      const updated = await this.bookings.updateByPublicId(id, { $set: { status } });
-      if (!updated) throw bookingNotFound(id);
-
       if (booking.status === 'waitlisted') {
-        // Nunca tuvo lugar ni crédito: solo sale de la fila.
+        // Nunca tuvo lugar ni crédito, así que tampoco puede cancelar tarde:
+        // solo sale de la fila.
+        const salida = await this.bookings.updateByPublicId(id, {
+          $set: { status: 'cancelled' },
+        });
+        if (!salida) throw bookingNotFound(id);
         await this.sessions.adjustWaitlist(booking.sessionId, -1);
 
-        return updated;
+        return salida;
       }
+
+      const session = await this.sessions.find(booking.sessionId);
+      const policy = session ? await this.policyOf(session) : undefined;
+      const tarde = session && policy ? isLateCancel(policy, session.startAt, this.now()) : false;
+
+      if (tarde && options.acceptsLateCancel !== true) {
+        throw lateCancelNeedsConfirmation(id, policy as BookingPolicy);
+      }
+
+      const status = tarde ? 'late_cancelled' : 'cancelled';
+      const updated = await this.bookings.updateByPublicId(id, { $set: { status } });
+      if (!updated) throw bookingNotFound(id);
 
       await this.sessions.releaseSeat(booking.sessionId);
 
       /*
-       * ADR-001: la cancelación dentro de plazo devuelve el crédito; el late
-       * cancel no. El plazo lo evalúa F1-15, que es quien conoce la ventana del
-       * Venue; acá se respeta la decisión que ya vino tomada.
+       * La tabla de §2.1.9 decide, no este servicio: cancelar en plazo devuelve
+       * y el late cancel depende de la política del centro.
        */
-      if (status === 'cancelled' && booking.contractId !== undefined) {
+      const efecto = creditEffectOf(tarde ? 'late_cancelled' : 'cancelled_in_time', {
+        lateCancelPolicy: policy?.lateCancelPolicy ?? 'no_refund',
+      });
+      if (efecto === 'refund' && booking.contractId !== undefined) {
         await this.credits.refund(booking.contractId);
       }
 
@@ -243,7 +284,7 @@ export class BookingService {
         bookingId: id,
         sessionId: booking.sessionId,
         memberId: booking.memberId,
-        creditRefunded: status === 'cancelled' && booking.contractId !== undefined,
+        creditRefunded: efecto === 'refund' && booking.contractId !== undefined,
       });
 
       return updated;
@@ -269,7 +310,9 @@ export class BookingService {
          * La clase no se dio: el crédito se devuelve siempre, sin mirar la
          * ventana de cancelación (§2.1.9). El socio no hizo nada mal.
          */
-        if (booking.contractId !== undefined) await this.credits.refund(booking.contractId);
+        if (creditEffectOf('session_cancelled') === 'refund' && booking.contractId !== undefined) {
+          await this.credits.refund(booking.contractId);
+        }
       }
 
       return vivas.length;
@@ -294,11 +337,41 @@ export class BookingService {
         });
         await this.sessions.releaseSeat(booking.sessionId);
         // Salieron del query por contrato: el crédito siempre tiene a dónde volver.
-        await this.credits.refund(contractId);
+        if (creditEffectOf('contract_frozen') === 'refund') await this.credits.refund(contractId);
       }
 
       return futuras.length;
     });
+  }
+
+  /**
+   * La política que la app le muestra al socio **antes** de confirmar
+   * (§2.1.5.d): hasta cuándo puede cancelar y qué pasa si cancela tarde.
+   */
+  async policyViewOf(sessionId: string): Promise<BookingPolicyView> {
+    const session = await this.sessions.find(sessionId);
+    if (!session) throw sessionNotFound(sessionId);
+
+    const policy = await this.policyOf(session);
+    const ventana = bookingWindowOf(policy, session.startAt);
+    const ahora = this.now();
+
+    return {
+      sessionId,
+      opensAt: ventana.opensAt.toString(),
+      closesAt: ventana.closesAt.toString(),
+      cancelCutoffAt: cancelCutoffAt(policy, session.startAt).toString(),
+      lateCancelPolicy: policy.lateCancelPolicy,
+      text: policyText(policy, session.startAt, session.timeZone),
+      canBookNow:
+        Temporal.Instant.compare(ahora, ventana.opensAt) >= 0 &&
+        Temporal.Instant.compare(ahora, ventana.closesAt) <= 0,
+    };
+  }
+
+  /** La política del centro con la excepción de la categoría de la clase. */
+  private async policyOf(session: ClaimedSession): Promise<BookingPolicy> {
+    return policyFor(await this.venues.policyOf(session.venueId), session.categoryId);
   }
 
   /**
@@ -345,6 +418,21 @@ export class BookingService {
       });
     }
   }
+}
+
+/** §2.1.9: cancelar tarde pierde el crédito, y eso se avisa antes de hacerlo. */
+function lateCancelNeedsConfirmation(id: string, policy: BookingPolicy): AppError {
+  const devuelve = policy.lateCancelPolicy !== 'no_refund';
+
+  return new AppError({
+    code: 'LP-BOOK-422-004',
+    status: 422,
+    message: devuelve
+      ? 'Pasó el plazo de cancelación de esta clase.'
+      : 'Pasó el plazo de cancelación: si cancelás igual, se te descuenta el crédito.',
+    action: 'Confirmá para cancelar de todos modos y liberar el lugar.',
+    meta: { bookingId: id, lateCancelPolicy: policy.lateCancelPolicy },
+  });
 }
 
 const LIVE = ['booked', 'waitlisted', 'checked_in'];

@@ -79,3 +79,33 @@ export const bookingResultSchema = z.object({
 });
 
 export type BookingResult = z.infer<typeof bookingResultSchema>;
+
+/**
+ * Cancelar fuera de plazo pierde el crédito (§2.1.9), así que el pedido lleva
+ * la confirmación explícita: la primera vez el backend responde
+ * `LP-BOOK-422-004` explicando qué se pierde, y recién con el `true` cancela.
+ *
+ * No es una fricción de más: la regla ya existe igual, y enterarse después de
+ * cancelar es lo que hace que el centro parezca arbitrario (§2.1.5.d).
+ */
+export const cancelBookingSchema = z.object({
+  acceptsLateCancel: z.boolean().default(false),
+});
+
+export type CancelBookingInput = z.infer<typeof cancelBookingSchema>;
+
+/** Lo que la app le muestra al socio **antes** de confirmar la reserva. */
+export const bookingPolicyViewSchema = z.object({
+  sessionId: z.string(),
+  /** Desde cuándo y hasta cuándo se puede reservar esta clase. */
+  opensAt: z.string(),
+  closesAt: z.string(),
+  /** Hasta cuándo se cancela sin perder el crédito. */
+  cancelCutoffAt: z.string(),
+  lateCancelPolicy: z.enum(['no_refund', 'refund', 'refund_and_notify']),
+  /** El texto en es-AR, ya resuelto en la hora del centro. */
+  text: z.string(),
+  canBookNow: z.boolean(),
+});
+
+export type BookingPolicyView = z.infer<typeof bookingPolicyViewSchema>;

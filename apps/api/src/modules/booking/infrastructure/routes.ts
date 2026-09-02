@@ -1,11 +1,14 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import {
+  bookingPolicyViewSchema,
   bookingResultSchema,
   bookingSchema,
+  cancelBookingSchema,
   createBookingSchema,
   paginatedSchema,
   paginationQuerySchema,
+  type CancelBookingInput,
   type CreateBookingInput,
 } from '@laplace/schemas';
 import type { AppEnv } from '../../../app.js';
@@ -99,9 +102,26 @@ export function createBookingRoutes(
       summary: 'Cancelar una reserva',
       tags: ['booking'],
       permission: { booking: ['cancel'] },
-      request: { params: idParams },
+      request: { params: idParams, body: cancelBookingSchema },
       response: { status: 200, schema: bookingSchema },
-      errorCodes: ['LP-BOOK-404-006', 'LP-BOOK-409-001', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-BOOK-404-006', 'LP-BOOK-409-001', 'LP-BOOK-422-004', 'LP-AUTH-403-002'],
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/booking-policies/:sessionId',
+      tenantScoped: true,
+      // Una clase de otro centro no existe para este: el fixture ataca con un
+      // id sembrado y espera el 404 de siempre.
+      isolationFixture: async ({ victimTenantId }) => {
+        await seedVictim(victimTenantId);
+        return { path: '/api/v1/booking-policies/ses_victima_ajena' };
+      },
+      summary: 'La política de reserva y cancelación de una clase',
+      tags: ['booking'],
+      permission: { booking: ['read'] },
+      request: { params: z.object({ sessionId: z.string() }) },
+      response: { status: 200, schema: bookingPolicyViewSchema },
+      errorCodes: ['LP-BOOK-404-006', 'LP-AUTH-403-002'],
     },
   ]);
 
@@ -118,6 +138,7 @@ export function createBookingRoutes(
   for (const guard of guards) {
     routes.use('/api/v1/bookings', guard);
     routes.use('/api/v1/bookings/*', guard);
+    routes.use('/api/v1/booking-policies/*', guard);
   }
 
   /** El socio del pedido, o el que indica el staff si tiene permiso para eso. */
@@ -181,8 +202,26 @@ export function createBookingRoutes(
     service.get(c.req.param('id')).then((booking) => c.json(booking)),
   );
 
-  routes.post('/api/v1/bookings/:id/cancel', requirePermission({ booking: ['cancel'] }), (c) =>
-    service.cancel(c.req.param('id')).then((booking) => c.json(booking)),
+  routes.post(
+    '/api/v1/bookings/:id/cancel',
+    requirePermission({ booking: ['cancel'] }),
+    validated<CancelBookingInput, AppEnv>(cancelBookingSchema, async (c, input) =>
+      c.json(
+        await service.cancel(c.req.param('id') as string, {
+          acceptsLateCancel: input.acceptsLateCancel,
+        }),
+      ),
+    ),
+  );
+
+  /*
+   * §2.1.5.d: la política tiene que estar a la vista **antes** de confirmar, no
+   * después de que el socio perdio el credito.
+   */
+  routes.get(
+    '/api/v1/booking-policies/:sessionId',
+    requirePermission({ booking: ['read'] }),
+    async (c) => c.json(await service.policyViewOf(c.req.param('sessionId') as string)),
   );
 
   return routes;

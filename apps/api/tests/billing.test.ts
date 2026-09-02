@@ -804,6 +804,67 @@ describe('mora × reserva: el corte que aplica `allowDebt` (ADR-004)', () => {
   });
 });
 
+describe('la idempotencia de un pago aguanta la carrera (§5.0)', () => {
+  it('dos pedidos simultáneos con la misma clave cobran una sola vez', async () => {
+    const centro = await centroConSocio('idem-carrera');
+    await cobrar(centro, { amountCents: 10_000_000 });
+    const clave = nuevaClave();
+
+    // El doble click del mostrador: los dos salen antes de que el primero
+    // termine, así que la búsqueda previa no ve nada y los dos escriben.
+    const [uno, dos] = await Promise.all([
+      pagar(centro, { amountCents: 6_000_000 }, clave),
+      pagar(centro, { amountCents: 6_000_000 }, clave),
+    ]);
+
+    const estados = [uno.status, dos.status].sort();
+    expect(estados).toEqual([201, 409]);
+
+    // Lo que importa: en la caja hay un solo pago, no dos.
+    const cuantos = await mongoose.connection.db
+      ?.collection('payments')
+      .countDocuments({ idempotencyKey: clave });
+    expect(cuantos).toBe(1);
+  });
+
+  it('el segundo pedido devuelve el pago que ganó, no un error a secas', async () => {
+    const centro = await centroConSocio('idem-ganador');
+    await cobrar(centro, { amountCents: 10_000_000 });
+    const clave = nuevaClave();
+
+    const [uno, dos] = await Promise.all([
+      pagar(centro, { amountCents: 6_000_000 }, clave),
+      pagar(centro, { amountCents: 6_000_000 }, clave),
+    ]);
+    const perdedor = uno.status === 409 ? uno : dos;
+    const cuerpo = (await perdedor.json()) as { error: { code: string; action?: string } };
+
+    // El envelope no filtra el `meta` al cliente (§5.0): lo que el mostrador
+    // necesita es saber dónde encontrarlo.
+    expect(cuerpo.error.code).toBe('LP-BILL-409-002');
+    expect(cuerpo.error.action).toContain('estado de cuenta');
+  });
+});
+
+describe('un pago que sobra no sobrepaga el cargo', () => {
+  it('el excedente queda como saldo a favor, y el reembolso lo devuelve', async () => {
+    const centro = await centroConSocio('reembolso-sobrante');
+    const cargo = await cobrar(centro, { amountCents: 6_000_000 });
+    const pago = await pagarOk(centro, { amountCents: 10_000_000 });
+
+    await app.request(
+      `/api/v1/payments/${pago.publicId}/refund`,
+      req(centro.cookie, 'POST', { amountCents: 2_000_000, reason: 'Se cobró de más.' }),
+    );
+    const estado = await estadoDeCuenta(centro);
+
+    // Se imputaron 6.000.000 al cargo y 4.000.000 quedaron a favor; devolver
+    // 2.000.000 sale del saldo, y el cargo vuelve a deber lo que se le sacó.
+    expect(estado.balanceCents).toBe(2_000_000);
+    expect(estado.charges.find((c) => c.publicId === cargo.publicId)?.status).toBe('pending');
+  });
+});
+
 describe('caja diaria (§2.1.16)', () => {
   const arqueo = async (centro: Centro, query = '') => {
     const res = await app.request(
@@ -849,6 +910,21 @@ describe('caja diaria (§2.1.16)', () => {
 
     expect(caja.refundedCents).toBe(2_000_000);
     expect(caja.totalCents).toBe(4_000_000);
+  });
+
+  it('sin fecha, la caja es la de hoy en la hora del centro', async () => {
+    const centro = await centroConSocio('caja-hoy');
+
+    const res = await app.request(
+      `/api/v1/venues/${centro.venueId}/till`,
+      req(centro.cookie, 'GET'),
+    );
+    const caja = (await res.json()) as { date: string };
+
+    // El reloj del test está clavado el 15 de marzo de 2026 a las 12:00 UTC,
+    // que en Bahía Blanca sigue siendo el 15.
+    expect(res.status).toBe(200);
+    expect(caja.date).toBe('2026-03-15');
   });
 
   it('un día sin movimientos da cero, no un error', async () => {

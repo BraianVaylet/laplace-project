@@ -131,18 +131,18 @@ se abre.
 
 ### BOOK — Reservas
 
-| Código            | HTTP | Significado                      | Mensaje al usuario                                            |
-| ----------------- | ---- | -------------------------------- | ------------------------------------------------------------- |
-| `LP-BOOK-409-001` | 409  | Ya reservado                     | Ya tenés una reserva en esta clase.                           |
-| `LP-BOOK-409-002` | 409  | Clase completa                   | La clase está completa. Podés sumarte a la lista de espera.   |
-| `LP-BOOK-422-003` | 422  | Fuera de la ventana de reserva   | Todavía no se puede reservar esta clase.                      |
-| `LP-BOOK-422-004` | 422  | Cancelación fuera de término     | Pasó el plazo de cancelación; se descuenta el crédito.        |
-| `LP-BOOK-403-005` | 403  | Miembro en mora                  | Tenés un pago pendiente. Regularizá para reservar.            |
-| `LP-BOOK-404-006` | 404  | Clase inexistente                | No encontramos esa clase.                                     |
-| `LP-BOOK-409-007` | 409  | Ya está en la lista de espera    | Ya estás en la lista de espera de esta clase.                 |
-| `LP-BOOK-422-008` | 422  | Lista de espera llena            | La lista de espera está completa.                             |
-| `LP-BOOK-422-009` | 422  | Confirmación de waitlist vencida | Se venció el plazo para confirmar tu lugar.                   |
-| `LP-BOOK-403-010` | 403  | Bloqueado por no-shows           | Tenés las reservas bloqueadas hasta el {fecha} por ausencias. |
+| Código            | HTTP | Significado                      | Mensaje al usuario                                               |
+| ----------------- | ---- | -------------------------------- | ---------------------------------------------------------------- |
+| `LP-BOOK-409-001` | 409  | Ya reservado                     | Ya tenés una reserva en esta clase.                              |
+| `LP-BOOK-409-002` | 409  | Clase completa                   | La clase está completa. Podés sumarte a la lista de espera.      |
+| `LP-BOOK-422-003` | 422  | Fuera de la ventana de reserva   | Todavía no se puede reservar esta clase (o ya se cerraron).      |
+| `LP-BOOK-422-004` | 422  | Cancelación fuera de término     | Pasó el plazo: confirmá para cancelar igual y perder el crédito. |
+| `LP-BOOK-403-005` | 403  | Miembro en mora                  | Tenés un pago pendiente. Regularizá para reservar.               |
+| `LP-BOOK-404-006` | 404  | Clase inexistente                | No encontramos esa clase.                                        |
+| `LP-BOOK-409-007` | 409  | Ya está en la lista de espera    | Ya estás en la lista de espera de esta clase.                    |
+| `LP-BOOK-422-008` | 422  | Lista de espera llena            | La lista de espera está completa.                                |
+| `LP-BOOK-422-009` | 422  | Confirmación de waitlist vencida | Se venció el plazo para confirmar tu lugar.                      |
+| `LP-BOOK-403-010` | 403  | Bloqueado por no-shows           | Tenés las reservas bloqueadas hasta el {fecha} por ausencias.    |
 
 > El `403-005` solo se emite cuando el Venue tiene `allowDebt: false` (ADR-004, decisión 2).
 

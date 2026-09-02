@@ -1,5 +1,5 @@
 import type { CreateVenueInput, UpdateVenueInput } from '@laplace/schemas';
-import { DEFAULT_BOOKING_POLICY, bookingPolicySchema } from '@laplace/schemas';
+import { DEFAULT_BOOKING_POLICY, bookingPolicySchema, type BookingPolicy } from '@laplace/schemas';
 import type { DomainEventBus } from '../../../events/bus.js';
 import { AppError } from '../../../http/errors.js';
 import type { Page } from '../../../tenancy/repository.js';
@@ -111,13 +111,19 @@ export class VenueService {
   }
 
   /**
-   * ¿Este centro deja reservar a quien debe? ADR-004 decision 2: configurable
-   * por Venue, **default `false`**. Es el puerto que consume Booking.
+   * La politica de reserva del centro, completa: las cinco ventanas de §2.1.5.c,
+   * el flag de deuda de ADR-004 y las excepciones por categoria. Es el puerto
+   * que consume Booking, que resuelve las ventanas por su cuenta.
+   *
+   * Se devuelve completa y no campo por campo porque preguntar de a uno seria
+   * un viaje a la base por regla, y todas se evaluan en la misma reserva.
    */
-  async allowDebtOf(publicId: string): Promise<boolean> {
-    const policy = (await this.getByPublicId(publicId)).bookingPolicy as { allowDebt?: boolean };
+  async policyOf(publicId: string): Promise<BookingPolicy> {
+    const guardada = (await this.getByPublicId(publicId)).bookingPolicy;
 
-    return policy.allowDebt ?? DEFAULT_BOOKING_POLICY.allowDebt;
+    // Las sedes creadas antes de que una regla existiera no la tienen guardada:
+    // el default la completa sin necesidad de migrar datos.
+    return { ...DEFAULT_BOOKING_POLICY, ...((guardada ?? {}) as Partial<BookingPolicy>) };
   }
 
   /** Tope anual de dias de congelamiento del centro (§2.1.9). */
