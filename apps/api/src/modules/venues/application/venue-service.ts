@@ -102,6 +102,15 @@ export class VenueService {
   }
 
   /**
+   * La zona horaria de una sede. Es el puerto que consume Contracts: el
+   * vencimiento de un pack se calcula en el calendario del centro (§2.1.2), no
+   * en el del servidor.
+   */
+  async timeZoneOf(publicId: string): Promise<string> {
+    return (await this.getByPublicId(publicId)).timeZone;
+  }
+
+  /**
    * ¿Existe esa sede en este tenant? Es el puerto que consume Rooms (ADR-003):
    * la alternativa seria que Rooms importara el modelo de Venues.
    */

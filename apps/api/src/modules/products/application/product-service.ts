@@ -128,8 +128,21 @@ export class ProductService {
   }
 
   /**
-   * Todo lo que hay que verificar antes de vender. Lo va a llamar Contracts
-   * (F1-08) desde la operación de compra.
+   * Suma una venta. Es lo que hace que el cupo `maxSales` aplique de verdad, y
+   * lo llama Contracts al vender.
+   */
+  async registerSale(productId: string): Promise<void> {
+    await this.products.updateByPublicId(productId, { $inc: { soldCount: 1 } } as never);
+  }
+
+  /** Devuelve una venta anotada. Compensa una venta que falló después del `$inc`. */
+  async releaseSale(productId: string): Promise<void> {
+    await this.products.updateByPublicId(productId, { $inc: { soldCount: -1 } } as never);
+  }
+
+  /**
+   * Todo lo que hay que verificar antes de vender. Lo llama Contracts (F1-08)
+   * desde la operación de compra.
    */
   async assertPurchasable(productId: string, memberId: string): Promise<ProductDoc> {
     const product = await this.getByPublicId(productId);

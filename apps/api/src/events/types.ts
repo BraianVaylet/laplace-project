@@ -33,6 +33,19 @@ export interface DomainEvents {
     to: string;
   };
 
+  /** Venta de un contrato. La escuchan Billing (genera el cargo) y Metrics. */
+  'contract.sold': {
+    contractId: string;
+    memberId: string;
+    productId: string;
+    priceCents: number;
+  };
+  'contract.status_changed': {
+    contractId: string;
+    from: string;
+    to: string;
+  };
+
   'booking.created': {
     bookingId: string;
     sessionId: string;

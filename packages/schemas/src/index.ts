@@ -1,6 +1,7 @@
 export * from './common/error.js';
 export * from './common/pagination.js';
 export * from './common/tenant.js';
+export * from './contracts/index.js';
 export * from './invite-codes/index.js';
 export * from './members/index.js';
 export * from './members/import.js';
