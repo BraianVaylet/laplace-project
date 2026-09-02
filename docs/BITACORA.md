@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `contracts`
 - **Tipo:** feature
-- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `5f23cda` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/SeFAtiva (F1-09) — movida a **Completadas**
 - **Qué cambió:** el staff congela un contrato por vacaciones o lesión y el vencimiento se corre por
   los días declarados, respetando el tope anual del centro. Dos jobs diarios expiran los vencidos y
