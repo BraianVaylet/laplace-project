@@ -39,6 +39,27 @@ export class ChargeRepository extends TenantRepository<ChargeDoc> {
 
     return updated;
   }
+
+  /**
+   * 🔴 Cargos vencidos e impagos de **todos los tenants**, para el job de mora.
+   *
+   * Un job no corre dentro del pedido de nadie: es el mismo uso legitimo de
+   * `skipTenantScope` que documenta el plugin. Devuelve el `tenantId` para que
+   * el servicio abra el contexto de cada centro antes de tocar nada.
+   */
+  async overdueAcrossTenants(now: Date, limit = 1000): Promise<ChargeDoc[]> {
+    return ChargeModel.find({
+      deletedAt: null,
+      status: 'pending',
+      dueAt: { $lte: now },
+      // Solo los que de verdad deben algo: un cargo saldado no entra en mora.
+      $expr: { $lt: ['$paidCents', '$amountCents'] },
+    })
+      .setOptions({ skipTenantScope: true })
+      .limit(limit)
+      .lean<ChargeDoc[]>()
+      .exec();
+  }
 }
 
 /** Pagos de los socios al centro. */
@@ -57,6 +78,16 @@ export class PaymentRepository extends TenantRepository<PaymentDoc> {
   /** El pago ya registrado con esa clave, si existe. Lo usa la idempotencia. */
   async findByIdempotencyKey(key: string): Promise<PaymentDoc | null> {
     return this.findOne({ idempotencyKey: key } as FilterQuery<PaymentDoc>);
+  }
+
+  /** Los pagos de una sede en una ventana de tiempo. Es la base del arqueo. */
+  async ofVenueBetween(venueId: string, from: Date, to: Date): Promise<PaymentDoc[]> {
+    return PaymentModel.find(
+      this.scope({ venueId, receivedAt: { $gte: from, $lt: to } } as FilterQuery<PaymentDoc>),
+    )
+      .sort({ receivedAt: 1 })
+      .lean<PaymentDoc[]>()
+      .exec();
   }
 
   /** Suma un reembolso al pago sin borrarlo nunca (§5.2.4). */

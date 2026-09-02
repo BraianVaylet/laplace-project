@@ -886,11 +886,14 @@ describe('jobs diarios (§10)', () => {
         publicId: contractId,
       })) ?? null;
 
-  it('los dos jobs están declarados con su cron', () => {
-    expect(modules.jobs.map((job) => job.name)).toEqual([
-      'expireContracts',
-      'notifyExpiringContracts',
-    ]);
+  it('los dos jobs de Contracts están declarados con su cron', () => {
+    // El punto de composición junta los de todos los módulos; acá solo importan
+    // los de Contracts.
+    const nombres = modules.jobs.map((job) => job.name);
+
+    expect(nombres).toContain('expireContracts');
+    expect(nombres).toContain('notifyExpiringContracts');
+    for (const job of modules.jobs) expect(job.cron, job.name).toMatch(/^[\d*]/);
   });
 
   it('`expireContracts` pasa a `expired` los vencidos', async () => {

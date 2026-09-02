@@ -3,6 +3,7 @@ import { z } from 'zod';
 import {
   accountStatementSchema,
   chargeSchema,
+  tillSummarySchema,
   createChargeSchema,
   paymentSchema,
   refundPaymentSchema,
@@ -23,10 +24,22 @@ import { requireIdempotencyKey } from '../../../http/idempotency.js';
 import { registerRoutes, type IsolationFixture } from '../../../http/route-registry.js';
 import { validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
+import { Temporal } from '@js-temporal/polyfill';
 import type { BillingService } from '../application/billing-service.js';
+import { tillToCsv } from '../domain/billing.js';
 
 const idParams = z.object({ id: z.string() });
 const memberParams = z.object({ memberId: z.string() });
+/** `format=csv` devuelve el arqueo para pegarlo en la planilla del centro. */
+const tillQuery = z.object({
+  /** `YYYY-MM-DD` en la zona del Venue. Sin valor, hoy. */
+  date: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Usá el formato AAAA-MM-DD.')
+    .optional(),
+  format: z.enum(['json', 'csv']).default('json'),
+});
+
 const voidChargeSchema = z.object({
   reason: z.string().trim().min(5, 'Escribí el motivo de la anulación.').max(300),
 });
@@ -37,6 +50,8 @@ export const VICTIM_CHARGE_DESCRIPTION = 'Cargo del otro centro';
 export function createBillingRoutes(
   service: BillingService,
   entitlements: EntitlementsLoader,
+  /** La zona horaria de la sede. El día de la caja es el del centro (§2.1.2). */
+  venues: { timeZoneOf(venueId: string): Promise<string> },
   seedVictim: (victimTenantId: string) => Promise<{ chargeId: string; memberId: string }>,
 ) {
   const attackCharge: IsolationFixture = async ({ victimTenantId }) => ({
@@ -116,6 +131,22 @@ export function createBillingRoutes(
     },
     {
       method: 'GET',
+      path: '/api/v1/venues/:venueId/till',
+      tenantScoped: true,
+      isolationFixture: async ({ victimTenantId }) => {
+        await seedVictim(victimTenantId);
+        return { path: '/api/v1/venues/ven_victima/till?date=2026-03-15' };
+      },
+      summary: 'Arqueo de caja del día en una sede',
+      tags: ['billing'],
+      // Es la plata del día: lo ve quien cobra, no cualquiera con acceso.
+      permission: { billing: ['read'] },
+      request: { params: z.object({ venueId: z.string() }), query: tillQuery },
+      response: { status: 200, schema: tillSummarySchema },
+      errorCodes: ['LP-SYS-404-002', 'LP-AUTH-403-002'],
+    },
+    {
+      method: 'GET',
       path: '/api/v1/members/:memberId/statement',
       tenantScoped: true,
       isolationFixture: attackStatement,
@@ -139,6 +170,7 @@ export function createBillingRoutes(
   ] as const;
 
   for (const guard of guards) {
+    routes.use('/api/v1/venues/:venueId/till', guard);
     for (const path of [
       '/api/v1/charges',
       '/api/v1/charges/*',
@@ -187,10 +219,39 @@ export function createBillingRoutes(
   );
 
   routes.get(
+    '/api/v1/venues/:venueId/till',
+    requirePermission({ billing: ['read'] }),
+    async (c) => {
+      const venueId = c.req.param('venueId');
+      const { date, format } = tillQuery.parse(c.req.query());
+      const timeZone = await venues.timeZoneOf(venueId);
+
+      // El dia es el DEL CENTRO: calculado en UTC, la caja de un centro argentino
+      // cerraria a las 21:00 y los pagos de la ultima hora caerian en el dia
+      // siguiente.
+      const summary = await service.till(venueId, date ?? todayIn(timeZone), timeZone);
+
+      if (format !== 'csv') return c.json(summary);
+
+      return new Response(tillToCsv(summary), {
+        headers: {
+          'content-type': 'text/csv; charset=utf-8',
+          'content-disposition': `attachment; filename="caja-${summary.date}.csv"`,
+        },
+      });
+    },
+  );
+
+  routes.get(
     '/api/v1/members/:memberId/statement',
     requirePermission({ billing: ['read'] }),
     async (c) => c.json(await service.statement(c.req.param('memberId'))),
   );
 
   return routes;
+}
+
+/** Hoy en la zona del centro, `YYYY-MM-DD`. */
+function todayIn(timeZone: string): string {
+  return Temporal.Now.plainDateISO(timeZone).toString();
 }

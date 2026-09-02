@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |      9 |
+| Fase 1 — MVP vendible   |       32 |          186 |     10 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -879,7 +879,7 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   - Un reembolso parcial revierte **el último cargo saldado**, no el primero: la deuda que reaparece
     es la que se acababa de cobrar.
 
-## [ ] F1-11 · Billing: mora, caja diaria y reembolsos
+## [x] F1-11 · Billing: mora, caja diaria y reembolsos
 
 - **module:** billing
 - **description:** La morosidad es el KPI número 1 del mercado argentino (§2.1.12). El pasaje a mora
@@ -903,8 +903,20 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **test_plan:** Test del job de mora con reloj inyectado e idempotente. Test de la interacción
   mora × reserva con `allowDebt` en ambos valores. Test del arqueo de caja contra pagos sembrados.
   Cobertura mínima 95%.
-- **error-codes:** `LP-BILL-402-006` (miembro en mora, acción bloqueada)
-- **data-model-impact:** `Charge.status = overdue`, `Member.flags.debtor`.
+- **error-codes:** `LP-BOOK-403-005` (miembro en mora, reserva bloqueada). El
+  `LP-BILL-402-006` queda para cuando la mora bloquee una acción de facturación y no una reserva:
+  el corte que pide esta tarea es sobre reservar, y §11.2 ya tiene su código en el módulo BOOK.
+- **data-model-impact:** `Charge.status = overdue`, `Member.flags.debtor`. Ninguno nuevo.
+- **decisiones de diseño:**
+  - El estado de cobranza (`clear` / `pending` / `overdue` / `credit`) es **derivado**, no un campo:
+    guardarlo obligaría a un job que lo mantenga al día y a que ese job no se atrase nunca.
+  - El corte de la mora vive en Billing (`assertCanTransact`) y lo llamará Booking: el módulo que
+    sabe cuánto se debe es el que decide, y el que reserva solo pregunta.
+  - El día de la caja es **el del centro**, en su zona horaria. Calculado en UTC, la caja de un
+    centro argentino cerraría a las 21:00 y los pagos de la última hora caerían en el día siguiente.
+  - El efectivo se reporta aparte del resto: es lo único que hay que contar a mano al cerrar el
+    turno, y es donde aparecen las diferencias.
+- **ya cubierto en F1-10:** los reembolsos con motivo obligatorio, tope y `AuditLog`.
 
 ## [ ] F1-12 · Schedule: plantillas y materialización de sesiones
 
@@ -970,9 +982,13 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 
 ## [ ] F1-14 · Booking: reserva atómica con descuento de crédito
 
-> **Hereda una deuda de F1-09:** conectar el puerto `FutureBookingReleaser` de Contracts con la
-> cancelación real de reservas futuras y la devolución de sus créditos (ADR-001). Hasta que se haga,
-> congelar y vencer un contrato piden la liberación pero nadie la ejecuta.
+> **Hereda dos deudas:**
+>
+> - De F1-09: conectar el puerto `FutureBookingReleaser` de Contracts con la cancelación real de
+>   reservas futuras y la devolución de sus créditos (ADR-001). Hasta que se haga, congelar y vencer
+>   un contrato piden la liberación pero nadie la ejecuta.
+> - De F1-11: llamar a `billing.assertCanTransact(memberId, allowDebt)` antes de reservar. El corte
+>   de la mora está implementado y testeado, pero nadie lo invoca desde el flujo de reserva.
 
 - **module:** booking
 - **description:** El corazón del producto y su condición de carrera clásica: dos personas tomando

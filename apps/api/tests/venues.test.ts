@@ -428,7 +428,11 @@ describe('aislamiento de tenant', () => {
 
 describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
   it('todas las rutas de venues traen su fixture de ataque', () => {
-    const venues = allRegisteredRoutes().filter((route) => route.path.startsWith('/api/v1/venues'));
+    // La caja diaria cuelga de `/venues/:venueId/till` pero es de Billing
+    // (F1-11), y tiene su propia suite.
+    const venues = allRegisteredRoutes().filter(
+      (route) => route.path.startsWith('/api/v1/venues') && !route.path.endsWith('/till'),
+    );
 
     expect(venues.length).toBe(6);
     for (const route of venues) {
@@ -443,6 +447,7 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
 
     for (const route of allRegisteredRoutes()) {
       if (!route.path.startsWith('/api/v1/venues') || !route.isolationFixture) continue;
+      if (route.path.endsWith('/till')) continue;
 
       const attack = await route.isolationFixture({ victimTenantId: victima.organizationId });
       const res = await app.request(attack.path, {
@@ -463,6 +468,7 @@ describe('el registro no deja rutas de venues sueltas', () => {
     const montadas = app.routes
       .filter((route) => route.path.startsWith('/api/v1/venues'))
       .filter((route) => route.method !== 'ALL')
+      .filter((route) => !route.path.endsWith('/till'))
       .map((route) => `${route.method} ${route.path}`);
 
     const declaradas = allRegisteredRoutes()

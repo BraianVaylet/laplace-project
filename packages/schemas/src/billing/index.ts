@@ -146,6 +146,16 @@ export const refundSchema = z.object({
 export type Refund = z.infer<typeof refundSchema>;
 
 /**
+ * El estado de cobranza del socio, visible en tiempo real (§2.1.16).
+ *
+ * Es **derivado**, no un campo: se calcula sobre cargos y pagos. Guardarlo
+ * obligaría a un job que lo mantenga al día y a que ese job no se atrase nunca.
+ */
+export const BILLING_STATUSES = ['clear', 'pending', 'overdue', 'credit'] as const;
+export const billingStatusSchema = z.enum(BILLING_STATUSES);
+export type BillingStatus = z.infer<typeof billingStatusSchema>;
+
+/**
  * El estado de cuenta del socio: qué se le cobró, qué pagó y cuánto debe.
  *
  * `balanceCents` es **pagado menos cobrado**: negativo significa que debe, que
@@ -157,8 +167,40 @@ export const accountStatementSchema = z.object({
   balanceCents: z.number().int(),
   /** Lo vencido e impago. Es el número que dispara la mora (F1-11). */
   overdueCents: z.number().int(),
+  /** Al día, con algo por vencer, en mora, o con saldo a favor. */
+  status: billingStatusSchema,
   charges: z.array(chargeSchema),
   payments: z.array(paymentSchema),
 });
 
 export type AccountStatement = z.infer<typeof accountStatementSchema>;
+
+/**
+ * El arqueo de caja de un día en una sede (§2.1.16).
+ *
+ * Se abre para cerrar el turno: lo que entró, separado por método de pago, con
+ * el efectivo aparte porque es lo único que hay que contar a mano.
+ */
+export const tillSummarySchema = z.object({
+  venueId: z.string(),
+  /** El día del centro, en su zona horaria. `YYYY-MM-DD`. */
+  date: z.string(),
+  currency: currencySchema,
+  totalCents: z.number().int(),
+  /** Lo que entró por cada método. Los métodos sin movimiento no aparecen. */
+  byMethod: z.array(
+    z.object({
+      method: paymentMethodSchema,
+      count: z.number().int(),
+      grossCents: z.number().int(),
+      refundedCents: z.number().int(),
+      netCents: z.number().int(),
+    }),
+  ),
+  /** Lo que tiene que estar en el cajón al cerrar. */
+  cashCents: z.number().int(),
+  paymentCount: z.number().int(),
+  refundedCents: z.number().int(),
+});
+
+export type TillSummary = z.infer<typeof tillSummarySchema>;

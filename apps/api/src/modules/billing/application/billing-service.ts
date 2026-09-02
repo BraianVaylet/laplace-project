@@ -4,17 +4,21 @@ import type {
   CreateChargeInput,
   RefundPaymentInput,
   RegisterPaymentInput,
+  TillSummary,
 } from '@laplace/schemas';
 import type { AuditWriter } from '../../../audit/audit-log.js';
 import type { DomainEventBus } from '../../../events/bus.js';
 import { AppError } from '../../../http/errors.js';
 import { fromBsonDate, toBsonDate } from '../../../persistence/bson-date.js';
-import { requireTenant } from '../../../tenancy/context.js';
+import { requireTenant, runWithTenant } from '../../../tenancy/context.js';
 import {
   allocatePayment,
+  assertNoArrears,
   assertRefundable,
   balanceOf,
+  billingStatusOf,
   overdueOf,
+  summarizeTill,
   type PayableCharge,
 } from '../domain/billing.js';
 import type { ChargeDoc, PaymentDoc } from '../infrastructure/billing.model.js';
@@ -214,23 +218,112 @@ export class BillingService {
 
     const nowIso = this.now().toString();
 
+    const balanceCents = balanceOf(
+      charges.map((charge) => ({
+        amountCents: charge.amountCents,
+        status: charge.status as never,
+      })),
+      payments.map((payment) => ({
+        amountCents: payment.amountCents,
+        refundedCents: payment.refundedCents,
+        status: payment.status,
+      })),
+    );
+    const overdueCents = overdueOf(charges.map(toPayable), nowIso);
+
     return {
       memberId,
       currency: (charges[0]?.currency ?? payments[0]?.currency ?? 'ARS') as 'ARS',
-      balanceCents: balanceOf(
-        charges.map((charge) => ({
-          amountCents: charge.amountCents,
-          status: charge.status as never,
-        })),
+      balanceCents,
+      overdueCents,
+      status: billingStatusOf(balanceCents, overdueCents),
+      charges: charges.map(chargeToResponse),
+      payments: payments.map(paymentToResponse),
+    };
+  }
+
+  /**
+   * 🔴 El corte de la mora sobre una accion del socio (§2.1.12). Lo llama
+   * Booking (F1-14) antes de reservar.
+   *
+   * `allowDebt` sale de la politica del Venue y su default es `false`
+   * (ADR-004): el centro decide si deja reservar a quien debe. La morosidad es
+   * el KPI numero 1 del mercado argentino, y la palanca que la mueve es esta.
+   */
+  async assertCanTransact(memberId: string, allowDebt: boolean): Promise<void> {
+    const { overdueCents } = await this.statement(memberId);
+
+    assertNoArrears(overdueCents, allowDebt);
+  }
+
+  /**
+   * Job diario de mora: pasa a `overdue` los cargos vencidos e impagos, marca
+   * al socio como deudor y avisa.
+   *
+   * **Idempotente**: el filtro solo trae los que siguen `pending`, asi que la
+   * segunda corrida del dia no encuentra nada.
+   */
+  async runDunning(): Promise<number> {
+    const now = this.now();
+    const vencidos = await this.charges.overdueAcrossTenants(toBsonDate(now));
+    let marcados = 0;
+
+    for (const charge of vencidos) {
+      const tenantId = String(charge['tenantId']);
+      const chargeId = String(charge['publicId']);
+
+      await runWithTenant(
+        { tenantId, userId: 'system:dunning', requestId: `job-dunning-${chargeId}` },
+        async () => {
+          await this.charges.updateByPublicId(chargeId, { $set: { status: 'overdue' } });
+
+          // Refrescar el saldo tambien prende el flag `debtor` del socio.
+          const { overdueCents, balanceCents } = await this.statement(charge.memberId);
+          await this.members.set(charge.memberId, balanceCents);
+
+          await this.events.emit('charge.overdue', {
+            chargeId,
+            memberId: charge.memberId,
+            overdueCents,
+          });
+        },
+      );
+
+      marcados += 1;
+    }
+
+    return marcados;
+  }
+
+  /**
+   * El arqueo de caja de una sede en un dia (§2.1.16).
+   *
+   * El dia es el **del centro**, en su zona horaria: si se calculara en UTC, la
+   * caja de un centro argentino cerraria a las 21:00 y los pagos de la ultima
+   * hora entrarian en el dia siguiente.
+   */
+  async till(venueId: string, date: string, timeZone: string): Promise<TillSummary> {
+    const desde = Temporal.PlainDate.from(date).toZonedDateTime({ timeZone });
+    const hasta = desde.add({ days: 1 });
+
+    const payments = await this.payments.ofVenueBetween(
+      venueId,
+      toBsonDate(desde.toInstant()),
+      toBsonDate(hasta.toInstant()),
+    );
+
+    return {
+      venueId,
+      date,
+      currency: (payments[0]?.currency ?? 'ARS') as 'ARS',
+      ...summarizeTill(
         payments.map((payment) => ({
+          method: payment.method as never,
           amountCents: payment.amountCents,
           refundedCents: payment.refundedCents,
           status: payment.status,
         })),
       ),
-      overdueCents: overdueOf(charges.map(toPayable), nowIso),
-      charges: charges.map(chargeToResponse),
-      payments: payments.map(paymentToResponse),
     };
   }
 

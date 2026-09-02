@@ -110,6 +110,7 @@ export function createModules(deps: ModuleDeps) {
     members: {
       set: (memberId, balanceCents) => members.service.setBalance(memberId, balanceCents),
     },
+    venues: { timeZoneOf: (venueId) => venues.service.timeZoneOf(venueId) },
   });
 
   routes.route('/', venues.routes);
@@ -120,7 +121,7 @@ export function createModules(deps: ModuleDeps) {
   routes.route('/', billing.routes);
 
   /** Todo lo que el runner tiene que programar (§10). */
-  const jobs = [...contracts.jobs];
+  const jobs = [...contracts.jobs, ...billing.jobs];
 
   return { routes, jobs, venues, rooms, members, products, contracts, billing };
 }

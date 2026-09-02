@@ -4,6 +4,7 @@ import type { EntitlementsLoader } from '../../entitlements/middleware.js';
 import type { DomainEventBus } from '../../events/bus.js';
 import { toBsonDate } from '../../persistence/bson-date.js';
 import { runWithTenant } from '../../tenancy/context.js';
+import type { JobDefinition } from '../../jobs/runner.js';
 import { BillingService, type MemberBalanceCache } from './application/billing-service.js';
 import type { ChargeDoc } from './infrastructure/billing.model.js';
 import {
@@ -11,6 +12,7 @@ import {
   PaymentRepository,
   RefundRepository,
 } from './infrastructure/billing.repository.js';
+import { billingJobs } from './infrastructure/jobs.js';
 import { VICTIM_CHARGE_DESCRIPTION, createBillingRoutes } from './infrastructure/routes.js';
 
 /**
@@ -20,6 +22,8 @@ import { VICTIM_CHARGE_DESCRIPTION, createBillingRoutes } from './infrastructure
 export interface BillingModule {
   routes: ReturnType<typeof createBillingRoutes>;
   service: BillingService;
+  /** El proceso diario de mora (§10). Lo registra el runner desde `index.ts`. */
+  jobs: JobDefinition[];
 }
 
 export interface BillingModuleDeps {
@@ -28,6 +32,8 @@ export interface BillingModuleDeps {
   audit: AuditWriter;
   /** Refresca el saldo cacheado del socio. Lo contesta Members. */
   members: MemberBalanceCache;
+  /** La zona horaria de la sede. El día de la caja es el del centro (§2.1.2). */
+  venues: { timeZoneOf(venueId: string): Promise<string> };
   now?: (() => Temporal.Instant) | undefined;
 }
 
@@ -64,7 +70,11 @@ export function createBillingModule(deps: BillingModuleDeps): BillingModule {
     return { chargeId: String(created['publicId']), memberId };
   };
 
-  return { routes: createBillingRoutes(service, deps.entitlements, seedVictim), service };
+  return {
+    routes: createBillingRoutes(service, deps.entitlements, deps.venues, seedVictim),
+    service,
+    jobs: billingJobs(service),
+  };
 }
 
 export type { BillingService, MemberBalanceCache } from './application/billing-service.js';

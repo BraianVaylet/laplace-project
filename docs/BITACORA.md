@@ -23,6 +23,55 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-02 — F1-11: mora automática y caja diaria
+
+- **Módulo:** `billing`
+- **Tipo:** feature
+- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/cxZpencT (F1-11) — movida a **Completadas**
+- **Qué cambió:** un job diario pasa a mora los cargos vencidos, marca al socio como deudor y avisa.
+  El estado de cobranza se ve en tiempo real, y cada sede tiene su arqueo de caja del día por método
+  de pago, exportable a CSV.
+- **Por qué:** §2.1.12 marca la morosidad como el KPI número 1 del mercado argentino. El pasaje a
+  mora tiene que ser automático: si hay que calcularlo a mano, no se calcula.
+- **Impacto:** un job nuevo (`dunning`) · una ruta nueva (`/venues/:venueId/till`) · evento
+  `charge.overdue` · sin cambios en el modelo.
+- **Pendiente:** el corte sobre la reserva está implementado y testeado, pero quien lo llama es
+  Booking (F1-14). Ver la deuda declarada abajo.
+
+**Decisiones:**
+
+- **El estado de cobranza es derivado, no un campo.** `clear`, `pending`, `overdue` o `credit` se
+  calculan sobre cargos y pagos. Guardarlo obligaría a un job que lo mantenga al día y a que ese job
+  no se atrase nunca; y un estado de cobranza atrasado es peor que no tenerlo.
+- **El corte de la mora vive en Billing, no en Booking.** `assertCanTransact(memberId, allowDebt)`:
+  el módulo que sabe cuánto se debe es el que decide, y el que reserva solo pregunta. `allowDebt`
+  sale de la política del Venue y su default es `false` (ADR-004, decisión 2).
+- **El mensaje del corte dice cuánto debe.** "Regularizá" sin número manda al socio al mostrador a
+  preguntar cuánto, que es exactamente la fricción que la mora automática viene a sacar.
+- **El día de la caja es el del centro.** Calculado en UTC, la caja de un centro argentino cerraría
+  a las 21:00 y los pagos de la última hora caerían en el día siguiente, con el arqueo sin cerrar.
+- **El efectivo va aparte del resto.** Es lo único que hay que contar a mano al cerrar el turno, y
+  es donde aparecen las diferencias. El CSV sale con el mismo corte para pegarlo en la planilla.
+- **El job corre a las 06:00.** El socio que llega a entrenar y está en mora tiene que verlo en la
+  puerta, no a media mañana.
+- **El job es idempotente por su filtro:** solo trae los que siguen `pending` y de verdad deben
+  algo, así que la segunda corrida del día no encuentra nada. Un cargo parcialmente pagado sí entra,
+  por lo que falta.
+
+**Sobre el código de error:** la tarjeta pedía `LP-BILL-402-006`, pero el corte que describe es
+sobre **reservar**, y §11.2 ya tiene ese caso en el módulo BOOK: `LP-BOOK-403-005`, con la nota de
+que solo se emite cuando `allowDebt` es `false`. Se usó ese. El `LP-BILL-402-006` queda libre para
+cuando la mora bloquee una acción de facturación.
+
+**Deuda declarada:** `assertCanTransact` está implementado y tiene cinco tests, pero hasta F1-14
+nadie lo llama desde el flujo de reserva. Anotado en esa tarea.
+
+**Verificación:** 1439 tests verdes (1049 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido.
+
+---
+
 ## 2026-09-02 — F1-10: Billing, cargos y pagos manuales
 
 - **Módulo:** `billing`

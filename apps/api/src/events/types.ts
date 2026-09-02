@@ -70,6 +70,14 @@ export interface DomainEvents {
     memberId: string;
     method: 'self' | 'staff' | 'kiosk';
   };
+  /** Un cargo entro en mora. Lo escucha Notifications para el aviso (§2.1.12). */
+  'charge.overdue': {
+    chargeId: string;
+    memberId: string;
+    /** Cuanto debe en total, no solo este cargo: es lo que va en el aviso. */
+    overdueCents: number;
+  };
+
   'payment.received': {
     paymentId: string;
     memberId: string;

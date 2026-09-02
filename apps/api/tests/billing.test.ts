@@ -14,6 +14,7 @@ import { allRegisteredRoutes, resetRouteRegistry } from '../src/http/route-regis
 import { createModules } from '../src/modules/index.js';
 import { VICTIM_CHARGE_DESCRIPTION } from '../src/modules/billing/infrastructure/routes.js';
 import { createLogger } from '../src/observability/logger.js';
+import { runWithTenant } from '../src/tenancy/context.js';
 
 /**
  * F1-10. El dinero entre el centro y sus socios (§2.1.16), que es el gap más
@@ -657,6 +658,234 @@ describe('estado de cuenta', () => {
   });
 });
 
+describe('mora (§2.1.12)', () => {
+  const correrJob = async (name: string) => {
+    const job = modules.jobs.find((candidate) => candidate.name === name);
+    if (!job) throw new Error(`no existe el job ${name}`);
+
+    await job.handler();
+  };
+
+  const cargoEnBase = async (chargeId: string) =>
+    mongoose.connection.db
+      ?.collection('charges')
+      .findOne<{ status: string }>({ publicId: chargeId });
+
+  it('el job pasa a `overdue` los cargos vencidos e impagos', async () => {
+    const centro = await centroConSocio('mora');
+    const cargo = await cobrar(centro, { dueAt: '2026-03-01T12:00:00Z' });
+
+    await correrJob('dunning');
+
+    expect((await cargoEnBase(cargo.publicId))?.status).toBe('overdue');
+  });
+
+  it('el socio queda marcado como deudor', async () => {
+    const centro = await centroConSocio('mora-flag');
+    await cobrar(centro, { dueAt: '2026-03-01T12:00:00Z' });
+
+    await correrJob('dunning');
+
+    const socio = await mongoose.connection.db
+      ?.collection('members')
+      .findOne<{ flags: { debtor: boolean } }>({ publicId: centro.memberId });
+    expect(socio?.flags.debtor).toBe(true);
+  });
+
+  it('no toca los que todavía no vencieron', async () => {
+    const centro = await centroConSocio('mora-vigente');
+    const cargo = await cobrar(centro, { dueAt: '2026-06-01T12:00:00Z' });
+
+    await correrJob('dunning');
+
+    expect((await cargoEnBase(cargo.publicId))?.status).toBe('pending');
+  });
+
+  it('no toca los que ya se pagaron, aunque la fecha haya pasado', async () => {
+    const centro = await centroConSocio('mora-pagado');
+    const cargo = await cobrar(centro, { dueAt: '2026-03-01T12:00:00Z' });
+    await pagarOk(centro);
+
+    await correrJob('dunning');
+
+    expect((await cargoEnBase(cargo.publicId))?.status).toBe('paid');
+  });
+
+  it('un cargo parcialmente pagado sí entra en mora por lo que falta', async () => {
+    const centro = await centroConSocio('mora-parcial');
+    const cargo = await cobrar(centro, { dueAt: '2026-03-01T12:00:00Z' });
+    await pagarOk(centro, { amountCents: 2_000_000 });
+
+    await correrJob('dunning');
+
+    expect((await cargoEnBase(cargo.publicId))?.status).toBe('overdue');
+  });
+
+  it('es idempotente: la segunda corrida del día no encuentra nada', async () => {
+    const centro = await centroConSocio('mora-idempotente');
+    await cobrar(centro, { dueAt: '2026-03-01T12:00:00Z' });
+
+    await correrJob('dunning');
+    // El runner garantiza que no corran dos a la vez, no que no corran dos veces.
+    await correrJob('dunning');
+
+    const cuantos = await mongoose.connection.db
+      ?.collection('charges')
+      .countDocuments({ memberId: centro.memberId, status: 'overdue' });
+    expect(cuantos).toBe(1);
+  });
+
+  it('el estado de cobranza del socio se ve en tiempo real', async () => {
+    const centro = await centroConSocio('estado-cobranza');
+
+    expect((await estadoDeCuenta(centro)).status).toBe('clear');
+
+    await cobrar(centro, { dueAt: '2026-06-01T12:00:00Z' });
+    expect((await estadoDeCuenta(centro)).status).toBe('pending');
+
+    await cobrar(centro, { dueAt: '2026-03-01T12:00:00Z' });
+    expect((await estadoDeCuenta(centro)).status).toBe('overdue');
+  });
+
+  it('con saldo a favor el estado es `credit`', async () => {
+    const centro = await centroConSocio('estado-credito');
+
+    await pagarOk(centro, { amountCents: 3_000_000 });
+
+    expect((await estadoDeCuenta(centro)).status).toBe('credit');
+  });
+});
+
+describe('mora × reserva: el corte que aplica `allowDebt` (ADR-004)', () => {
+  const corte = (organizationId: string, memberId: string, allowDebt: boolean) =>
+    runWithTenant({ tenantId: organizationId, userId: 'usr_test', requestId: 'req-corte' }, () =>
+      modules.billing.service.assertCanTransact(memberId, allowDebt),
+    );
+
+  it('con `allowDebt: false`, el socio en mora no puede: LP-BOOK-403-005', async () => {
+    const centro = await centroConSocio('corte-bloquea');
+    await cobrar(centro, { dueAt: '2026-03-01T12:00:00Z' });
+
+    await expect(corte(centro.organizationId, centro.memberId, false)).rejects.toMatchObject({
+      code: 'LP-BOOK-403-005',
+    });
+  });
+
+  it('el mensaje dice cuánto debe', async () => {
+    const centro = await centroConSocio('corte-monto');
+    await cobrar(centro, { amountCents: 2_500_000, dueAt: '2026-03-01T12:00:00Z' });
+
+    // "Regularizá" sin número manda al socio al mostrador a preguntar cuánto.
+    await expect(corte(centro.organizationId, centro.memberId, false)).rejects.toThrow(/25\.000/);
+  });
+
+  it('con `allowDebt: true`, el mismo socio sí puede', async () => {
+    const centro = await centroConSocio('corte-permite');
+    await cobrar(centro, { dueAt: '2026-03-01T12:00:00Z' });
+
+    await expect(corte(centro.organizationId, centro.memberId, true)).resolves.toBeUndefined();
+  });
+
+  it('sin deuda vencida no corta, aunque tenga algo por vencer', async () => {
+    const centro = await centroConSocio('corte-por-vencer');
+    await cobrar(centro, { dueAt: '2026-06-01T12:00:00Z' });
+
+    await expect(corte(centro.organizationId, centro.memberId, false)).resolves.toBeUndefined();
+  });
+
+  it('pagar la deuda levanta el corte', async () => {
+    const centro = await centroConSocio('corte-regulariza');
+    await cobrar(centro, { dueAt: '2026-03-01T12:00:00Z' });
+    await expect(corte(centro.organizationId, centro.memberId, false)).rejects.toThrow();
+
+    await pagarOk(centro);
+
+    await expect(corte(centro.organizationId, centro.memberId, false)).resolves.toBeUndefined();
+  });
+});
+
+describe('caja diaria (§2.1.16)', () => {
+  const arqueo = async (centro: Centro, query = '') => {
+    const res = await app.request(
+      `/api/v1/venues/${centro.venueId}/till?date=2026-03-15${query}`,
+      req(centro.cookie, 'GET'),
+    );
+
+    return { res, texto: await res.text() };
+  };
+
+  it('suma los ingresos del día separados por método de pago', async () => {
+    const centro = await centroConSocio('caja');
+    await cobrar(centro, { amountCents: 10_000_000 });
+    await pagarOk(centro, { amountCents: 6_000_000, method: 'cash' });
+    await pagarOk(centro, { amountCents: 4_000_000, method: 'transfer' });
+
+    const { texto } = await arqueo(centro);
+    const caja = JSON.parse(texto) as {
+      totalCents: number;
+      cashCents: number;
+      paymentCount: number;
+      byMethod: Array<{ method: string; netCents: number }>;
+    };
+
+    expect(caja.totalCents).toBe(10_000_000);
+    // El efectivo va aparte: es lo único que hay que contar a mano al cerrar.
+    expect(caja.cashCents).toBe(6_000_000);
+    expect(caja.paymentCount).toBe(2);
+    expect(caja.byMethod.map((fila) => fila.method)).toEqual(['cash', 'transfer']);
+  });
+
+  it('los reembolsos se restan del arqueo', async () => {
+    const centro = await centroConSocio('caja-reembolso');
+    await cobrar(centro);
+    const pago = await pagarOk(centro);
+    await app.request(
+      `/api/v1/payments/${pago.publicId}/refund`,
+      req(centro.cookie, 'POST', { amountCents: 2_000_000, reason: 'Devolución parcial.' }),
+    );
+
+    const { texto } = await arqueo(centro);
+    const caja = JSON.parse(texto) as { totalCents: number; refundedCents: number };
+
+    expect(caja.refundedCents).toBe(2_000_000);
+    expect(caja.totalCents).toBe(4_000_000);
+  });
+
+  it('un día sin movimientos da cero, no un error', async () => {
+    const centro = await centroConSocio('caja-vacia');
+
+    const { res, texto } = await arqueo(centro);
+
+    expect(res.status).toBe(200);
+    expect(JSON.parse(texto)).toMatchObject({ totalCents: 0, paymentCount: 0, byMethod: [] });
+  });
+
+  it('exporta a CSV para pegarlo en la planilla del centro', async () => {
+    const centro = await centroConSocio('caja-csv');
+    await cobrar(centro);
+    await pagarOk(centro, { method: 'cash' });
+
+    const { res, texto } = await arqueo(centro, '&format=csv');
+
+    expect(res.headers.get('content-type')).toContain('text/csv');
+    expect(res.headers.get('content-disposition')).toContain('caja-2026-03-15.csv');
+    expect(texto).toContain('metodo,cantidad,bruto,reembolsado,neto');
+    expect(texto).toContain('cash,1,6000000,0,6000000');
+    expect(texto).toContain('TOTAL');
+  });
+
+  it('la caja es de la sede: no mezcla lo de otro centro', async () => {
+    const victima = await centroConSocio('caja-victima');
+    await cobrar(victima);
+    await pagarOk(victima);
+    const atacante = await centroConSocio('caja-atacante');
+
+    const propia = await arqueo(atacante);
+
+    expect((JSON.parse(propia.texto) as { totalCents: number }).totalCents).toBe(0);
+  });
+});
+
 describe('aislamiento de tenant', () => {
   it('el atacante no ve ni toca los movimientos del otro centro', async () => {
     const victima = await centroConSocio('bill-victima');
@@ -712,10 +941,11 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
       (route) =>
         route.path.startsWith('/api/v1/charges') ||
         route.path.startsWith('/api/v1/payments') ||
-        route.path.endsWith('/statement'),
+        route.path.endsWith('/statement') ||
+        route.path.endsWith('/till'),
     );
 
-    expect(rutas).toHaveLength(5);
+    expect(rutas).toHaveLength(6);
     for (const route of rutas) {
       expect(route.tenantScoped, `${route.method} ${route.path}`).toBe(true);
       expect(route.isolationFixture, `${route.method} ${route.path}`).toBeDefined();
@@ -730,7 +960,8 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
       const esDeBilling =
         route.path.startsWith('/api/v1/charges') ||
         route.path.startsWith('/api/v1/payments') ||
-        route.path.endsWith('/statement');
+        route.path.endsWith('/statement') ||
+        route.path.endsWith('/till');
       if (!esDeBilling || !route.isolationFixture) continue;
 
       const attack = await route.isolationFixture({ victimTenantId: victima.organizationId });

@@ -1,4 +1,10 @@
-import { CHARGE_TRANSITIONS, type ChargeStatus } from '@laplace/schemas';
+import {
+  CHARGE_TRANSITIONS,
+  type BillingStatus,
+  type ChargeStatus,
+  type PaymentMethod,
+  type TillSummary,
+} from '@laplace/schemas';
 import { AppError } from '../../../http/errors.js';
 
 /**
@@ -134,4 +140,101 @@ export function overdueOf(charges: readonly PayableCharge[], nowIso: string): nu
 /** Pesos con dos decimales, solo para armar mensajes. La cuenta siempre es en centavos. */
 function formatCents(cents: number): string {
   return `$${(cents / 100).toLocaleString('es-AR', { minimumFractionDigits: 2 })}`;
+}
+
+/**
+ * El estado de cobranza que ve el staff, en tiempo real (§2.1.16). Es derivado:
+ * guardarlo obligaria a un job que lo mantenga al dia y a que nunca se atrase.
+ */
+export function billingStatusOf(balanceCents: number, overdueCents: number): BillingStatus {
+  if (overdueCents > 0) return 'overdue';
+  if (balanceCents > 0) return 'credit';
+  if (balanceCents < 0) return 'pending';
+
+  return 'clear';
+}
+
+/**
+ * El corte de la mora sobre una accion del socio (§2.1.12).
+ *
+ * `allowDebt` es del Venue y su default es `false` (ADR-004, decision 2): el
+ * centro decide si deja reservar a quien debe. La morosidad es el KPI numero 1
+ * del mercado argentino, y la palanca que la mueve es esta.
+ */
+export function assertNoArrears(overdueCents: number, allowDebt: boolean): void {
+  if (allowDebt || overdueCents === 0) return;
+
+  throw new AppError({
+    code: 'LP-BOOK-403-005',
+    status: 403,
+    // El monto va en el mensaje: "regularizá" sin numero manda al socio al
+    // mostrador a preguntar cuanto.
+    message: `Tenés ${formatCents(overdueCents)} de deuda vencida.`,
+    action: 'Regularizá para poder reservar.',
+    meta: { overdueCents },
+  });
+}
+
+export interface TillPayment {
+  method: PaymentMethod;
+  amountCents: number;
+  refundedCents: number;
+  status: string;
+}
+
+/**
+ * El arqueo de un dia: lo que entro por cada metodo, con los reembolsos
+ * restados.
+ *
+ * El efectivo va aparte porque es lo unico que hay que contar a mano al cerrar
+ * el turno, y es donde aparecen las diferencias.
+ */
+export function summarizeTill(
+  payments: readonly TillPayment[],
+): Omit<TillSummary, 'venueId' | 'date' | 'currency'> {
+  const validos = payments.filter(
+    (payment) => payment.status === 'approved' || payment.status === 'refunded',
+  );
+
+  const porMetodo = new Map<PaymentMethod, { count: number; gross: number; refunded: number }>();
+  for (const payment of validos) {
+    const actual = porMetodo.get(payment.method) ?? { count: 0, gross: 0, refunded: 0 };
+
+    porMetodo.set(payment.method, {
+      count: actual.count + 1,
+      gross: actual.gross + payment.amountCents,
+      refunded: actual.refunded + payment.refundedCents,
+    });
+  }
+
+  const byMethod = [...porMetodo.entries()]
+    .map(([method, totales]) => ({
+      method,
+      count: totales.count,
+      grossCents: totales.gross,
+      refundedCents: totales.refunded,
+      netCents: totales.gross - totales.refunded,
+    }))
+    .sort((a, b) => a.method.localeCompare(b.method));
+
+  return {
+    totalCents: byMethod.reduce((total, fila) => total + fila.netCents, 0),
+    byMethod,
+    cashCents: byMethod.find((fila) => fila.method === 'cash')?.netCents ?? 0,
+    paymentCount: validos.length,
+    refundedCents: byMethod.reduce((total, fila) => total + fila.refundedCents, 0),
+  };
+}
+
+/** El arqueo como CSV, para pegarlo en la planilla del centro. */
+export function tillToCsv(summary: TillSummary): string {
+  const filas = [
+    ['metodo', 'cantidad', 'bruto', 'reembolsado', 'neto'].join(','),
+    ...summary.byMethod.map((fila) =>
+      [fila.method, fila.count, fila.grossCents, fila.refundedCents, fila.netCents].join(','),
+    ),
+    ['TOTAL', summary.paymentCount, '', summary.refundedCents, summary.totalCents].join(','),
+  ];
+
+  return filas.join('\n');
 }
