@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `members`
 - **Tipo:** feature
-- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `7d93104` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/V0UQdGSX (F1-05) — movida a **Completadas**
 - **Qué cambió:** el centro sube el padrón exportado de un Excel o de un competidor, lo ve fila por
   fila con su validación, corrige o saltea lo que haga falta, y recién ahí importa. Al terminar
