@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `billing`
 - **Tipo:** feature
-- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `6ff533f` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/dyKwcshG (F1-10) — movida a **Completadas**
 - **Qué cambió:** el centro genera cargos, registra pagos en efectivo, transferencia o POS, y abre
   el estado de cuenta de cualquier socio con su saldo y su deuda vencida. Los pagos se anulan con un
