@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `booking`
 - **Tipo:** feature
-- **Commit/PR:** pendiente (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `4e1515d` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/LnUNw1UM (F1-15) — movida a **Completadas**
 - **Qué cambió:** las cinco ventanas de §2.1.5.c se respetan de verdad — abrir, cerrar, cancelar,
   promover y hacer check-in —, cada categoría puede tener las suyas, y el socio ve el texto de la
