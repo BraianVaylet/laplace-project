@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `schedule`
 - **Tipo:** feature
-- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `9a312dc` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/kpxJMwoQ (F1-13) — movida a **Completadas**
 - **Qué cambió:** el comportamiento tipo Google Calendar de §2.1.5.a — editar solo una clase o "esta
   y futuras" —, los feriados y cierres que cancelan en bloque, la cancelación con devolución de
