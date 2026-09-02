@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `billing`
 - **Tipo:** feature
-- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `ee576e7` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/cxZpencT (F1-11) — movida a **Completadas**
 - **Qué cambió:** un job diario pasa a mora los cargos vencidos, marca al socio como deudor y avisa.
   El estado de cobranza se ve en tiempo real, y cada sede tiene su arqueo de caja del día por método
