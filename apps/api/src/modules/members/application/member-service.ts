@@ -205,6 +205,19 @@ export class MemberService {
     return (await this.getByPublicId(id)).notes;
   }
 
+  /**
+   * Refresca el saldo cacheado del socio. Lo escribe Billing (F1-10).
+   *
+   * Es una **copia**: la fuente de verdad es el estado de cuenta, que se calcula
+   * sobre cargos y pagos. Esto existe para que la lista de socios y la ficha 360
+   * no tengan que recalcularlo por cada fila.
+   */
+  async setBalance(memberId: string, balanceCents: number): Promise<void> {
+    await this.members.updateByPublicId(memberId, {
+      $set: { balanceCents, 'flags.debtor': balanceCents < 0 },
+    });
+  }
+
   /** Lo consume el guard de entitlements. Cuenta los que ocupan cupo. */
   countActive(): Promise<number> {
     return this.members.countActive();

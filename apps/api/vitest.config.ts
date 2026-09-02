@@ -40,8 +40,9 @@ export default defineConfig({
         // Modulos de negocio. La regla es la criticidad, no el directorio.
         'src/modules/**': { lines: 85, statements: 85, branches: 80, functions: 85 },
 
-        // 🔴 Contracts maneja creditos: es plata. Sube al 95% de §6, igual que
-        // auth y entitlements.
+        // 🔴 Contracts y Billing manejan plata y cupos: suben al 95% de §6,
+        // igual que auth y entitlements.
+        'src/modules/billing/**': { lines: 95, statements: 90, branches: 85, functions: 90 },
         // Las ramas van 10 puntos por debajo de las lineas, como el resto del
         // archivo: exigir 95% de ramas obliga a testear cada `??` defensivo.
         'src/modules/contracts/**': { lines: 95, statements: 90, branches: 85, functions: 90 },

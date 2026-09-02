@@ -6,6 +6,7 @@ import type { AppEnv } from '../app.js';
 import type { EntitlementsLoader } from '../entitlements/middleware.js';
 import type { DomainEventBus } from '../events/bus.js';
 import { createMembersModule, type OrganizationMembershipPort } from './members/index.js';
+import { createBillingModule } from './billing/index.js';
 import { createContractsModule, type FutureBookingReleaser } from './contracts/index.js';
 import { createProductsModule } from './products/index.js';
 import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
@@ -47,6 +48,8 @@ export interface ModuleDeps {
 export function createModules(deps: ModuleDeps) {
   const routes = new Hono<AppEnv>();
 
+  const audit = createAuditWriter();
+
   const venues = createVenuesModule(deps);
   const rooms = createRoomsModule({
     ...deps,
@@ -67,7 +70,7 @@ export function createModules(deps: ModuleDeps) {
 
   const contracts = createContractsModule({
     ...deps,
-    audit: createAuditWriter(),
+    audit,
     products: {
       assertPurchasable: async (productId, memberId) => {
         const product = await products.service.assertPurchasable(productId, memberId);
@@ -96,16 +99,30 @@ export function createModules(deps: ModuleDeps) {
     },
   });
 
+  const billing = createBillingModule({
+    ...deps,
+    audit,
+    /*
+     * El saldo del socio se guarda tambien en su ficha, para no recalcularlo por
+     * cada fila del listado. La fuente de verdad sigue siendo el estado de
+     * cuenta, que se calcula sobre cargos y pagos.
+     */
+    members: {
+      set: (memberId, balanceCents) => members.service.setBalance(memberId, balanceCents),
+    },
+  });
+
   routes.route('/', venues.routes);
   routes.route('/', rooms.routes);
   routes.route('/', members.routes);
   routes.route('/', products.routes);
   routes.route('/', contracts.routes);
+  routes.route('/', billing.routes);
 
   /** Todo lo que el runner tiene que programar (§10). */
   const jobs = [...contracts.jobs];
 
-  return { routes, jobs, venues, rooms, members, products, contracts };
+  return { routes, jobs, venues, rooms, members, products, contracts, billing };
 }
 
 /**

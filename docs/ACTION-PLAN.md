@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |      8 |
+| Fase 1 — MVP vendible   |       32 |          186 |      9 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -833,7 +833,7 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   pide a través del puerto `FutureBookingReleaser`, que hasta F1-14 responde 0. El pedido sale con
   su motivo (`frozen` / `expired`) y hay un test que lo verifica; lo que falta es quien lo conteste.
 
-## [ ] F1-10 · Billing: cargos, pagos manuales y estado de cuenta
+## [x] F1-10 · Billing: cargos, pagos manuales y estado de cuenta
 
 - **module:** billing
 - **description:** El gap más grave de la v1 (§2.1.16): el dinero entre el centro y sus socios.
@@ -863,7 +863,21 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   Cobertura mínima 95%.
 - **error-codes:** `LP-BILL-422-003`, `LP-BILL-404-004`, `LP-BILL-409-005` (reembolso mayor al pago)
 - **data-model-impact:** `Charge`, `Payment`, `Refund` de §5.2.2. Índice único
-  `{ tenantId, idempotencyKey }` en `Payment`.
+  `{ tenantId, idempotencyKey }` en `Payment`. `Charge.paidCents` se suma al modelo de §5.2.2: sin
+  él no se puede representar un pago parcial, que es un criterio de esta tarea.
+- **decisiones de diseño:**
+  - `requireIdempotencyKey` es infraestructura HTTP compartida (`src/http/idempotency.ts`), no del
+    módulo: F1-14 (reserva) y F1-19 (check-in) la reutilizan. El middleware **solo exige y valida
+    la clave**; la deduplicación real la hace el índice único, porque una caché de respuestas en
+    memoria se pierde justo cuando el proceso se reinicia, que es cuando el cliente reintenta.
+  - Un pago se imputa **del cargo más viejo al más nuevo**: es lo que espera el mostrador cuando
+    alguien paga "lo que debe", y evita que una deuda vieja quede abierta mientras se saldan las
+    nuevas.
+  - El estado de cuenta es la **fuente de verdad** del saldo; `Member.balanceCents` es una copia que
+    Billing refresca para que el listado de socios no tenga que recalcularlo por fila. El flag
+    `debtor` se deriva del mismo número.
+  - Un reembolso parcial revierte **el último cargo saldado**, no el primero: la deuda que reaparece
+    es la que se acababa de cobrar.
 
 ## [ ] F1-11 · Billing: mora, caja diaria y reembolsos
 

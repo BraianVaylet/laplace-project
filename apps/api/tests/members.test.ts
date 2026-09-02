@@ -621,14 +621,16 @@ describe('aislamiento de tenant', () => {
 
 describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
   it('las diez rutas de members traen su fixture de ataque', () => {
-    // Las de `/import` son de F1-05 y tienen su propia suite.
+    // Las de `/import` son de F1-05 y el estado de cuenta es de Billing (F1-10):
+    // cada una tiene su propia suite.
     const members = allRegisteredRoutes().filter(
       (route) =>
         route.path.startsWith('/api/v1/members') &&
-        !route.path.startsWith('/api/v1/members/import'),
+        !route.path.startsWith('/api/v1/members/import') &&
+        !route.path.endsWith('/statement'),
     );
 
-    expect(members.length).toBe(10);
+    expect(members).toHaveLength(10);
     for (const route of members) {
       expect(route.tenantScoped, `${route.method} ${route.path}`).toBe(true);
       expect(route.isolationFixture, `${route.method} ${route.path}`).toBeDefined();
@@ -642,6 +644,7 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
     for (const route of allRegisteredRoutes()) {
       if (!route.path.startsWith('/api/v1/members') || !route.isolationFixture) continue;
       if (route.path.startsWith('/api/v1/members/import')) continue;
+      if (route.path.endsWith('/statement')) continue;
 
       const attack = await route.isolationFixture({ victimTenantId: victima.organizationId });
       const res = await app.request(attack.path, {
@@ -658,6 +661,7 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
     const montadas = app.routes
       .filter((route) => route.path.startsWith('/api/v1/members'))
       .filter((route) => route.method !== 'ALL')
+      .filter((route) => !route.path.endsWith('/statement'))
       .map((route) => `${route.method} ${route.path}`);
 
     const declaradas = allRegisteredRoutes()

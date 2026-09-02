@@ -23,6 +23,52 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-02 — F1-10: Billing, cargos y pagos manuales
+
+- **Módulo:** `billing`
+- **Tipo:** feature
+- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/dyKwcshG (F1-10) — movida a **Completadas**
+- **Qué cambió:** el centro genera cargos, registra pagos en efectivo, transferencia o POS, y abre
+  el estado de cuenta de cualquier socio con su saldo y su deuda vencida. Los pagos se anulan con un
+  reembolso, nunca borrándolos.
+- **Por qué:** §2.1.16 lo marca como el gap más grave de la v1. El registro manual es como cobra hoy
+  la mayoría de los centros.
+- **Impacto:** colecciones `charges`, `payments` y `refunds` · cinco rutas nuevas ·
+  `src/http/idempotency.ts` como infraestructura compartida · `Charge.paidCents` sumado al modelo ·
+  umbral de cobertura propio para `src/modules/billing/**`.
+- **Pendiente:** la mora automática y la caja diaria son F1-11.
+
+**Decisiones:**
+
+- **La idempotencia la garantiza el índice, no el middleware.** `requireIdempotencyKey` exige y
+  valida la clave; la deduplicación real es el único `{ tenantId, idempotencyKey }`. Una caché de
+  respuestas en memoria se pierde justo cuando el proceso se reinicia, que es exactamente cuando el
+  cliente reintenta. Hay un test que lanza tres pagos simultáneos con la misma clave y verifica que
+  gane uno solo, y otro que manda el mismo pago tres veces en serie: un registro, dos 409.
+- **El 409 del duplicado lleva el pago original.** Sin él, el mostrador no puede confirmar que el
+  cobro entró y termina cobrándolo de nuevo a mano, que es justo lo que la idempotencia evita.
+- **La clave es por tenant.** El índice es `{ tenantId, idempotencyKey }`: si fuera solo la clave,
+  el primer centro que use "abc" se la bloquearía a todos los demás. Tiene su test.
+- **Un pago se imputa del cargo más viejo al más nuevo.** Es lo que espera el mostrador cuando
+  alguien paga "lo que debe". Al revés, la deuda vieja queda abierta mientras se saldan las nuevas.
+  Lo que sobra queda como saldo a favor, no se pierde.
+- **Un pago nunca se borra (§5.2.4).** Se anula con un reembolso, con motivo obligatorio y registro
+  en `AuditLog`. Si el pago desapareciera, el arqueo del día anterior dejaría de coincidir y nadie
+  sabría por qué. Hay un test que verifica que el documento sigue existiendo después del reembolso.
+- **Un reembolso parcial revierte el último cargo saldado, no el primero.** La deuda que reaparece
+  es la que se acababa de cobrar; la vieja ya estaba cobrada y no tiene por qué volver a abrirse.
+- **El estado de cuenta es la fuente de verdad del saldo.** `Member.balanceCents` es una copia que
+  Billing refresca en cada movimiento, para que el listado de socios no recalcule por fila. El flag
+  `debtor` sale del mismo número, así que no puede desincronizarse de él.
+- **`Charge.paidCents` se sumó al modelo de §5.2.2.** Sin él no se puede representar un pago
+  parcial, que es un criterio explícito de la tarea.
+
+**Verificación:** 1421 tests verdes (1031 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde. Cobertura de `src/modules/billing/**`: **100% de líneas**.
+
+---
+
 ## 2026-09-02 — F1-09: congelamiento y vencimiento de contratos
 
 - **Módulo:** `contracts`
