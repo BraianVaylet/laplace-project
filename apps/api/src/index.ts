@@ -46,7 +46,21 @@ async function main() {
     logger,
     corsOrigins: env.CORS_ORIGINS,
     auth,
-    modules: createModuleRoutes({ events, entitlements, logger }),
+    modules: createModuleRoutes({
+      events,
+      entitlements,
+      logger,
+      /*
+       * El canje de un codigo suma al usuario a la organizacion del centro con
+       * rol `member`. El rol viaja acotado a proposito: el codigo da acceso de
+       * socio, nunca de staff.
+       */
+      memberships: {
+        add: async ({ userId, organizationId }) => {
+          await auth.api.addMember({ body: { userId, organizationId, role: 'member' } });
+        },
+      },
+    }),
     lockoutGuard: createLockoutGuard({ store: createMongoLockoutStore(db as Db) }),
     openapi: {
       version: '1.0.0',

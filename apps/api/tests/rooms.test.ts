@@ -145,6 +145,7 @@ beforeAll(async () => {
       events: createEventBus(logger),
       entitlements,
       logger,
+      memberships: { add: () => Promise.resolve() },
       sessions: {
         countFutureSessions: (roomId) => Promise.resolve(sesionesFuturas.get(roomId) ?? 0),
       },

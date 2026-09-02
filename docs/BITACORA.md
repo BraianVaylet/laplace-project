@@ -23,6 +23,58 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-02 — F1-04: códigos de invitación
+
+- **Módulo:** `members`
+- **Tipo:** feature
+- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/fRal7oGI (F1-04) — movida a **Completadas**
+- **Qué cambió:** el centro genera códigos con vencimiento y límite de usos, y los revoca. Un
+  atleta registrado en la WAFM canjea el código y queda como socio de ese centro. La v1 no definía
+  ni vencimiento ni límite: un código filtrado se usaba para siempre.
+- **Por qué:** es la puerta de entrada del socio al producto, y la única parte del sistema que
+  atraviesa la frontera de tenant por diseño.
+- **Impacto:** colección `inviteCodes` · cuatro rutas nuevas · **migración nueva**
+  (`20260902100000-invite-code-global-unique.cjs`) · salida explícita `skipTenantScope` en el
+  plugin de tenancy · prefijo de id `inv`.
+- **Pendiente:** nada de esta tarea.
+
+**Decisiones:**
+
+- **El código lo genera el sistema.** Si el centro pudiera escribirlo, dos centros elegirían
+  "VERANO2026" y el canje no sabría a cuál de los dos asociar a la persona. Son 8 caracteres de un
+  alfabeto sin `O`, `0`, `I`, `1` ni `L`, que son las cinco que la gente confunde al dictarlo.
+- **Índice único GLOBAL sobre `code`, y es la única excepción a "tenantId primero".** El canje
+  ocurre antes de que la persona pertenezca a ningún centro: el tenant sale del código, que es el
+  único dato que hay. Con el `{ tenantId, code }` solo, la unicidad sería por centro y la búsqueda
+  global sería ambigua. El índice hace que el choque sea imposible en vez de improbable.
+- **`skipTenantScope`: una salida explícita en el plugin, en vez de esquivarlo con el driver.** La
+  alternativa era consultar `db.collection('inviteCodes')` directo, que es exactamente la "ruta
+  trampa" que la suite de F0-05 existe para cazar. Una opción con nombre es greppable, testeable y
+  justificable en la revisión. Tiene cuatro tests propios, incluido el que documenta que **dentro**
+  de un contexto de tenant sigue devolviendo datos de otros centros: por eso el filtro tiene que
+  acotar por sí mismo.
+- **El consumo del uso es atómico.** `findOneAndUpdate` con `$expr` sobre `usedCount < maxUses`:
+  el filtro y el `$inc` suceden en la misma operación. Con un read y después un write, cinco
+  atletas contra el último cupo leerían `usedCount: 0` y pasarían los cinco. Hay un test que lanza
+  exactamente eso y verifica que gane uno solo.
+- **Un solo error para vencido, agotado, revocado e inexistente.** §11.2 lo pide así a propósito:
+  distinguirlos le diría a quien prueba códigos al azar cuáles existen.
+- **Revocar no toca a quienes ya lo usaron.** Son socios del centro por derecho propio;
+  desasociarlos por revocar un código sería un efecto que nadie pidió.
+- **El canje pide nombre y apellido.** Partir el nombre de la cuenta ("Juan Pérez" → nombre +
+  apellido) falla con un apellido compuesto y con quien se registró con un solo nombre, y deja la
+  ficha del socio mal desde el día uno.
+- **Compensación en vez de transacción.** Si el canje falla después de consumir el uso, se devuelve
+  con un `$inc: -1`. F1-14 (reserva) es donde las transacciones se vuelven obligatorias y donde se
+  va a introducir esa plumbing; acá el peor caso de que la compensación también falle es un cupo de
+  menos, no un dato inconsistente.
+
+**Verificación:** 1152 tests verdes (796 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido.
+
+---
+
 ## 2026-09-01 — F1-03: módulo Members, la ficha del socio
 
 - **Módulo:** `members`

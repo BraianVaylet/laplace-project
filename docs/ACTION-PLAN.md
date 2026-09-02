@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |      3 |
+| Fase 1 — MVP vendible   |       32 |          186 |      4 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -596,7 +596,7 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   (`memberResponseSchema` + `toMemberResponse`), no un `delete doc.notes`. Un campo sensible que se
   agregue mañana al documento no se filtra por olvido.
 
-## [ ] F1-04 · Códigos de invitación
+## [x] F1-04 · Códigos de invitación
 
 - **module:** members
 - **description:** El código con el que un atleta asocia su cuenta de la WAFM a un centro (§2.1.7),
@@ -619,7 +619,19 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **test_plan:** Integración + aislamiento. Test de vencimiento con reloj inyectado, de agotamiento
   por límite de usos, de revocación y de uso concurrente del último cupo del código.
 - **error-codes:** `LP-MEMB-422-005`
-- **data-model-impact:** `InviteCode` de §5.2.2. Índice único `{ tenantId, code }`.
+- **data-model-impact:** `InviteCode` de §5.2.2. Índice único `{ tenantId, code }` **más un único
+  global sobre `code`** (migración `20260902100000`). El canje ocurre antes de que la persona
+  pertenezca a ningún centro, así que la búsqueda no puede acotarse por tenant; sin el índice
+  global, dos centros podrían generar el mismo código y el canje no sabría a cuál asociarla.
+- **decisiones de diseño:**
+  - El código lo **genera el sistema**, no lo escribe el centro: si dos centros pudieran elegir
+    "VERANO2026", el canje sería ambiguo. 8 caracteres de un alfabeto sin `O`/`0`/`I`/`1`/`L`,
+    que son las que se confunden al dictarlo por teléfono.
+  - `POST /api/v1/invite-codes/redeem` es la **única ruta de negocio con `tenantScoped: false`**, y
+    usa la salida explícita `skipTenantScope` del plugin de Mongoose. Ambas cosas están declaradas
+    y testeadas: la excepción tiene que seguir siendo una sola.
+  - El permiso es `athlete.create`, no `invitation.create`: `invitation` está reservado por Better
+    Auth para invitar **staff** (F0-02).
 
 ## [ ] F1-05 · Importación masiva por CSV
 

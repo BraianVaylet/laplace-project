@@ -1,9 +1,10 @@
 import { Hono } from 'hono';
+import type { Temporal } from '@js-temporal/polyfill';
 import type { Logger } from 'pino';
 import type { AppEnv } from '../app.js';
 import type { EntitlementsLoader } from '../entitlements/middleware.js';
 import type { DomainEventBus } from '../events/bus.js';
-import { createMembersModule } from './members/index.js';
+import { createMembersModule, type OrganizationMembershipPort } from './members/index.js';
 import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
 import { createVenuesModule } from './venues/index.js';
 
@@ -18,6 +19,13 @@ export interface ModuleDeps {
   sessions?: FutureSessionCounter | undefined;
   /** Hoy en `YYYY-MM-DD`. Se inyecta para poder testear la mayoria de edad. */
   today?: (() => string) | undefined;
+  /** Reloj del canje de codigos. Se inyecta para probar el vencimiento sin esperar. */
+  now?: (() => Temporal.Instant) | undefined;
+  /**
+   * Suma un usuario a la organizacion de un centro. Lo implementa Better Auth
+   * desde `index.ts`: los modulos no conocen la libreria de identidad.
+   */
+  memberships: OrganizationMembershipPort;
 }
 
 /**

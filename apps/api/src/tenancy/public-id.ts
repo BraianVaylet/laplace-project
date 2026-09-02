@@ -11,6 +11,7 @@ export const ID_PREFIXES = {
   room: 'rom',
   member: 'mem',
   memberNote: 'mnt',
+  inviteCode: 'inv',
   product: 'prd',
   contract: 'ctr',
   charge: 'chg',

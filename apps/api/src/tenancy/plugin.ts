@@ -10,6 +10,16 @@ import { currentTenant, requireTenant } from './context.js';
  * **Falla ruidosamente si no hay contexto.** Es deliberado: una consulta sin
  * `tenantId` que igual devuelve resultados es una fuga entre centros, y prefiero
  * un 500 con su codigo a un listado con los socios de otro box.
+ *
+ * 🔴 **La unica salida es `.setOptions({ skipTenantScope: true })`**, y existe
+ * para el puñado de operaciones que ocurren ANTES de que haya un tenant: hoy,
+ * solo el canje de un codigo de invitacion (F1-04), donde el tenant sale del
+ * codigo porque la persona todavia no pertenece a ningun centro.
+ *
+ * Es explicita y greppable a proposito. Cada uso nuevo tiene que poder
+ * justificarse en la revision igual que un `tenantScoped: false` en el registro
+ * de rutas, y ninguna consulta que dependa de datos del usuario puede usarla:
+ * el filtro tiene que acotar por si mismo, como el `code` unico global.
  */
 export function tenantPlugin(schema: Schema): void {
   schema.add({
@@ -102,9 +112,14 @@ interface SchemaDoc {
  * lo borrado logicamente.
  */
 function applyScope(query: SchemaQuery): void {
+  const options = query.getOptions();
+
+  // Ver el comentario de `tenantPlugin`: salida explicita para lo que corre
+  // antes de que exista un tenant.
+  if (options['skipTenantScope'] === true) return;
+
   const context = requireTenant();
   const filter = query.getFilter();
-  const options = query.getOptions();
 
   /**
    * Si el filtro nombra un tenant distinto al del contexto, es un bug del

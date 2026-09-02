@@ -137,7 +137,12 @@ beforeAll(async () => {
     logger,
     corsOrigins: ['http://localhost:5174'],
     auth,
-    modules: createModuleRoutes({ events: createEventBus(logger), entitlements, logger }),
+    modules: createModuleRoutes({
+      events: createEventBus(logger),
+      entitlements,
+      logger,
+      memberships: { add: () => Promise.resolve() },
+    }),
   });
 }, 120_000);
 

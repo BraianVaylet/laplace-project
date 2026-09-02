@@ -207,6 +207,52 @@ describe('capa 2 — el plugin como red de seguridad', () => {
   });
 });
 
+describe('capa 2 — la salida explicita `skipTenantScope`', () => {
+  /*
+   * F1-04 la necesita: el canje de un codigo de invitacion ocurre ANTES de que
+   * la persona pertenezca a ningun centro, asi que el tenant sale del codigo.
+   * Es la unica excepcion, y estos tests existen para que siga siendo unica y
+   * para que su alcance quede escrito.
+   */
+  it('sin contexto de tenant, el plugin corta: es lo normal', async () => {
+    await seedBoth();
+
+    await expect(Widget.find({}).lean().exec()).rejects.toThrowError(AppError);
+  });
+
+  it('con la salida explicita, la consulta corre sin tenant', async () => {
+    await seedBoth();
+
+    const found = await Widget.find({}).setOptions({ skipTenantScope: true }).lean().exec();
+
+    // Ve los dos centros: por eso el filtro tiene que acotar por si mismo, como
+    // el `code` unico global de un codigo de invitacion.
+    expect(found).toHaveLength(2);
+  });
+
+  it('la salida es por consulta, no un interruptor global', async () => {
+    await seedBoth();
+
+    await Widget.find({}).setOptions({ skipTenantScope: true }).lean().exec();
+
+    // La consulta siguiente vuelve a exigir contexto: si la salida se pegara al
+    // modelo, un solo uso dejaria abierta la coleccion para todo el proceso.
+    await expect(Widget.find({}).lean().exec()).rejects.toThrowError(AppError);
+  });
+
+  it('dentro de un contexto de tenant, la salida sigue mandando', async () => {
+    await seedBoth();
+
+    const found = await runWithTenant(BOX_TORO, () =>
+      Widget.find({}).setOptions({ skipTenantScope: true }).lean().exec(),
+    );
+
+    // Es lo que hace que sea peligrosa y por lo que tiene que ser greppable:
+    // usarla adentro de un pedido con tenant devuelve datos de otros centros.
+    expect(found).toHaveLength(2);
+  });
+});
+
 describe('borrado logico', () => {
   it('no borra de verdad: el documento sigue en la coleccion', async () => {
     const { mine } = await seedBoth();
