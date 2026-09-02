@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `products`
 - **Tipo:** feature
-- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `004e0f8` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/sFx6qTcx (F1-07) — movida a **Completadas**
 - **Qué cambió:** el centro publica y administra su catálogo con los siete tipos de §2.1.17: pack de
   clases, membresía ilimitada, membresía con tope, clase suelta, clase de prueba, bono de personal
