@@ -5,6 +5,7 @@ import type { AppEnv } from '../app.js';
 import type { EntitlementsLoader } from '../entitlements/middleware.js';
 import type { DomainEventBus } from '../events/bus.js';
 import { createMembersModule, type OrganizationMembershipPort } from './members/index.js';
+import { createProductsModule } from './products/index.js';
 import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
 import { createVenuesModule } from './venues/index.js';
 
@@ -46,10 +47,12 @@ export function createModuleRoutes(deps: ModuleDeps): Hono<AppEnv> {
   });
 
   const members = createMembersModule(deps);
+  const products = createProductsModule(deps);
 
   routes.route('/', venues.routes);
   routes.route('/', rooms.routes);
   routes.route('/', members.routes);
+  routes.route('/', products.routes);
 
   return routes;
 }

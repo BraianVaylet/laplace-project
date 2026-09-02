@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |      5 |
+| Fase 1 — MVP vendible   |       32 |          186 |      6 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -698,7 +698,7 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** ninguno nuevo.
 
-## [ ] F1-07 · Módulo Products
+## [x] F1-07 · Módulo Products
 
 - **module:** products
 - **description:** El catálogo vendible que absorbe y generaliza a Packs (§2.1.17). Sin membresía
@@ -726,8 +726,27 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   por persona. Test de que el dinero es entero en centavos en toda la ruta.
 - **error-codes:** `LP-PROD-422-001`, `LP-PROD-409-002`, `LP-PROD-404-003`
 - **data-model-impact:** `Product` de §5.2.2. Índice `{ tenantId, active, type }`.
+- **decisiones de diseño:**
+  - Las reglas por tipo se validan **al crear el producto**, no en el motor de reservas: un
+    "ilimitado" con créditos o un pack sin créditos son contradicciones que se pueden rechazar en
+    el formulario en vez de desambiguar más tarde.
+  - El **tipo no se edita**: cambiarlo cambiaría el significado de los contratos ya vendidos, que
+    apuntan al producto para saber cómo se consumen.
+  - El PATCH revalida las reglas del tipo **con el documento ya mezclado**. El schema del PATCH por
+    sí solo no puede verlo, porque no conoce el tipo.
+  - El catálogo público se fuerza en el servidor: quien no pueda crear productos ve solo lo visible
+    y activo. Ocultar un producto en el front no es una restricción.
+- **cerrada con dos deudas declaradas:**
+  - La regla del trial único por persona está implementada y testeada contra el puerto
+    `PurchaseHistory`, que hasta F1-08 responde `false` para todos. F1-08 conecta el historial real.
+  - `soldCount` y `priceSnapshotCents` los escribe Contracts (F1-08). Acá solo se declara el cupo
+    (`maxSales`) y se verifica que archivar no toque nada vendido.
 
 ## [ ] F1-08 · Módulo Contracts
+
+> **Hereda dos deudas de F1-07:** conectar el puerto `PurchaseHistory` de Products con el historial
+> real de contratos (hasta que se haga, el trial único por persona está escrito y testeado pero
+> nunca se dispara), e incrementar `soldCount` al vender para que el cupo `maxSales` aplique.
 
 - **module:** contracts
 - **description:** La instancia comprada por un miembro, con su máquina de estados y sus créditos.

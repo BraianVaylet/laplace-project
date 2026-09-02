@@ -23,6 +23,51 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-02 — F1-07: módulo Products, el catálogo vendible
+
+- **Módulo:** `products`
+- **Tipo:** feature
+- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/sFx6qTcx (F1-07) — movida a **Completadas**
+- **Qué cambió:** el centro publica y administra su catálogo con los siete tipos de §2.1.17: pack de
+  clases, membresía ilimitada, membresía con tope, clase suelta, clase de prueba, bono de personal
+  training y evento. El socio ve el catálogo público; el staff ve todo.
+- **Por qué:** modelar solo packs deja afuera al gimnasio y al estudio de pilates, que trabajan con
+  cuota mensual. La spec lo marca como bloqueante comercial.
+- **Impacto:** colección `products` · seis rutas nuevas · sin códigos de error nuevos.
+- **Pendiente:** ver las dos deudas declaradas abajo.
+
+**Decisiones:**
+
+- **Las reglas por tipo se validan al crear el producto, no en el motor de reservas.** Un
+  "ilimitado" con créditos, un pack sin créditos o una clase de prueba paga son contradicciones que
+  se pueden rechazar en el formulario. Dejarlas pasar obliga a que el motor de reservas las
+  desambigüe, y ahí el que se entera es el socio parado en la puerta.
+- **El tipo no se edita.** Cambiarlo cambiaría el significado de los contratos ya vendidos, que
+  apuntan al producto para saber cómo se consumen.
+- **El PATCH revalida las reglas del tipo con el documento ya mezclado.** El schema del PATCH por sí
+  solo no puede verlo, porque no conoce el tipo: sin esto, un PATCH que borra `credits` dejaría el
+  pack vendible y sin clases.
+- **El catálogo público se fuerza en el servidor.** Quien no tiene permiso para crear productos ve
+  solo lo visible y activo. Se decide por el permiso y no por el nombre del rol, así que un rol
+  nuevo que pueda publicar hereda la vista completa sin tocar nada.
+- **El dinero es entero en centavos en toda la ruta.** Hay un test que verifica el request, lo
+  guardado en la base y la respuesta: 60.000,50 pesos son 6000050 centavos, y un float en cualquiera
+  de los tres puntos arrastra el error hasta la caja del centro.
+
+**Deudas declaradas, ambas para F1-08:**
+
+1. El **trial único por persona** está implementado y testeado contra el puerto `PurchaseHistory`,
+   que hasta que exista Contracts responde `false` para todos. Es el mismo patrón que
+   `FutureSessionCounter` en Rooms: la regla vive en su módulo y el dato lo trae quien lo tiene.
+2. `soldCount` y `priceSnapshotCents` los escribe Contracts. Acá se declara el cupo (`maxSales`) y
+   se verifica que archivar no toque nada vendido.
+
+**Verificación:** 1263 tests verdes (873 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido.
+
+---
+
 ## 2026-09-02 — F1-05: importación masiva por CSV
 
 - **Módulo:** `members`
