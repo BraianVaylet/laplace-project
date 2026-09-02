@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `schedule`
 - **Tipo:** feature
-- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `f648109` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/wHIRoAUH (F1-12) — movida a **Completadas**
 - **Qué cambió:** el centro define plantillas recurrentes y un job diario materializa las clases de
   los próximos 60 días. También se pueden cargar clases sueltas, y dos clases no pueden ocupar la
