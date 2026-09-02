@@ -107,6 +107,27 @@ export function createBookingRoutes(
       errorCodes: ['LP-BOOK-404-006', 'LP-BOOK-409-001', 'LP-BOOK-422-004', 'LP-AUTH-403-002'],
     },
     {
+      method: 'POST',
+      path: '/api/v1/bookings/:id/confirm',
+      tenantScoped: true,
+      isolationFixture: async (context) => ({
+        path: `${(await attackBooking(context)).path}/confirm`,
+      }),
+      summary: 'Confirmar el lugar que se liberó',
+      tags: ['booking'],
+      permission: { booking: ['create'] },
+      request: { params: idParams },
+      response: { status: 200, schema: bookingResultSchema },
+      errorCodes: [
+        'LP-BOOK-404-006',
+        'LP-BOOK-409-001',
+        'LP-BOOK-422-009',
+        'LP-BOOK-403-005',
+        'LP-CTRT-402-001',
+        'LP-AUTH-403-002',
+      ],
+    },
+    {
       method: 'GET',
       path: '/api/v1/booking-policies/:sessionId',
       tenantScoped: true,
@@ -212,6 +233,14 @@ export function createBookingRoutes(
         }),
       ),
     ),
+  );
+
+  /*
+   * §2.1.5.b: el promovido confirma y recién ahí se le descuenta el crédito.
+   * Mientras esperaba no tenía nada que consumir.
+   */
+  routes.post('/api/v1/bookings/:id/confirm', requirePermission({ booking: ['create'] }), (c) =>
+    service.confirmPromotion(c.req.param('id')).then((resultado) => c.json(resultado)),
   );
 
   /*

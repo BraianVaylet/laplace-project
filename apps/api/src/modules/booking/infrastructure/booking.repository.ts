@@ -46,9 +46,58 @@ export class BookingRepository extends TenantRepository<BookingDoc> {
       .exec();
   }
 
+  /** La fila de una clase, en orden. Los promovidos ya no estan: tienen lugar. */
+  async waitlistOf(sessionId: string): Promise<BookingDoc[]> {
+    return BookingModel.find(
+      this.scope({
+        sessionId,
+        status: 'waitlisted',
+        holdExpiresAt: null,
+      } as FilterQuery<BookingDoc>),
+    )
+      .sort({ waitlistPosition: 1 })
+      .setOptions(sessionOption())
+      .lean<BookingDoc[]>()
+      .exec();
+  }
+
+  /** Las esperas vivas de un socio. Las mata el congelamiento y la baja. */
+  async waitlistedOfMember(memberId: string): Promise<BookingDoc[]> {
+    return BookingModel.find(
+      this.scope({ memberId, status: 'waitlisted' } as FilterQuery<BookingDoc>),
+    )
+      .setOptions(sessionOption())
+      .lean<BookingDoc[]>()
+      .exec();
+  }
+
+  /**
+   * 🔴 Los lugares guardados que ya vencieron, de **todos los tenants**.
+   *
+   * El job no corre dentro del pedido de nadie, asi que no hay tenant en el
+   * contexto: es el uso legitimo de `skipTenantScope` que documenta el plugin.
+   * Devuelve el `tenantId` para que el servicio abra el contexto de cada centro
+   * antes de tocar nada.
+   */
+  async expiredHoldsAcrossTenants(now: Temporal.Instant, limit = 500): Promise<BookingDoc[]> {
+    return BookingModel.find({
+      deletedAt: null,
+      status: 'waitlisted',
+      holdExpiresAt: { $ne: null, $lte: toBsonDate(now) },
+    })
+      .setOptions({ skipTenantScope: true })
+      .limit(limit)
+      .lean<BookingDoc[]>()
+      .exec();
+  }
+
   /** Cuantos hay en la fila de una clase. Sirve para dar la posicion siguiente. */
   async waitlistLength(sessionId: string): Promise<number> {
-    return this.count({ sessionId, status: 'waitlisted' } as FilterQuery<BookingDoc>);
+    return this.count({
+      sessionId,
+      status: 'waitlisted',
+      holdExpiresAt: null,
+    } as FilterQuery<BookingDoc>);
   }
 
   /** Crea la reserva. El unico `{ tenantId, sessionId, memberId }` es el cinturon final. */

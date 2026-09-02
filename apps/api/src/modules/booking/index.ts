@@ -1,10 +1,12 @@
 import { Temporal } from '@js-temporal/polyfill';
 import type { EntitlementsLoader } from '../../entitlements/middleware.js';
+import type { JobDefinition } from '../../jobs/runner.js';
 import type { DomainEventBus } from '../../events/bus.js';
 import { toBsonDate } from '../../persistence/bson-date.js';
 import { runWithTenant } from '../../tenancy/context.js';
 import {
   BookingService,
+  subscribeBookingToMembers,
   type ArrearsGate,
   type CreditLedger,
   type SessionSeats,
@@ -12,6 +14,7 @@ import {
 } from './application/booking-service.js';
 import type { BookingDoc } from './infrastructure/booking.model.js';
 import { BookingRepository } from './infrastructure/booking.repository.js';
+import { bookingJobs } from './infrastructure/jobs.js';
 import { createBookingRoutes, type MemberResolver } from './infrastructure/routes.js';
 
 /**
@@ -21,6 +24,7 @@ import { createBookingRoutes, type MemberResolver } from './infrastructure/route
 export interface BookingModule {
   routes: ReturnType<typeof createBookingRoutes>;
   service: BookingService;
+  jobs: JobDefinition[];
 }
 
 export interface BookingModuleDeps {
@@ -72,9 +76,12 @@ export function createBookingModule(deps: BookingModuleDeps): BookingModule {
     return String(created['publicId']);
   };
 
+  subscribeBookingToMembers(deps.events, service);
+
   return {
     routes: createBookingRoutes(service, deps.entitlements, deps.members, seedVictim),
     service,
+    jobs: bookingJobs(service),
   };
 }
 

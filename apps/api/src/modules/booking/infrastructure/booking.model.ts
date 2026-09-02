@@ -18,6 +18,15 @@ export interface BookingDoc extends Record<string, unknown> {
   status: string;
   waitlistPosition?: number | null;
   bookedAt: Date;
+  /**
+   * Hasta cuando el promovido tiene el lugar guardado (§2.1.5.b). Presente solo
+   * mientras esta esperando que confirme: es lo que distingue al promovido del
+   * resto de la fila.
+   */
+  holdExpiresAt?: Date | null;
+  promotedAt?: Date | null;
+  /** Cuando confirmo. Con `promotedAt`, es la tasa de conversion de la fila. */
+  confirmedAt?: Date | null;
   /** §5.0: obligatorio en reservas. El unico parcial evita la doble reserva por reintento. */
   idempotencyKey?: string;
 }
@@ -31,6 +40,9 @@ const bookingSchema = new Schema<BookingDoc>(
     status: { type: String, required: true, default: 'booked' },
     waitlistPosition: { type: Number, required: false, default: null },
     bookedAt: { type: Date, required: true },
+    holdExpiresAt: { type: Date, required: false, default: null },
+    promotedAt: { type: Date, required: false, default: null },
+    confirmedAt: { type: Date, required: false, default: null },
     idempotencyKey: { type: String, required: false },
   },
   { collection: COLLECTIONS.booking },

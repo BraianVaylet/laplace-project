@@ -8,9 +8,17 @@ import type {
 } from '@laplace/schemas';
 import type { DomainEventBus } from '../../../events/bus.js';
 import { AppError } from '../../../http/errors.js';
-import { fromBsonDate } from '../../../persistence/bson-date.js';
+import { fromBsonDate, toBsonDate } from '../../../persistence/bson-date.js';
 import { withTransaction } from '../../../persistence/transaction.js';
+import { runWithTenant } from '../../../tenancy/context.js';
 import { creditEffectOf } from '../domain/credit-matrix.js';
+import {
+  assertWaitlistHasRoom,
+  canPromote,
+  holdExpiresAt,
+  nextPosition,
+  repositionAfter,
+} from '../domain/waitlist.js';
 import {
   assertWithinBookingWindow,
   bookingWindowOf,
@@ -137,14 +145,15 @@ export class BookingService {
     const policy = await this.policyOf(session);
     assertWithinBookingWindow(policy, session.startAt, this.now(), session.timeZone);
 
-    if (await this.bookings.liveOf(input.sessionId, memberId)) throw alreadyBooked(input.sessionId);
+    const previa2 = await this.bookings.liveOf(input.sessionId, memberId);
+    if (previa2) throw alreadyBooked(input.sessionId, previa2.status);
 
     // El corte de la mora, antes de tocar nada: rechazar después de haber tomado
     // el lugar obligaría a devolverlo, y por un rato la clase figuraría llena.
     await this.arrears.assertCanTransact(memberId, policy.allowDebt);
 
     const lugar = await this.sessions.claimSeat(input.sessionId);
-    if (!lugar) return this.joinWaitlist(session, memberId, idempotencyKey);
+    if (!lugar) return this.joinWaitlist(session, memberId, idempotencyKey, policy);
 
     let consumo: Consumption | undefined;
     try {
@@ -191,8 +200,11 @@ export class BookingService {
     session: ClaimedSession,
     memberId: string,
     idempotencyKey: string,
+    policy: BookingPolicy,
   ): Promise<BookingResult> {
-    const position = (await this.bookings.waitlistLength(session.publicId)) + 1;
+    const enLaFila = await this.bookings.waitlistLength(session.publicId);
+    assertWaitlistHasRoom(policy, enLaFila, session.publicId);
+    const position = nextPosition(enLaFila);
 
     const booking = await this.bookings.book({
       sessionId: session.publicId,
@@ -245,12 +257,19 @@ export class BookingService {
 
       if (booking.status === 'waitlisted') {
         // Nunca tuvo lugar ni crédito, así que tampoco puede cancelar tarde:
-        // solo sale de la fila.
+        // solo sale de la fila. Si estaba promovido, el lugar guardado vuelve.
+        const fila = await this.bookings.waitlistOf(booking.sessionId);
         const salida = await this.bookings.updateByPublicId(id, {
-          $set: { status: 'cancelled' },
+          $set: { status: 'cancelled', holdExpiresAt: null },
         });
         if (!salida) throw bookingNotFound(id);
-        await this.sessions.adjustWaitlist(booking.sessionId, -1);
+
+        if (booking.holdExpiresAt) {
+          await this.sessions.releaseSeat(booking.sessionId);
+        } else {
+          await this.sessions.adjustWaitlist(booking.sessionId, -1);
+          await this.reposition(fila, id);
+        }
 
         return salida;
       }
@@ -279,6 +298,9 @@ export class BookingService {
       if (efecto === 'refund' && booking.contractId !== undefined) {
         await this.credits.refund(booking.contractId);
       }
+
+      // El lugar que se libera es de quien está esperando desde hace rato.
+      await this.promoteNext(booking.sessionId);
 
       await this.events.emit('booking.cancelled', {
         bookingId: id,
@@ -328,7 +350,7 @@ export class BookingService {
   async releaseFuture(params: { contractId: string; memberId: string }): Promise<number> {
     const { contractId } = params;
 
-    return withTransaction(async () => {
+    const liberadas = await withTransaction(async () => {
       const futuras = await this.futureBookingsOf(contractId);
 
       for (const booking of futuras) {
@@ -340,8 +362,202 @@ export class BookingService {
         if (creditEffectOf('contract_frozen') === 'refund') await this.credits.refund(contractId);
       }
 
-      return futuras.length;
+      /*
+       * §2.1.5.b: quien congela su contrato sale también de las listas de
+       * espera. Guardarle el lugar a alguien que decidió no venir en un mes deja
+       * la fila trabada para el resto.
+       */
+      const esperas = await this.dropWaitlistOf(params.memberId);
+
+      return {
+        sesiones: futuras.map((booking) => booking.sessionId),
+        total: futuras.length + esperas,
+      };
     });
+
+    // Los lugares que se liberaron son de quien está esperando, y promover abre
+    // su propia transacción: va afuera de la que acaba de cerrar.
+    for (const sessionId of liberadas.sesiones) await this.promoteNext(sessionId);
+
+    return liberadas.total;
+  }
+
+  /**
+   * 🔴 Promueve al primero de la fila y le guarda el lugar (§2.1.5.b).
+   *
+   * El lugar se **toma de verdad** al promover, no al confirmar: si quedara
+   * libre durante la ventana, cualquiera que abriera la app se lo llevaría y el
+   * aviso que acaba de recibir el primero de la fila sería mentira.
+   *
+   * Devuelve el id de quien fue promovido, o `null` si no había a quién.
+   */
+  async promoteNext(sessionId: string): Promise<string | null> {
+    return withTransaction(async () => {
+      const session = await this.sessions.find(sessionId);
+      if (!session || session.status === 'cancelled') return null;
+
+      const policy = await this.policyOf(session);
+      const ahora = this.now();
+      // Pasado el corte, avisar es mandar a alguien a llegar tarde.
+      if (!canPromote(policy, session.startAt, ahora)) return null;
+
+      const fila = await this.bookings.waitlistOf(sessionId);
+      const primero = fila[0];
+      if (!primero) return null;
+
+      // El lugar se toma con el mismo `findOneAndUpdate` atómico de la reserva:
+      // dos cancelaciones simultáneas no pueden promover al mismo dos veces.
+      const lugar = await this.sessions.claimSeat(sessionId);
+      if (!lugar) return null;
+
+      const id = String(primero['publicId']);
+      const vence = holdExpiresAt(policy, session.startAt, ahora);
+
+      await this.bookings.updateByPublicId(id, {
+        $set: {
+          waitlistPosition: null,
+          holdExpiresAt: toBsonDate(vence),
+          promotedAt: toBsonDate(ahora),
+        },
+      });
+      await this.sessions.adjustWaitlist(sessionId, -1);
+      await this.reposition(fila, id);
+
+      await this.events.emit('booking.waitlist_promoted', {
+        bookingId: id,
+        sessionId,
+        memberId: primero.memberId,
+        confirmBefore: vence.toString(),
+      });
+
+      return id;
+    });
+  }
+
+  /**
+   * El promovido confirma y la espera se vuelve reserva. Recién acá se descuenta
+   * el crédito: mientras esperaba no tenía nada que consumir.
+   */
+  async confirmPromotion(id: string): Promise<BookingResult> {
+    return withTransaction(async () => {
+      const booking = await this.get(id);
+      if (booking.status !== 'waitlisted' || !booking.holdExpiresAt) {
+        throw alreadyClosed(id, booking.status);
+      }
+
+      const vence = fromBsonDate(booking.holdExpiresAt);
+      if (Temporal.Instant.compare(this.now(), vence) > 0) throw holdExpired(id, vence);
+
+      const session = await this.sessions.find(booking.sessionId);
+      if (!session) throw sessionNotFound(booking.sessionId);
+
+      const policy = await this.policyOf(session);
+      await this.arrears.assertCanTransact(booking.memberId, policy.allowDebt);
+
+      const consumo = await this.credits.consume(booking.memberId, {
+        category: session.categoryId,
+        startsAtLocal: localTimeOf(session.startAt, session.timeZone),
+      });
+
+      const confirmada = await this.bookings.updateByPublicId(id, {
+        $set: {
+          status: 'booked',
+          contractId: consumo.contractId,
+          holdExpiresAt: null,
+          confirmedAt: toBsonDate(this.now()),
+        },
+      });
+      if (!confirmada) throw bookingNotFound(id);
+
+      await this.events.emit('booking.created', {
+        bookingId: id,
+        sessionId: booking.sessionId,
+        memberId: booking.memberId,
+        venueId: booking.venueId,
+      });
+
+      return { booking: toResponse(confirmada), consumption: consumo };
+    });
+  }
+
+  /**
+   * 🔴 El job de cada minuto: al que no confirmó se le suelta el lugar y pasa al
+   * siguiente (§2.1.5.b).
+   *
+   * Corre sobre todos los centros y abre el contexto de cada uno antes de tocar
+   * nada, que es el uso legítimo de `skipTenantScope`.
+   */
+  async expireWaitlistHolds(): Promise<number> {
+    const vencidos = await this.bookings.expiredHoldsAcrossTenants(this.now());
+    let liberados = 0;
+
+    for (const booking of vencidos) {
+      const tenantId = String(booking['tenantId']);
+      const id = String(booking['publicId']);
+
+      liberados += await runWithTenant(
+        { tenantId, userId: 'system:expireWaitlistHolds', requestId: `job-hold-${id}` },
+        async () => {
+          await withTransaction(async () => {
+            await this.bookings.updateByPublicId(id, {
+              $set: { status: 'cancelled', holdExpiresAt: null },
+            });
+            await this.sessions.releaseSeat(booking.sessionId);
+          });
+
+          await this.events.emit('booking.waitlist_hold_expired', {
+            bookingId: id,
+            sessionId: booking.sessionId,
+            memberId: booking.memberId,
+          });
+
+          // El lugar vuelve a la fila, no a la nada: es lo que hace que la
+          // promoción sea automática de punta a punta.
+          await this.promoteNext(booking.sessionId);
+
+          return 1;
+        },
+      );
+    }
+
+    return liberados;
+  }
+
+  /** Saca al socio de todas las filas en las que esté esperando. */
+  async dropWaitlistOf(memberId: string): Promise<number> {
+    const esperas = await this.bookings.waitlistedOfMember(memberId);
+
+    for (const espera of esperas) {
+      const id = String(espera['publicId']);
+      const fila = await this.bookings.waitlistOf(espera.sessionId);
+      await this.bookings.updateByPublicId(id, {
+        $set: { status: 'cancelled', holdExpiresAt: null },
+      });
+
+      if (espera.holdExpiresAt) {
+        // Tenía el lugar guardado: vuelve a la clase, no a la fila.
+        await this.sessions.releaseSeat(espera.sessionId);
+      } else {
+        await this.sessions.adjustWaitlist(espera.sessionId, -1);
+        await this.reposition(fila, id);
+      }
+    }
+
+    return esperas.length;
+  }
+
+  /** Reescribe solo las posiciones que se movieron. */
+  private async reposition(queue: readonly BookingDoc[], leavingId: string): Promise<void> {
+    const entradas = queue.map((entry) => ({
+      publicId: String(entry['publicId']),
+      waitlistPosition: Number(entry.waitlistPosition ?? 0),
+    }));
+
+    for (const entry of repositionAfter(entradas, leavingId)) {
+      await this.bookings.updateByPublicId(entry.publicId, {
+        $set: { waitlistPosition: entry.waitlistPosition },
+      });
+    }
   }
 
   /**
@@ -435,6 +651,17 @@ function lateCancelNeedsConfirmation(id: string, policy: BookingPolicy): AppErro
   });
 }
 
+/** §2.1.5.b: el lugar guardado tiene ventana, y vencida ya no vale. */
+function holdExpired(bookingId: string, vencio: Temporal.Instant): AppError {
+  return new AppError({
+    code: 'LP-BOOK-422-009',
+    status: 422,
+    message: 'Se venció el plazo para confirmar tu lugar.',
+    action: 'Si todavía hay lugar, podés volver a reservar.',
+    meta: { bookingId, expiredAt: vencio.toString() },
+  });
+}
+
 const LIVE = ['booked', 'waitlisted', 'checked_in'];
 const isLive = (status: string) => LIVE.includes(status);
 
@@ -476,11 +703,17 @@ function bookingNotFound(bookingId: string): AppError {
   });
 }
 
-function alreadyBooked(sessionId: string): AppError {
+function alreadyBooked(sessionId: string, status = 'booked'): AppError {
+  // Estar en la fila y tener lugar no son lo mismo, y al socio le importa la
+  // diferencia: uno ya tiene la clase, el otro está esperando.
+  const enLaFila = status === 'waitlisted';
+
   return new AppError({
-    code: 'LP-BOOK-409-001',
+    code: enLaFila ? 'LP-BOOK-409-007' : 'LP-BOOK-409-001',
     status: 409,
-    message: 'Ya tenés una reserva en esta clase.',
+    message: enLaFila
+      ? 'Ya estás en la lista de espera de esta clase.'
+      : 'Ya tenés una reserva en esta clase.',
     meta: { sessionId },
   });
 }
@@ -491,5 +724,21 @@ function alreadyClosed(bookingId: string, status: string): AppError {
     status: 409,
     message: 'Esa reserva ya estaba cerrada.',
     meta: { bookingId, status },
+  });
+}
+
+/**
+ * Se suscribe a la baja del socio (§2.1.5.b): quien se da de baja o queda
+ * archivado sale de todas las listas de espera.
+ *
+ * Va por evento y no por llamada directa porque Members no puede tocar el
+ * modelo de Booking (ADR-003). El bus aísla los fallos: si esto falla, la baja
+ * queda hecha igual y el error se loguea — al revés sería peor.
+ */
+export function subscribeBookingToMembers(events: DomainEventBus, service: BookingService): void {
+  events.on('member.status_changed', async ({ memberId, to }) => {
+    if (to === 'active') return;
+
+    await service.dropWaitlistOf(memberId);
   });
 }

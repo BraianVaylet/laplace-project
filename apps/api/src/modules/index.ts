@@ -197,7 +197,7 @@ export function createModules(deps: ModuleDeps) {
   routes.route('/', booking.routes);
 
   /** Todo lo que el runner tiene que programar (§10). */
-  const jobs = [...contracts.jobs, ...billing.jobs, ...schedule.jobs];
+  const jobs = [...contracts.jobs, ...billing.jobs, ...schedule.jobs, ...booking.jobs];
 
   return {
     routes,

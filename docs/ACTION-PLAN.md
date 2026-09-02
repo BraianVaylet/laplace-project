@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     14 |
+| Fase 1 — MVP vendible   |       32 |          186 |     15 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1122,7 +1122,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   Y el `status` que dejaba un cargo después de un reembolso tenía una rama muerta: la imputación
   nunca sobrepaga un cargo, así que sacarle algo siempre lo deja debiendo.
 
-## [ ] F1-16 · Waitlist con promoción automática
+## [x] F1-16 · Waitlist con promoción automática
 
 - **module:** booking
 - **description:** La lista de espera de §2.1.5.b: FIFO, con ventana de confirmación y promoción
@@ -1154,6 +1154,28 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   `LP-BOOK-422-009` (confirmación vencida)
 - **data-model-impact:** `Booking.status = waitlisted`, `Booking.waitlistPosition`,
   `Booking.holdExpiresAt`. `ClassSession.waitlistCount`.
+- **decisiones de diseño:**
+  - **El lugar se toma al promover, no al confirmar.** Si quedara libre durante la ventana,
+    cualquiera que abriera la app se lo llevaría y el aviso que acabás de recibir sería mentira.
+    Se toma con el mismo `findOneAndUpdate` atómico de la reserva, que es lo que impide que dos
+    cancelaciones simultáneas promuevan a la misma persona dos veces.
+  - El promovido sigue en `waitlisted` y lo que lo distingue es tener `holdExpiresAt`. No hace
+    falta un estado nuevo para algo que dura quince minutos, y agregarlo obligaría a tocar la
+    máquina de estados de §14 y todas sus transiciones.
+  - **El crédito se descuenta al confirmar**, no al promover: mientras esperaba no tenía nada que
+    consumir, y cobrarle por un lugar que todavía no aceptó sería cobrarle por un aviso.
+  - La ventana de confirmación **nunca se estira más allá del inicio de la clase**. Quince minutos
+    otorgados a cinco del comienzo dejarían el lugar bloqueado después de que la clase arrancó.
+  - El job corre **cada minuto** porque la ventana se mide en minutos: cada cinco, el que confirmó
+    a horario podría encontrarse con que ya se lo pasaron al siguiente.
+  - Salir de la fila reescribe **solo las posiciones que se movieron**. Reescribir la fila entera
+    en cada baja son N escrituras para arreglar N−k, y en una clase con veinte esperando eso pasa
+    varias veces por hora.
+  - La baja del socio llega **por evento** (`member.status_changed`): Members no puede tocar el
+    modelo de Booking (ADR-003), y el bus aísla el fallo — si la limpieza falla, la baja queda
+    hecha igual.
+  - `promotedAt` y `confirmedAt` quedan guardados: son los dos números que necesita F1-23 para la
+    tasa de conversión de la fila, que es lo que dice si falta oferta en ese horario (§2.1.5.b).
 
 ## [ ] F1-17 · No-show y política de penalización
 

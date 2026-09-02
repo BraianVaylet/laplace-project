@@ -193,6 +193,22 @@ async function socioCon(centro: Centro, nombre: string, credits = 8) {
   return socio.publicId;
 }
 
+const correrJob = async (name: string) => {
+  const job = modules.jobs.find((candidate) => candidate.name === name);
+  if (!job) throw new Error(`no existe el job ${name}`);
+
+  await job.handler();
+};
+
+/** El contrato activo de un socio, para mirarle los créditos. */
+async function contratoDe(memberId: string): Promise<string> {
+  const doc = await mongoose.connection.db
+    ?.collection('contracts')
+    .findOne<{ publicId: string }>({ memberId, status: 'active' });
+
+  return String(doc?.publicId);
+}
+
 let clave = 0;
 const nuevaClave = () => `bkg-${++clave}-${Date.now()}`;
 
@@ -502,7 +518,12 @@ describe('reserva', () => {
 
 describe('🔴 concurrencia: el último lugar (§Testing.2)', () => {
   it('50 reservas paralelas sobre 1 cupo: una entra, 49 a la lista de espera', async () => {
-    const centro = await centroListo('concurrencia', { capacity: 1 });
+    // La fila entra entera a propósito: lo que se prueba acá es el cupo, no el
+    // tope de la lista de espera, que tiene su propio test.
+    const centro = await centroListo('concurrencia', {
+      capacity: 1,
+      bookingPolicy: { waitlistMaxSize: 60 },
+    });
     const socios = await Promise.all(
       Array.from({ length: 50 }, (_, i) => socioCon(centro, `Socio${i}`, 8)),
     );
@@ -1058,6 +1079,231 @@ describe('late cancel (§2.1.9)', () => {
   });
 });
 
+describe('lista de espera: promoción automática (§2.1.5.b)', () => {
+  /** Una clase de un solo lugar, ocupado, con dos personas esperando en orden. */
+  async function filaDeDos(nombre: string, policy: Record<string, unknown> = {}) {
+    const centro = await centroListo(nombre, { capacity: 1, bookingPolicy: policy });
+    const conLugar = await socioCon(centro, 'ConLugar', 8);
+    const primero = await socioCon(centro, 'Primero', 8);
+    const segundo = await socioCon(centro, 'Segundo', 8);
+
+    const reserva = await reservarOk(centro, conLugar);
+    const espera1 = await reservarOk(centro, primero);
+    const espera2 = await reservarOk(centro, segundo);
+
+    return { centro, conLugar, primero, segundo, reserva, espera1, espera2 };
+  }
+
+  const reservaEnBase = async (bookingId: string) =>
+    mongoose.connection.db
+      ?.collection('bookings')
+      .findOne<{ status: string; waitlistPosition: number | null; holdExpiresAt: Date | null }>({
+        publicId: bookingId,
+      });
+
+  const cancelar = (centro: Centro, bookingId: string, body: unknown = {}) =>
+    app.request(`/api/v1/bookings/${bookingId}/cancel`, req(centro.cookie, 'POST', body));
+
+  it('la fila es FIFO: las posiciones salen en orden de llegada', async () => {
+    const { espera1, espera2 } = await filaDeDos('fila-fifo');
+
+    expect(espera1.booking.waitlistPosition).toBe(1);
+    expect(espera2.booking.waitlistPosition).toBe(2);
+  });
+
+  it('una cancelación promueve al primero y le guarda el lugar', async () => {
+    const { centro, reserva, espera1 } = await filaDeDos('fila-promueve');
+
+    await cancelar(centro, reserva.booking.publicId);
+    const promovido = await reservaEnBase(espera1.booking.publicId);
+
+    // Sigue en `waitlisted` porque todavía no confirmó, pero el lugar ya es suyo.
+    expect(promovido?.status).toBe('waitlisted');
+    expect(promovido?.holdExpiresAt).not.toBeNull();
+    expect((await claseEnBase(centro.sessionId))?.bookedCount).toBe(1);
+  });
+
+  it('el segundo de la fila sube a la posición 1', async () => {
+    const { centro, reserva, espera2 } = await filaDeDos('fila-corrimiento');
+
+    await cancelar(centro, reserva.booking.publicId);
+
+    expect((await reservaEnBase(espera2.booking.publicId))?.waitlistPosition).toBe(1);
+  });
+
+  it('confirmar descuenta el crédito, igual que una reserva normal', async () => {
+    const { centro, reserva, espera1, primero } = await filaDeDos('fila-confirma');
+    const contrato = await contratoDe(primero);
+    await cancelar(centro, reserva.booking.publicId);
+
+    const res = await app.request(
+      `/api/v1/bookings/${espera1.booking.publicId}/confirm`,
+      req(centro.cookie, 'POST', {}),
+    );
+
+    expect(res.status).toBe(200);
+    const cuerpo = (await res.json()) as BookingResult;
+    expect(cuerpo.booking.status).toBe('booked');
+    // Mientras esperaba no tenía nada que consumir: el crédito sale ahora.
+    expect((await contratoEnBase(contrato))?.creditsUsed).toBe(1);
+  });
+
+  it('vencida la ventana, ya no se confirma', async () => {
+    const { centro, reserva, espera1 } = await filaDeDos('fila-vencida');
+    await cancelar(centro, reserva.booking.publicId);
+
+    // La ventana por default son 15 minutos.
+    ahora = ahora.add({ minutes: 16 });
+    const res = await app.request(
+      `/api/v1/bookings/${espera1.booking.publicId}/confirm`,
+      req(centro.cookie, 'POST', {}),
+    );
+
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-BOOK-422-009');
+  });
+
+  it('🔴 el que no confirma pierde el lugar y pasa al siguiente', async () => {
+    const { centro, reserva, espera1, espera2 } = await filaDeDos('fila-expira');
+    await cancelar(centro, reserva.booking.publicId);
+
+    ahora = ahora.add({ minutes: 16 });
+    await correrJob('expireWaitlistHolds');
+
+    // Juan no contestó: pierde el lugar y lo hereda Lucía, sin que nadie del
+    // staff toque nada (§2.1.5.b).
+    expect((await reservaEnBase(espera1.booking.publicId))?.status).toBe('cancelled');
+    const segundo = await reservaEnBase(espera2.booking.publicId);
+    expect(segundo?.status).toBe('waitlisted');
+    expect(segundo?.holdExpiresAt).not.toBeNull();
+    expect((await claseEnBase(centro.sessionId))?.bookedCount).toBe(1);
+  });
+
+  it('avisa por evento a quién promovió y hasta cuándo tiene', async () => {
+    const vistos: Array<{ memberId: string; confirmBefore: string }> = [];
+    bus.on('booking.waitlist_promoted', (payload) => {
+      vistos.push({ memberId: payload.memberId, confirmBefore: payload.confirmBefore });
+    });
+    const { centro, reserva, primero } = await filaDeDos('fila-evento');
+
+    await cancelar(centro, reserva.booking.publicId);
+
+    // De este evento cuelga el aviso de F1-22: sin él, el promovido nunca se
+    // entera de que tiene 15 minutos.
+    expect(vistos).toHaveLength(1);
+    expect(vistos[0]?.memberId).toBe(primero);
+    expect(vistos[0]?.confirmBefore).toBe(ahora.add({ minutes: 15 }).toString());
+  });
+
+  it('pasado el corte de promoción, el lugar queda libre y no se avisa a nadie', async () => {
+    const { centro, reserva, espera1 } = await filaDeDos('fila-corte');
+
+    // A 20 minutos del inicio, con el corte en 30: avisar ahora es mandar a
+    // alguien a llegar tarde.
+    ahora = Temporal.Instant.from('2026-03-03T09:40:00Z');
+    await cancelar(centro, reserva.booking.publicId, { acceptsLateCancel: true });
+
+    expect((await reservaEnBase(espera1.booking.publicId))?.holdExpiresAt ?? null).toBeNull();
+    expect((await claseEnBase(centro.sessionId))?.bookedCount).toBe(0);
+  });
+
+  it('🔴 dos cancelaciones simultáneas no promueven a la misma persona dos veces', async () => {
+    const centro = await centroListo('fila-concurrente', {
+      capacity: 2,
+      bookingPolicy: { waitlistMaxSize: 10 },
+    });
+    const conLugar1 = await socioCon(centro, 'Lugar1', 8);
+    const conLugar2 = await socioCon(centro, 'Lugar2', 8);
+    const primero = await socioCon(centro, 'Espera1', 8);
+    const segundo = await socioCon(centro, 'Espera2', 8);
+    const uno = await reservarOk(centro, conLugar1);
+    const dos = await reservarOk(centro, conLugar2);
+    const espera1 = await reservarOk(centro, primero);
+    const espera2 = await reservarOk(centro, segundo);
+
+    await Promise.all([
+      cancelar(centro, uno.booking.publicId),
+      cancelar(centro, dos.booking.publicId),
+    ]);
+
+    // Cada lugar liberado tiene que ir a una persona distinta: el `claimSeat`
+    // atómico es lo que impide que las dos cancelaciones le den el suyo al
+    // primero de la fila.
+    const promovidos = await mongoose.connection.db
+      ?.collection('bookings')
+      .find({ publicId: { $in: [espera1.booking.publicId, espera2.booking.publicId] } })
+      .toArray();
+    const conHold = promovidos?.filter((b) => b['holdExpiresAt'] !== null);
+
+    expect(conHold).toHaveLength(2);
+    expect((await claseEnBase(centro.sessionId))?.bookedCount).toBe(2);
+  });
+
+  it('el job corre cada minuto: la ventana se mide en minutos', () => {
+    const job = modules.jobs.find((candidate) => candidate.name === 'expireWaitlistHolds');
+
+    // Con un job cada cinco minutos, el que confirmó a horario podría
+    // encontrarse con que ya se lo pasaron al siguiente.
+    expect(job?.cron).toBe('* * * * *');
+  });
+
+  it('la lista tiene tope: llena, responde LP-BOOK-422-008', async () => {
+    const centro = await centroListo('fila-llena', {
+      capacity: 1,
+      bookingPolicy: { waitlistMaxSize: 1 },
+    });
+    const conLugar = await socioCon(centro, 'Lugar', 8);
+    const enFila = await socioCon(centro, 'Fila', 8);
+    const tarde = await socioCon(centro, 'Tarde', 8);
+    await reservarOk(centro, conLugar);
+    await reservarOk(centro, enFila);
+
+    const res = await reservar(centro, tarde);
+
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-BOOK-422-008');
+  });
+
+  it('anotarse dos veces en la misma fila responde LP-BOOK-409-007', async () => {
+    const { centro, primero } = await filaDeDos('fila-doble');
+
+    const res = await reservar(centro, primero);
+
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-BOOK-409-007');
+  });
+
+  it('salir de la fila corrige las posiciones de los que quedan', async () => {
+    const { centro, espera1, espera2 } = await filaDeDos('fila-baja');
+
+    await cancelar(centro, espera1.booking.publicId);
+
+    expect((await reservaEnBase(espera2.booking.publicId))?.waitlistPosition).toBe(1);
+    expect((await claseEnBase(centro.sessionId))?.waitlistCount).toBe(1);
+  });
+
+  it('la baja del socio también lo saca de las filas', async () => {
+    const { centro, primero, espera1 } = await filaDeDos('fila-baja-socio');
+
+    await post(centro.cookie, `/api/v1/members/${primero}/archive`, {});
+
+    // Va por evento: Members no puede tocar el modelo de Booking (ADR-003).
+    expect((await reservaEnBase(espera1.booking.publicId))?.status).toBe('cancelled');
+    expect((await claseEnBase(centro.sessionId))?.waitlistCount).toBe(1);
+  });
+
+  it('congelar el contrato saca al socio de todas las filas', async () => {
+    const { centro, primero, espera1 } = await filaDeDos('fila-freeze');
+    const contrato = await contratoDe(primero);
+
+    await post(centro.cookie, `/api/v1/contracts/${contrato}/freeze`, { days: 7 });
+
+    // Guardarle el lugar a alguien que decidió no venir en un mes deja la fila
+    // trabada para el resto (§2.1.5.b).
+    expect((await reservaEnBase(espera1.booking.publicId))?.status).toBe('cancelled');
+  });
+});
+
 describe('aislamiento de tenant', () => {
   it('el atacante no ve ni cancela la reserva del otro centro', async () => {
     const victima = await centroListo('bkg-victima');
@@ -1098,14 +1344,14 @@ describe('aislamiento de tenant', () => {
 });
 
 describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
-  it('las cinco rutas traen su fixture de ataque', () => {
+  it('las seis rutas traen su fixture de ataque', () => {
     const rutas = allRegisteredRoutes().filter(
       (route) =>
         route.path.startsWith('/api/v1/bookings') ||
         route.path.startsWith('/api/v1/booking-policies'),
     );
 
-    expect(rutas).toHaveLength(5);
+    expect(rutas).toHaveLength(6);
     for (const route of rutas) {
       expect(route.tenantScoped, `${route.method} ${route.path}`).toBe(true);
       expect(route.isolationFixture, `${route.method} ${route.path}`).toBeDefined();

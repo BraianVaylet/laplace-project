@@ -95,6 +95,15 @@ export interface DomainEvents {
     memberId: string;
     confirmBefore: string;
   };
+  /**
+   * El promovido no confirmo a tiempo y perdio el lugar (§2.1.5.b). Lo escucha
+   * Notifications para avisarle, y F1-23 para la tasa de conversion de la fila.
+   */
+  'booking.waitlist_hold_expired': {
+    bookingId: string;
+    sessionId: string;
+    memberId: string;
+  };
   'attendance.checked_in': {
     bookingId: string;
     memberId: string;

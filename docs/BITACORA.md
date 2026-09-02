@@ -23,6 +23,37 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-02 — F1-16: lista de espera con promoción automática
+
+- **Módulo:** `booking`
+- **Tipo:** feature
+- **Commit/PR:** pendiente (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/bQrvQ9gC (F1-16) — movida a **Completadas**
+- **Qué cambió:** la fila es FIFO de verdad y se mueve sola. Cuando alguien cancela, el primero de
+  la lista recibe el lugar guardado y quince minutos para confirmar; si no contesta, el job de cada
+  minuto se lo pasa al siguiente. Congelar el contrato o dar de baja al socio lo saca de todas las
+  listas, y la fila tiene tope.
+- **Por qué:** §2.1.5.b pide que la promoción sea automática, sin que el staff intervenga. Una
+  lista de espera que hay que atender a mano es una lista que nadie atiende.
+- **Impacto:** `Booking` suma `holdExpiresAt`, `promotedAt` y `confirmedAt` · ruta nueva
+  `POST /api/v1/bookings/:id/confirm` · job `expireWaitlistHolds` cada minuto · evento nuevo
+  `booking.waitlist_hold_expired` · sin migración.
+- **Pendiente:** la notificación al promovido es F1-22, que escucha `booking.waitlist_promoted`.
+  La tasa de conversión de la fila la calcula F1-23 con `promotedAt` y `confirmedAt`.
+
+### Por qué el lugar se toma al promover y no al confirmar
+
+Si el lugar quedara libre durante los quince minutos de la ventana, cualquiera que abriera la app
+se lo llevaría, y el aviso que el primero de la fila acaba de recibir sería mentira. Se toma con el
+mismo `findOneAndUpdate` atómico de la reserva, así que dos cancelaciones simultáneas promueven a
+dos personas distintas — hay un test que lo verifica.
+
+### Con esto, el corazón del producto está entero
+
+Alta de centro → sala → producto → socio → contrato → clase → reserva → cupo lleno → fila →
+promoción → confirmación → cancelación con su crédito. Es el corte de revisión que marcaba el plan
+al terminar F1-16.
+
 ## 2026-09-02 — F1-15: ventanas de tiempo y devolución de crédito
 
 - **Módulo:** `booking`
