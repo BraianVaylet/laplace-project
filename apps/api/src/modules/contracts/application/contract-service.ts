@@ -1,0 +1,343 @@
+import { Temporal } from '@js-temporal/polyfill';
+import {
+  consumesCredits,
+  type AdjustCreditsInput,
+  type Consumption,
+  type ContractStatus,
+  type ProductType,
+  type SellContractInput,
+} from '@laplace/schemas';
+import type { AuditWriter } from '../../../audit/audit-log.js';
+import type { DomainEventBus } from '../../../events/bus.js';
+import { AppError } from '../../../http/errors.js';
+import { fromBsonDate, toBsonDate } from '../../../persistence/bson-date.js';
+import type { Page } from '../../../tenancy/repository.js';
+import {
+  assertUsable,
+  canTransition,
+  pickContract,
+  type ConsumableContract,
+  type UsageContext,
+} from '../domain/contract.js';
+import type { ContractDoc } from '../infrastructure/contract.model.js';
+import type { ContractRepository } from '../infrastructure/contract.repository.js';
+
+/**
+ * Lo que Contracts necesita de Products: verificar que se pueda vender y anotar
+ * la venta. ADR-003: se habla por interfaz, no importando su modelo.
+ */
+export interface ProductCatalog {
+  /** Valida cupo, estado y la regla del trial único. Devuelve el producto. */
+  assertPurchasable(productId: string, memberId: string): Promise<SoldProduct>;
+  /** Suma una venta al `soldCount`, que es lo que hace aplicar `maxSales`. */
+  registerSale(productId: string): Promise<void>;
+  releaseSale(productId: string): Promise<void>;
+}
+
+export interface SoldProduct {
+  publicId: string;
+  name: string;
+  type: ProductType;
+  priceCents: number;
+  currency: string;
+  credits?: number | undefined;
+  durationDays?: number | undefined;
+  weeklyLimit?: number | undefined;
+  monthlyLimit?: number | undefined;
+  allowedCategories: string[];
+  allowedTimeRanges: Array<{ from: string; to: string }>;
+  autoRenew: boolean;
+}
+
+/** La zona horaria del Venue. El vencimiento se calcula en el calendario del centro (§2.1.2). */
+export interface VenueClock {
+  timeZoneOf(venueId: string): Promise<string>;
+}
+
+export interface ContractServiceDeps {
+  contracts: ContractRepository;
+  products: ProductCatalog;
+  venues: VenueClock;
+  events: DomainEventBus;
+  audit: AuditWriter;
+  now?: (() => Temporal.Instant) | undefined;
+}
+
+export class ContractService {
+  private readonly contracts: ContractRepository;
+  private readonly products: ProductCatalog;
+  private readonly venues: VenueClock;
+  private readonly events: DomainEventBus;
+  private readonly audit: AuditWriter;
+  private readonly now: () => Temporal.Instant;
+
+  constructor(deps: ContractServiceDeps) {
+    this.contracts = deps.contracts;
+    this.products = deps.products;
+    this.venues = deps.venues;
+    this.events = deps.events;
+    this.audit = deps.audit;
+    this.now = deps.now ?? (() => Temporal.Now.instant());
+  }
+
+  /**
+   * Vende. El contrato se queda con una **copia** de las condiciones del
+   * producto: el centro puede editarlo mañana, y lo vendido tiene que seguir
+   * valiendo por lo que se vendió.
+   */
+  async sell(input: SellContractInput): Promise<ContractDoc> {
+    const product = await this.products.assertPurchasable(input.productId, input.memberId);
+    const timeZone = await this.venues.timeZoneOf(input.venueId);
+
+    const startsAt =
+      input.startsAt === undefined ? this.now() : Temporal.Instant.from(input.startsAt);
+
+    /*
+     * El vencimiento se calcula en el calendario del centro, no sumando 30×24
+     * horas: un pack de 30 días vendido el 1 de marzo vence el 31 de marzo a la
+     * misma hora local, aunque en el medio haya un cambio de hora (§2.1.2).
+     */
+    const endsAt =
+      product.durationDays === undefined
+        ? null
+        : startsAt.toZonedDateTimeISO(timeZone).add({ days: product.durationDays }).toInstant();
+
+    await this.products.registerSale(product.publicId);
+
+    try {
+      const contract = await this.contracts.create({
+        memberId: input.memberId,
+        productId: product.publicId,
+        venueId: input.venueId,
+        productType: product.type,
+        productName: product.name,
+        priceSnapshotCents: input.priceCents ?? product.priceCents,
+        currency: product.currency,
+        creditsTotal: consumesCredits(product.type) ? (product.credits ?? 0) : 0,
+        creditsUsed: 0,
+        allowedCategories: product.allowedCategories,
+        allowedTimeRanges: product.allowedTimeRanges,
+        ...(product.weeklyLimit === undefined ? {} : { weeklyLimit: product.weeklyLimit }),
+        ...(product.monthlyLimit === undefined ? {} : { monthlyLimit: product.monthlyLimit }),
+        startsAt: toBsonDate(startsAt),
+        endsAt: endsAt === null ? null : toBsonDate(endsAt),
+        /*
+         * Nace `pending_payment` salvo que sea gratis. La clase de prueba no
+         * tiene nada que cobrar, y dejarla esperando un pago de $0 sería una
+         * traba inventada en la puerta de entrada del socio.
+         */
+        status: (input.priceCents ?? product.priceCents) === 0 ? 'active' : 'pending_payment',
+        autoRenew: product.autoRenew,
+      } as Partial<ContractDoc>);
+
+      await this.events.emit('contract.sold', {
+        contractId: String(contract['publicId']),
+        memberId: input.memberId,
+        productId: product.publicId,
+        priceCents: contract.priceSnapshotCents,
+      });
+
+      return contract;
+    } catch (error) {
+      // La venta ya quedó anotada en el producto: se devuelve para que un fallo
+      // no le queme un lugar del cupo al centro.
+      await this.products.releaseSale(product.publicId).catch(() => undefined);
+      throw error;
+    }
+  }
+
+  async list(
+    filters: { memberId?: string | undefined; status?: ContractStatus | undefined },
+    cursor?: string,
+    limit?: number,
+  ): Promise<Page<ContractDoc>> {
+    const filter: Record<string, unknown> = {};
+    if (filters.memberId !== undefined) filter['memberId'] = filters.memberId;
+    if (filters.status !== undefined) filter['status'] = filters.status;
+
+    return this.contracts.list(filter, {
+      sortField: 'createdAt',
+      direction: 'desc',
+      ...(cursor ? { cursor } : {}),
+      ...(limit ? { limit } : {}),
+    });
+  }
+
+  async getByPublicId(id: string): Promise<ContractDoc> {
+    const contract = await this.contracts.findByPublicId(id);
+    if (!contract) throw notFound(id);
+
+    return contract;
+  }
+
+  /** §14: el estado cambia solo por transición explícita y validada. */
+  async changeStatus(id: string, to: ContractStatus): Promise<ContractDoc> {
+    const contract = await this.getByPublicId(id);
+    const from = contract.status as ContractStatus;
+
+    if (!canTransition(from, to)) {
+      throw new AppError({
+        code: 'LP-CTRT-422-004',
+        status: 422,
+        message: `No se puede pasar de ${from} a ${to}.`,
+        meta: { contractId: id, from, to },
+      });
+    }
+
+    const updated = await this.contracts.updateByPublicId(id, { $set: { status: to } });
+    if (!updated) throw notFound(id);
+
+    await this.events.emit('contract.status_changed', { contractId: id, from, to });
+
+    return updated;
+  }
+
+  /**
+   * 🔴 Consume un crédito para una clase (ADR-001: se descuenta **al reservar**).
+   *
+   * Elige el contrato según §2.1.9 y lo descuenta con una sola operación
+   * atómica. Si el elegido pierde la carrera por su último crédito, intenta con
+   * el siguiente candidato: descartar la reserva porque justo se agotó el pack
+   * que el sistema eligió, teniendo otro disponible, sería un error nuestro.
+   */
+  async consume(memberId: string, context: UsageContext = {}): Promise<Consumption> {
+    const now = this.now();
+    const candidates = pickContract(
+      (await this.contracts.activeOf(memberId)).map(toConsumable),
+      now,
+      context,
+    );
+
+    if (candidates.length === 0) throw this.explainWhyNot(memberId, now, context);
+
+    for (const [index, candidate] of candidates.entries()) {
+      const taken = consumesCredits(candidate.productType)
+        ? await this.contracts.consumeCredit(candidate.publicId, now)
+        : await this.contracts.touchMembership(candidate.publicId, now);
+
+      if (!taken) continue;
+
+      return {
+        contractId: candidate.publicId,
+        productName: candidate.productName,
+        creditsLeft: consumesCredits(candidate.productType)
+          ? taken.creditsTotal - taken.creditsUsed
+          : null,
+        reason: reasonFor(candidate, index),
+      };
+    }
+
+    // Todos los candidatos se agotaron mientras se intentaba. Es raro, pero el
+    // socio tiene que ver el mismo error que si no hubiera tenido ninguno.
+    throw new AppError({
+      code: 'LP-CTRT-402-001',
+      status: 402,
+      message: 'No te quedan clases en tu pack.',
+      action: 'Comprá uno nuevo desde la app o en el mostrador.',
+      meta: { memberId },
+    });
+  }
+
+  /** Devuelve un crédito. Lo usa la cancelación dentro de plazo (ADR-001). */
+  async refund(contractId: string): Promise<ContractDoc> {
+    const refunded = await this.contracts.refundCredit(contractId);
+    if (!refunded) throw notFound(contractId);
+
+    return refunded;
+  }
+
+  /**
+   * Ajuste manual del staff. **Motivo obligatorio y registro en `AuditLog`**
+   * (§2.1.9): un ajuste sin motivo es indistinguible de un error, y seis meses
+   * después nadie puede explicar por qué el pack tenía 7 clases.
+   */
+  async adjustCredits(id: string, input: AdjustCreditsInput): Promise<ContractDoc> {
+    const contract = await this.getByPublicId(id);
+
+    const total = contract.creditsTotal + input.delta;
+    if (total < contract.creditsUsed) {
+      throw new AppError({
+        code: 'LP-CTRT-422-004',
+        status: 422,
+        message: `No se puede bajar a ${total} créditos: ya se usaron ${contract.creditsUsed}.`,
+        meta: { contractId: id, creditsUsed: contract.creditsUsed, requested: total },
+      });
+    }
+
+    const updated = await this.contracts.updateByPublicId(id, {
+      $set: { creditsTotal: total },
+    });
+    if (!updated) throw notFound(id);
+
+    await this.audit.record({
+      action: 'contract.credits_adjusted',
+      targetType: 'contract',
+      targetId: id,
+      reason: input.reason,
+      before: { creditsTotal: contract.creditsTotal },
+      after: { creditsTotal: total },
+    });
+
+    return updated;
+  }
+
+  /** ¿Ya usó su clase de prueba? Es el puerto que consume Products (F1-07). */
+  async hasUsedTrial(memberId: string): Promise<boolean> {
+    return this.contracts.hasBought(memberId, 'trial');
+  }
+
+  /**
+   * Por qué no se pudo consumir. Se vuelve a evaluar el contrato más cercano a
+   * servir para dar el error concreto: "no tenés pack" y "tu pack no incluye
+   * esta actividad" mandan al socio a lugares distintos.
+   */
+  private explainWhyNot(memberId: string, now: Temporal.Instant, context: UsageContext): AppError {
+    return new AppError({
+      code: 'LP-CTRT-402-001',
+      status: 402,
+      message: 'No tenés un pack activo para esta clase.',
+      action: 'Comprá uno desde la app o en el mostrador.',
+      meta: { memberId, context, at: now.toString() },
+    });
+  }
+}
+
+/** Explicación en castellano de por qué se eligió este contrato (§2.1.9). */
+function reasonFor(contract: ConsumableContract, index: number): string {
+  if (index > 0) return `Se usó "${contract.productName}" porque los anteriores se agotaron.`;
+  if (contract.endsAt === null) return `Se usó tu "${contract.productName}", que no vence.`;
+
+  return `Se usó "${contract.productName}", que es el que vence primero.`;
+}
+
+/** El documento de Mongo a la forma que entiende el dominio. */
+function toConsumable(doc: ContractDoc): ConsumableContract {
+  return {
+    publicId: String(doc['publicId']),
+    productName: doc.productName,
+    productType: doc.productType as ProductType,
+    status: doc.status as ContractStatus,
+    creditsTotal: doc.creditsTotal,
+    creditsUsed: doc.creditsUsed,
+    allowedCategories: doc.allowedCategories,
+    allowedTimeRanges: doc.allowedTimeRanges,
+    startsAt: fromBsonDate(doc.startsAt),
+    endsAt: doc.endsAt ? fromBsonDate(doc.endsAt) : null,
+    createdAt:
+      doc['createdAt'] instanceof Date
+        ? fromBsonDate(doc['createdAt'])
+        : fromBsonDate(doc.startsAt),
+  };
+}
+
+/** Se exporta para que Booking (F1-14) pueda explicar el mismo error. */
+export { assertUsable };
+
+function notFound(contractId: string): AppError {
+  return new AppError({
+    code: 'LP-CTRT-404-005',
+    status: 404,
+    message: 'No encontramos ese pack.',
+    meta: { contractId },
+  });
+}

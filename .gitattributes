@@ -1,0 +1,15 @@
+# Final de linea LF en todo el repo, tambien en Windows.
+# Prettier usa endOfLine: "lf": sin esto, core.autocrlf convierte al hacer
+# checkout y `pnpm format:check` falla en local aunque pase en CI.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.pdf binary
+
+pnpm-lock.yaml linguist-generated=true -diff

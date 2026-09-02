@@ -1,0 +1,14 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+
+allowBuilds:
+  esbuild: true
+  mongodb-memory-server: true
+  # MSW instala el service worker para mockear en el navegador (spec §6).
+  msw: true
+
+onlyBuiltDependencies:
+  - esbuild
+  - mongodb-memory-server
+  - msw

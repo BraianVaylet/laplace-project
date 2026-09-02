@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+
+jobs:
+  verify:
+    name: lint / typecheck / test / build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Format check
+        run: pnpm format:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      # El build va ANTES de los tests a proposito: los tests de la landing
+      # verifican el HTML prerenderizado, que solo existe despues de buildear.
+      # Con el orden al reves se saltean en silencio y el SSG queda sin cubrir.
+      - name: Build
+        run: pnpm build
+
+      # Corre los tests Y aplica el gate de cobertura por criticidad (§6):
+      # 95% en permisos y plata, 85/70/50 en el resto, >=80 global.
+      - name: Test + cobertura
+        run: pnpm test:coverage
+
+      - name: Publicar reporte de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: '**/coverage/lcov.info'
+          if-no-files-found: ignore
+          retention-days: 14
+
+  audit:
+    name: dependencias
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm audit --audit-level=high
+
+  # Despliegue a staging: solo desde `main` y solo si el CI paso entero.
+  # Requiere el secreto RAILWAY_TOKEN en el repositorio.
+  deploy-staging:
+    name: deploy a staging
+    needs: [verify, audit]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # Las migraciones van ANTES del deploy y desde un solo lugar: si las
+      # corriera el arranque del proceso, dos instancias las correrian a la vez.
+      - name: Migraciones
+        run: pnpm exec migrate-mongo up
+        env:
+          MONGODB_URI: ${{ secrets.STAGING_MONGODB_URI }}
+          MONGODB_DB_NAME: ${{ secrets.STAGING_MONGODB_DB_NAME }}
+
+      - name: Desplegar servicios
+        run: |
+          npm i -g @railway/cli
+          for service in laplace-api laplace-dfsa laplace-dfsm laplace-wafm laplace-landing; do
+            railway up --service "$service" --environment staging --ci
+          done
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Smoke contra staging
+        run: |
+          # `/ready` y no `/health`: verifica que ademas haya conexion a Mongo.
+          curl --fail --retry 10 --retry-delay 6 --retry-all-errors "${{ vars.STAGING_API_URL }}/ready"
+          curl --fail --retry 5 --retry-delay 3 "${{ vars.STAGING_LANDING_URL }}/"
