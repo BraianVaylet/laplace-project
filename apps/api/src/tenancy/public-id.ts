@@ -19,6 +19,7 @@ export const ID_PREFIXES = {
   refund: 'ref',
   classTemplate: 'tpl',
   classSession: 'ses',
+  venueClosure: 'cls',
   booking: 'bkg',
   exercise: 'exr',
   planning: 'pln',

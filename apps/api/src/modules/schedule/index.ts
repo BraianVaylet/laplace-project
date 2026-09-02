@@ -4,9 +4,11 @@ import type { DomainEventBus } from '../../events/bus.js';
 import type { JobDefinition } from '../../jobs/runner.js';
 import { toBsonDate } from '../../persistence/bson-date.js';
 import { runWithTenant } from '../../tenancy/context.js';
+import type { AuditWriter } from '../../audit/audit-log.js';
 import {
   ScheduleService,
   type RoomLookup,
+  type SessionBookingReleaser,
   type VenueLookup,
 } from './application/schedule-service.js';
 import { scheduleJobs } from './infrastructure/jobs.js';
@@ -14,6 +16,7 @@ import type { ClassSessionDoc, ClassTemplateDoc } from './infrastructure/schedul
 import {
   ClassSessionRepository,
   ClassTemplateRepository,
+  VenueClosureRepository,
 } from './infrastructure/schedule.repository.js';
 import { VICTIM_TEMPLATE_NAME, createScheduleRoutes } from './infrastructure/routes.js';
 
@@ -30,20 +33,27 @@ export interface ScheduleModule {
 export interface ScheduleModuleDeps {
   entitlements: EntitlementsLoader;
   events: DomainEventBus;
+  audit: AuditWriter;
   rooms: RoomLookup;
   venues: VenueLookup;
+  /** Lo contesta Booking (F1-14). Hasta entonces cancelar no libera reservas. */
+  bookings?: SessionBookingReleaser | undefined;
   now?: (() => Temporal.Instant) | undefined;
 }
 
 export function createScheduleModule(deps: ScheduleModuleDeps): ScheduleModule {
   const templates = new ClassTemplateRepository();
   const sessions = new ClassSessionRepository();
+  const closures = new VenueClosureRepository();
   const service = new ScheduleService({
     templates,
     sessions,
+    closures,
     rooms: deps.rooms,
     venues: deps.venues,
     events: deps.events,
+    audit: deps.audit,
+    ...(deps.bookings ? { bookings: deps.bookings } : {}),
     ...(deps.now ? { now: deps.now } : {}),
   });
 
@@ -101,4 +111,9 @@ export function createScheduleModule(deps: ScheduleModuleDeps): ScheduleModule {
   };
 }
 
-export type { ScheduleService, RoomLookup, VenueLookup } from './application/schedule-service.js';
+export type {
+  ScheduleService,
+  RoomLookup,
+  SessionBookingReleaser,
+  VenueLookup,
+} from './application/schedule-service.js';

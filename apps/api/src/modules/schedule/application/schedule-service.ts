@@ -2,20 +2,28 @@ import { Temporal } from '@js-temporal/polyfill';
 import {
   MATERIALIZATION_WINDOW_DAYS,
   type CreateClassTemplateInput,
+  type CreateClosureInput,
   type CreateSessionInput,
+  type DuplicateWeekInput,
+  type DuplicateWeekResult,
+  type EditScope,
   type SessionStatus,
   type UpdateClassTemplateInput,
+  type UpdateSessionInput,
 } from '@laplace/schemas';
+import type { AuditWriter } from '../../../audit/audit-log.js';
 import type { DomainEventBus } from '../../../events/bus.js';
 import { AppError } from '../../../http/errors.js';
 import { fromBsonDate, toBsonDate } from '../../../persistence/bson-date.js';
 import { runWithTenant } from '../../../tenancy/context.js';
 import type { Page } from '../../../tenancy/repository.js';
 import { assertProducesOccurrences, expandRecurrence } from '../domain/recurrence.js';
+import type { VenueClosureDoc } from '../infrastructure/closure.model.js';
 import type { ClassSessionDoc, ClassTemplateDoc } from '../infrastructure/schedule.model.js';
 import type {
   ClassSessionRepository,
   ClassTemplateRepository,
+  VenueClosureRepository,
 } from '../infrastructure/schedule.repository.js';
 
 /**
@@ -33,12 +41,30 @@ export interface VenueLookup {
   timeZoneOf(venueId: string): Promise<string>;
 }
 
+/**
+ * Cancela las reservas de una clase y **devuelve los créditos**, y dice cuántas
+ * tocó. Lo contesta Booking (F1-14).
+ *
+ * §2.1.9: cuando el centro cancela una clase, el crédito se devuelve siempre —
+ * el socio no perdió nada, la clase no se dio.
+ */
+export interface SessionBookingReleaser {
+  releaseSession(params: { sessionId: string; reason: string }): Promise<number>;
+}
+
+export const NO_BOOKINGS_YET: SessionBookingReleaser = {
+  releaseSession: () => Promise.resolve(0),
+};
+
 export interface ScheduleServiceDeps {
   templates: ClassTemplateRepository;
   sessions: ClassSessionRepository;
+  closures: VenueClosureRepository;
   rooms: RoomLookup;
   venues: VenueLookup;
   events: DomainEventBus;
+  audit: AuditWriter;
+  bookings?: SessionBookingReleaser | undefined;
   now?: (() => Temporal.Instant) | undefined;
 }
 
@@ -47,15 +73,21 @@ export class ScheduleService {
   private readonly sessions: ClassSessionRepository;
   private readonly rooms: RoomLookup;
   private readonly venues: VenueLookup;
+  private readonly closures: VenueClosureRepository;
   private readonly events: DomainEventBus;
+  private readonly audit: AuditWriter;
+  private readonly bookings: SessionBookingReleaser;
   private readonly now: () => Temporal.Instant;
 
   constructor(deps: ScheduleServiceDeps) {
     this.templates = deps.templates;
     this.sessions = deps.sessions;
+    this.closures = deps.closures;
     this.rooms = deps.rooms;
     this.venues = deps.venues;
     this.events = deps.events;
+    this.audit = deps.audit;
+    this.bookings = deps.bookings ?? NO_BOOKINGS_YET;
     this.now = deps.now ?? (() => Temporal.Now.instant());
   }
 
@@ -178,6 +210,232 @@ export class ScheduleService {
     });
 
     return updated;
+  }
+
+  /**
+   * Edita **solo esa sesión** (§2.1.5.a). Es la mitad "solo esta" del
+   * comportamiento tipo Google Calendar: la plantilla no se entera y las demás
+   * clases quedan como estaban.
+   */
+  async updateSession(id: string, input: UpdateSessionInput): Promise<ClassSessionDoc> {
+    const session = await this.getSession(id);
+    if (session.status === 'completed' || session.status === 'cancelled') {
+      throw finishedSession(id, session.status);
+    }
+    // Una clase que ya termino tampoco se edita, aunque su estado siga siendo
+    // `scheduled`: nadie transiciona la grilla vieja, y reescribirla cambiaria
+    // el historico de lo que de verdad ocurrio.
+    if (Temporal.Instant.compare(fromBsonDate(session.endAt), this.now()) <= 0) {
+      throw finishedSession(id, 'terminada');
+    }
+
+    const updated = await this.sessions.updateByPublicId(id, { $set: { ...input } });
+    if (!updated) throw sessionNotFound(id);
+
+    // El cambio de coach se avisa a los inscriptos (§2.1.5.f): el socio eligió
+    // esa clase, y a veces eligió a esa persona.
+    if (input.coachId !== undefined && input.coachId !== session.coachId) {
+      await this.events.emit('session.coach_changed', {
+        sessionId: id,
+        from: session.coachId ?? null,
+        to: input.coachId,
+      });
+    }
+
+    return updated;
+  }
+
+  /**
+   * Edita la plantilla y, con `this_and_future`, propaga el cambio a las clases
+   * que **todavía no empezaron** (§2.1.5.a).
+   *
+   * Las pasadas nunca se tocan: son el histórico de lo que de verdad ocurrió, y
+   * reescribirlo haría que la lista de asistencia de la semana pasada dejara de
+   * coincidir con lo que la gente hizo.
+   */
+  async updateTemplateWithScope(
+    id: string,
+    input: UpdateClassTemplateInput,
+    scope: EditScope,
+  ): Promise<{ template: ClassTemplateDoc; updatedSessions: number }> {
+    const template = await this.updateTemplate(id, input);
+    if (scope === 'template_only') return { template, updatedSessions: 0 };
+
+    const propagable = pickPropagable(input);
+    if (Object.keys(propagable).length === 0) return { template, updatedSessions: 0 };
+
+    const futuras = await this.sessions.futureOfTemplate(id, this.now());
+    for (const session of futuras) {
+      await this.sessions.updateByPublicId(String(session['publicId']), { $set: propagable });
+    }
+
+    return { template, updatedSessions: futuras.length };
+  }
+
+  /**
+   * 🔴 Cancela una clase y devuelve los créditos de todos sus inscriptos
+   * (§2.1.9).
+   *
+   * El orden importa: **primero se liberan las reservas, después se cancela la
+   * clase**. Si la devolución falla, la clase queda en pie y el centro puede
+   * reintentar; al revés, quedaría una clase cancelada con los créditos
+   * retenidos, que es plata del socio.
+   *
+   * F1-14 mete las dos escrituras en una transacción de Mongo, que es donde
+   * puede hacerlo: ahí las reservas y el contador de la sesión viven en el mismo
+   * módulo.
+   */
+  async cancelSession(id: string, reason: string): Promise<ClassSessionDoc> {
+    const session = await this.getSession(id);
+
+    if (session.status === 'completed' || session.status === 'cancelled') {
+      throw finishedSession(id, session.status);
+    }
+    if (Temporal.Instant.compare(fromBsonDate(session.endAt), this.now()) <= 0) {
+      throw finishedSession(id, 'terminada');
+    }
+
+    const liberadas = await this.bookings.releaseSession({ sessionId: id, reason });
+
+    const updated = await this.sessions.updateByPublicId(id, { $set: { status: 'cancelled' } });
+    if (!updated) throw sessionNotFound(id);
+
+    await this.audit.record({
+      action: 'session.cancelled',
+      targetType: 'classSession',
+      targetId: id,
+      reason,
+      before: { status: session.status, bookedCount: session.bookedCount },
+      after: { status: 'cancelled', bookingsReleased: liberadas },
+    });
+
+    await this.events.emit('session.cancelled', {
+      sessionId: id,
+      venueId: session.venueId,
+      startAt: fromBsonDate(session.startAt).toString(),
+      reason,
+      releasedBookings: liberadas,
+    });
+
+    return updated;
+  }
+
+  /**
+   * Declara un feriado o un cierre y **cancela en bloque** las clases del rango
+   * (§2.1.5.a).
+   *
+   * Cada cancelación pasa por el mismo camino que una individual, así que cada
+   * socio recupera su crédito y recibe su aviso.
+   */
+  async declareClosure(input: CreateClosureInput): Promise<VenueClosureDoc> {
+    const timeZone = await this.venues.timeZoneOf(input.venueId);
+    const desde = Temporal.PlainDate.from(input.from).toZonedDateTime({ timeZone }).toInstant();
+    const hasta = Temporal.PlainDate.from(input.to)
+      .add({ days: 1 })
+      .toZonedDateTime({ timeZone })
+      .toInstant();
+
+    const afectadas = await this.sessions.between(input.venueId, desde, hasta, {
+      status: { $nin: ['cancelled', 'completed'] },
+    });
+
+    let canceladas = 0;
+    for (const session of afectadas) {
+      // Las que ya pasaron no se cancelan: la clase se dio, y borrarla del
+      // registro seria mentir sobre lo que ocurrio.
+      if (Temporal.Instant.compare(fromBsonDate(session.endAt), this.now()) <= 0) continue;
+
+      await this.cancelSession(String(session['publicId']), input.reason);
+      canceladas += 1;
+    }
+
+    return this.closures.create({
+      ...input,
+      cancelledSessions: canceladas,
+    } as Partial<VenueClosureDoc>);
+  }
+
+  async listClosures(venueId: string): Promise<VenueClosureDoc[]> {
+    return this.closures.ofVenue(venueId);
+  }
+
+  /**
+   * Copia la grilla de una semana a otra (§2.1.5.a), **respetando los feriados**:
+   * la clase que caería en un día cerrado no se copia, y se dice por qué.
+   *
+   * Es lo que usa el centro que arma el horario a mano en vez de con plantillas.
+   */
+  async duplicateWeek(input: DuplicateWeekInput): Promise<DuplicateWeekResult> {
+    const timeZone = await this.venues.timeZoneOf(input.venueId);
+    const origen = Temporal.PlainDate.from(input.fromWeek);
+    const destino = Temporal.PlainDate.from(input.toWeek);
+    const dias = Math.round(origen.until(destino).days);
+
+    const desde = origen.toZonedDateTime({ timeZone }).toInstant();
+    const hasta = origen.add({ days: 7 }).toZonedDateTime({ timeZone }).toInstant();
+
+    const modelo = await this.sessions.between(input.venueId, desde, hasta, {
+      status: { $ne: 'cancelled' },
+    });
+
+    const cierres = await this.closures.coveringRange(
+      input.venueId,
+      destino.toString(),
+      destino.add({ days: 6 }).toString(),
+    );
+
+    const result: DuplicateWeekResult = { created: 0, skipped: [] };
+
+    for (const session of modelo) {
+      /*
+       * Se corre por dias de calendario, no por 7*24 horas: si en el medio hay
+       * un cambio de horario, la clase de las 7:00 tiene que seguir siendo a las
+       * 7:00 de la semana destino.
+       */
+      const inicio = fromBsonDate(session.startAt).toZonedDateTimeISO(timeZone).add({ days: dias });
+      const fin = inicio.add({
+        minutes: Math.round(
+          fromBsonDate(session.startAt)
+            .until(fromBsonDate(session.endAt))
+            .total({ unit: 'minute' }),
+        ),
+      });
+      const dia = inicio.toPlainDate().toString();
+
+      const cerrado = cierres.find((closure) => closure.from <= dia && closure.to >= dia);
+      if (cerrado) {
+        result.skipped.push({ startAt: inicio.toInstant().toString(), reason: cerrado.reason });
+        continue;
+      }
+
+      try {
+        await this.assertRoomFree(session.roomId, inicio.toInstant(), fin.toInstant());
+      } catch {
+        result.skipped.push({
+          startAt: inicio.toInstant().toString(),
+          reason: 'La sala ya está ocupada a esa hora.',
+        });
+        continue;
+      }
+
+      await this.sessions.create({
+        venueId: session.venueId,
+        roomId: session.roomId,
+        name: session.name,
+        categoryId: session.categoryId,
+        startAt: toBsonDate(inicio.toInstant()),
+        endAt: toBsonDate(fin.toInstant()),
+        capacity: session.capacity,
+        bookedCount: 0,
+        waitlistCount: 0,
+        ...(session.coachId === undefined ? {} : { coachId: session.coachId }),
+        status: 'scheduled',
+      } as Partial<ClassSessionDoc>);
+
+      result.created += 1;
+    }
+
+    return result;
   }
 
   /** Cuántas clases futuras tiene una sala. Es el puerto que consume Rooms (F1-02). */
@@ -325,4 +583,25 @@ function sessionNotFound(id: string): AppError {
 
 function isDuplicateKey(error: unknown): boolean {
   return typeof error === 'object' && error !== null && (error as { code?: number }).code === 11000;
+}
+
+/** Los campos de la plantilla que tiene sentido propagar a las clases futuras. */
+function pickPropagable(input: UpdateClassTemplateInput): Record<string, unknown> {
+  const propagable: Record<string, unknown> = {};
+
+  if (input.name !== undefined) propagable['name'] = input.name;
+  if (input.categoryId !== undefined) propagable['categoryId'] = input.categoryId;
+  if (input.capacity !== undefined) propagable['capacity'] = input.capacity;
+  if (input.coachId !== undefined) propagable['coachId'] = input.coachId;
+
+  return propagable;
+}
+
+function finishedSession(id: string, status: string): AppError {
+  return new AppError({
+    code: 'LP-SCHD-422-005',
+    status: 422,
+    message: 'No se puede modificar una clase que ya pasó.',
+    meta: { sessionId: id, status },
+  });
 }

@@ -23,6 +23,57 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-02 — F1-13: edición, feriados y cancelación de clase
+
+- **Módulo:** `schedule`
+- **Tipo:** feature
+- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/kpxJMwoQ (F1-13) — movida a **Completadas**
+- **Qué cambió:** el comportamiento tipo Google Calendar de §2.1.5.a — editar solo una clase o "esta
+  y futuras" —, los feriados y cierres que cancelan en bloque, la cancelación con devolución de
+  créditos, el aviso de cambio de coach y la duplicación de una semana respetando feriados.
+- **Por qué:** una grilla que no se puede corregir sin romper el histórico no sirve; y una
+  cancelación que no devuelve el crédito es plata del socio retenida.
+- **Impacto:** colección `venueClosures` con su **migración nueva** (`20260902160000`) · cinco rutas
+  nuevas · dos eventos (`session.cancelled`, `session.coach_changed`).
+- **Pendiente:** ver la deuda declarada abajo.
+
+**Decisiones:**
+
+- **Primero se liberan las reservas, después se cancela la clase.** Si la devolución falla, la clase
+  queda en pie y el centro puede reintentar. Al revés quedaría una clase cancelada con los créditos
+  retenidos, que es plata del socio y nadie se enteraría hasta que reclame. Hay un test que hace
+  fallar la devolución a propósito y verifica que la clase siga `scheduled`.
+- **Sin `scope`, editar la plantilla no propaga nada.** Reescribir clases ya publicadas sin que
+  nadie lo pida es peor que obligar a un click de más.
+- **Las clases pasadas nunca se tocan.** Son el histórico de lo que de verdad ocurrió; reescribirlas
+  haría que la lista de asistencia de la semana pasada dejara de coincidir con lo que la gente hizo.
+  El test mueve el reloj un mes y verifica que la mitad vieja de la grilla quedó intacta.
+- **Una clase que ya terminó no se edita ni se cancela, aunque su estado siga siendo `scheduled`.**
+  Nadie transiciona la grilla vieja, así que el corte tiene que ser por reloj, no por estado. Lo
+  encontró el test: la primera versión solo miraba el estado y dejaba editar una clase de marzo en
+  mayo.
+- **Los cierres guardan las fechas como `YYYY-MM-DD`.** Un feriado es un día del calendario del
+  centro, no una ventana de 24 horas; guardarlo como instante obligaría a elegir una hora arbitraria
+  y a recalcularla en cada zona.
+- **Un cierre declarado tarde no cancela lo que ya se dio.** La clase ocurrió: borrarla del registro
+  sería mentir sobre lo que pasó.
+- **Duplicar una semana dice qué no copió y por qué.** Feriado o sala ocupada: sin el motivo, el SMU
+  ve un hueco en la grilla y no sabe si es un bug.
+- **Cancelar dos veces no libera dos veces.** Liberar de nuevo devolvería el crédito otra vez, que
+  es regalar clases.
+
+**Deuda declarada:** el criterio pide que la cancelación y la devolución ocurran **en la misma
+transacción**. Hoy son dos operaciones ordenadas para que un fallo no deje créditos retenidos, con
+la devolución detrás del puerto `SessionBookingReleaser`. F1-14 las mete en una transacción de Mongo,
+que es donde puede hacerlo: ahí las reservas y el contador de la sesión viven en el mismo módulo.
+Anotado en esa tarea, que ya hereda tres deudas.
+
+**Verificación:** 1501 tests verdes (1111 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido.
+
+---
+
 ## 2026-09-02 — F1-12: la agenda y la materialización de clases
 
 - **Módulo:** `schedule`

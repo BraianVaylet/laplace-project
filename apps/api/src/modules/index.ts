@@ -9,7 +9,7 @@ import { createMembersModule, type OrganizationMembershipPort } from './members/
 import { createBillingModule } from './billing/index.js';
 import { createContractsModule, type FutureBookingReleaser } from './contracts/index.js';
 import { createProductsModule } from './products/index.js';
-import { createScheduleModule } from './schedule/index.js';
+import { createScheduleModule, type SessionBookingReleaser } from './schedule/index.js';
 import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
 import { createVenuesModule } from './venues/index.js';
 
@@ -36,6 +36,11 @@ export interface ModuleDeps {
    * contestar Booking (F1-14); hasta entonces no hay reservas que liberar.
    */
   bookings?: FutureBookingReleaser | undefined;
+  /**
+   * Libera las reservas de una clase cancelada y devuelve sus creditos. Lo va a
+   * contestar Booking (F1-14); hasta entonces cancelar no libera nada.
+   */
+  sessionBookings?: SessionBookingReleaser | undefined;
 }
 
 /**
@@ -68,9 +73,17 @@ export function createModules(deps: ModuleDeps) {
   });
 
   const schedule = createScheduleModule({
-    ...deps,
+    entitlements: deps.entitlements,
+    events: deps.events,
+    audit,
     rooms: { capacityOf: (roomId) => rooms.service.capacityOf(roomId) },
     venues: { timeZoneOf: (venueId) => venues.service.timeZoneOf(venueId) },
+    /*
+     * Cancelar una clase devuelve los creditos de sus inscriptos (§2.1.9). Lo
+     * contesta Booking (F1-14); hasta entonces no hay reservas que liberar.
+     */
+    ...(deps.sessionBookings ? { bookings: deps.sessionBookings } : {}),
+    ...(deps.now ? { now: deps.now } : {}),
   });
 
   const members = createMembersModule(deps);

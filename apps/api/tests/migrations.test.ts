@@ -12,6 +12,9 @@ import { COLLECTIONS } from '../src/persistence/collections.js';
  * y la no-sobreventa.
  */
 const require = createRequire(import.meta.url);
+const closures = require('../../../migrations/20260902160000-venue-closures.cjs') as {
+  COLLECTIONS: Record<string, string>;
+};
 const migration = require('../../../migrations/20260901120000-mandatory-indexes.cjs') as {
   up(db: Db): Promise<void>;
   down(db: Db): Promise<void>;
@@ -41,9 +44,16 @@ async function indexesOf(collection: string) {
   return db.collection(collection).indexes();
 }
 
-describe('la migracion y el codigo hablan de las mismas colecciones', () => {
+describe('las migraciones y el codigo hablan de las mismas colecciones', () => {
   it('los nombres coinciden exactamente', () => {
-    expect(migration.COLLECTIONS).toEqual(COLLECTIONS);
+    /*
+     * Cada migracion declara las colecciones que trae; juntas tienen que cubrir
+     * exactamente lo que el codigo usa. Una coleccion nueva sin su migracion
+     * rompe acá, que es antes de que exista sin indices en produccion.
+     */
+    const declaradas = { ...migration.COLLECTIONS, ...closures.COLLECTIONS };
+
+    expect(declaradas).toEqual(COLLECTIONS);
   });
 });
 

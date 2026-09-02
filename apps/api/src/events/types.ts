@@ -58,6 +58,24 @@ export interface DomainEvents {
     to: string;
   };
 
+  /**
+   * Clase cancelada por el centro. Los inscriptos ya recuperaron su credito
+   * (§2.1.9); esto dispara el aviso.
+   */
+  'session.cancelled': {
+    sessionId: string;
+    venueId: string;
+    startAt: string;
+    reason: string;
+    releasedBookings: number;
+  };
+  /** Cambio de coach. El socio eligio esa clase, y a veces eligio a esa persona. */
+  'session.coach_changed': {
+    sessionId: string;
+    from: string | null;
+    to: string;
+  };
+
   'booking.created': {
     bookingId: string;
     sessionId: string;

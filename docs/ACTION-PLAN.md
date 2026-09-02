@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     11 |
+| Fase 1 — MVP vendible   |       32 |          186 |     12 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -965,7 +965,7 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
     instantes y el front decide cómo la dibuja. La vista horizontal por sala de §2.1.5.f es
     presentación, y entra con el DFSM.
 
-## [ ] F1-13 · Schedule: edición, excepciones y cancelación de clase
+## [x] F1-13 · Schedule: edición, excepciones y cancelación de clase
 
 - **module:** schedule
 - **description:** El comportamiento tipo Google Calendar de §2.1.5.a — "solo esta / esta y
@@ -990,8 +990,25 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **test_plan:** Test transaccional de la cancelación: si falla la devolución, no se cancela nada.
   Test de "esta y futuras" verificando que las pasadas quedan intactas. Test de duplicación de
   semana con feriado en el medio.
-- **error-codes:** `LP-SCHD-422-005` (cancelar una sesión ya terminada)
-- **data-model-impact:** `ClassSession.status`, `VenueClosure { tenantId, venueId, from, to, reason }`.
+- **error-codes:** `LP-SCHD-422-005` (editar o cancelar una sesión ya terminada)
+- **data-model-impact:** `ClassSession.status`, `VenueClosure { tenantId, venueId, from, to, reason,
+cancelledSessions }` — colección nueva con su migración (`20260902160000`).
+- **decisiones de diseño:**
+  - **Primero se liberan las reservas, después se cancela la clase.** Si la devolución falla, la
+    clase queda en pie y el centro reintenta; al revés quedaría una clase cancelada con los créditos
+    retenidos, que es plata del socio. Hay un test que hace fallar la devolución y verifica que la
+    clase siga `scheduled`.
+  - Sin `scope`, editar la plantilla **no** propaga: reescribir clases ya publicadas sin que nadie
+    lo pida es peor que un click de más.
+  - Una clase que ya terminó no se edita ni se cancela **aunque su estado siga siendo `scheduled`**:
+    nadie transiciona la grilla vieja, y reescribirla cambiaría el histórico.
+  - Los cierres guardan `from`/`to` como `YYYY-MM-DD`, no como instantes: un feriado es un día del
+    calendario del centro, y guardarlo como instante obligaría a elegir una hora arbitraria.
+- **cerrada con una deuda declarada:** el criterio pide que la cancelación y la devolución ocurran
+  **en la misma transacción**. Hoy son dos operaciones ordenadas para que un fallo no deje créditos
+  retenidos, y la devolución se pide por el puerto `SessionBookingReleaser`. F1-14 las mete en una
+  transacción de Mongo, que es donde puede: ahí las reservas y el contador de la sesión viven en el
+  mismo módulo.
 
 ## [ ] F1-14 · Booking: reserva atómica con descuento de crédito
 
@@ -1002,6 +1019,9 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 >   un contrato piden la liberación pero nadie la ejecuta.
 > - De F1-11: llamar a `billing.assertCanTransact(memberId, allowDebt)` antes de reservar. El corte
 >   de la mora está implementado y testeado, pero nadie lo invoca desde el flujo de reserva.
+> - De F1-13: conectar el puerto `SessionBookingReleaser` y meter la cancelación de la clase y la
+>   devolución de sus créditos en **una transacción de Mongo**. Hoy son dos operaciones ordenadas
+>   para que un fallo no deje créditos retenidos.
 
 - **module:** booking
 - **description:** El corazón del producto y su condición de carrera clásica: dos personas tomando

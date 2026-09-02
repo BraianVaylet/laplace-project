@@ -148,3 +148,91 @@ export type ClassSession = z.infer<typeof classSessionSchema>;
 
 /** Cuántos días hacia adelante materializa el job (§2.1.5.a). */
 export const MATERIALIZATION_WINDOW_DAYS = 60;
+
+/**
+ * Edición de una sesión concreta. **Afecta solo a esa sesión** (§2.1.5.a): es la
+ * mitad "solo esta" del comportamiento tipo Google Calendar.
+ *
+ * La sala no está: mover una clase de sala puede chocar con otra, y ese cambio
+ * pasa por el alta, que valida la colisión.
+ */
+export const updateSessionSchema = z.object({
+  name: z.string().trim().min(2).max(80).optional(),
+  categoryId: z.string().trim().min(1).max(40).optional(),
+  capacity: z.number().int().min(1).max(500).optional(),
+  coachId: z.string().optional(),
+});
+
+export type UpdateSessionInput = z.infer<typeof updateSessionSchema>;
+
+/**
+ * El alcance de una edición de plantilla (§2.1.5.a).
+ *
+ * `template_only` cambia la plantilla y deja la grilla ya publicada como está;
+ * `this_and_future` la propaga a las clases que todavía no empezaron. **Las
+ * pasadas nunca se tocan**: son el histórico de lo que de verdad ocurrió.
+ */
+export const EDIT_SCOPES = ['template_only', 'this_and_future'] as const;
+export const editScopeSchema = z.enum(EDIT_SCOPES);
+export type EditScope = z.infer<typeof editScopeSchema>;
+
+export const cancelSessionSchema = z.object({
+  reason: z.string().trim().min(5, 'Escribí el motivo de la cancelación.').max(300),
+});
+
+export type CancelSessionInput = z.infer<typeof cancelSessionSchema>;
+
+/**
+ * Un feriado o un cierre del centro (§2.1.5.a). Cancela en bloque todas las
+ * clases del rango.
+ */
+export const createClosureSchema = z
+  .object({
+    venueId: z.string().min(1, 'Elegí la sede.'),
+    /** `YYYY-MM-DD` en la zona del Venue, inclusive. */
+    from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usá el formato AAAA-MM-DD.'),
+    /** Inclusive: un feriado de un día tiene `from` y `to` iguales. */
+    to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usá el formato AAAA-MM-DD.'),
+    reason: z.string().trim().min(3, 'Escribí el motivo del cierre.').max(200),
+  })
+  .refine((closure) => closure.to >= closure.from, {
+    message: 'El cierre no puede terminar antes de empezar.',
+    path: ['to'],
+  });
+
+export type CreateClosureInput = z.infer<typeof createClosureSchema>;
+
+export const venueClosureSchema = z.object({
+  publicId: z.string(),
+  venueId: z.string(),
+  from: z.string(),
+  to: z.string(),
+  reason: z.string(),
+  /** Cuántas clases canceló al declararse. */
+  cancelledSessions: z.number().int(),
+  createdAt: z.string(),
+});
+
+export type VenueClosure = z.infer<typeof venueClosureSchema>;
+
+/**
+ * Copiar la grilla de una semana a otra (§2.1.5.a). Es lo que usa el centro que
+ * arma el horario a mano en vez de con plantillas.
+ */
+export const duplicateWeekSchema = z.object({
+  venueId: z.string().min(1, 'Elegí la sede.'),
+  /** Lunes de la semana que se copia, `YYYY-MM-DD`. */
+  fromWeek: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usá el formato AAAA-MM-DD.'),
+  /** Lunes de la semana destino. */
+  toWeek: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Usá el formato AAAA-MM-DD.'),
+});
+
+export type DuplicateWeekInput = z.infer<typeof duplicateWeekSchema>;
+
+export const duplicateWeekResultSchema = z.object({
+  created: z.number().int(),
+  /** Las que no se copiaron y por qué: feriado, colisión o ya existían. */
+  skipped: z.array(z.object({ startAt: z.string(), reason: z.string() })),
+});
+
+export type DuplicateWeekResult = z.infer<typeof duplicateWeekResultSchema>;

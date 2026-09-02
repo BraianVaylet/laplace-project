@@ -2,6 +2,7 @@ import type { FilterQuery } from 'mongoose';
 import type { Temporal } from '@js-temporal/polyfill';
 import { toBsonDate } from '../../../persistence/bson-date.js';
 import { TenantRepository } from '../../../tenancy/repository.js';
+import { VenueClosureModel, type VenueClosureDoc } from './closure.model.js';
 import {
   ClassSessionModel,
   ClassTemplateModel,
@@ -85,6 +86,22 @@ export class ClassSessionRepository extends TenantRepository<ClassSessionDoc> {
     } as FilterQuery<ClassSessionDoc>);
   }
 
+  /**
+   * Las clases futuras de una plantilla. Es lo que toca "esta y futuras": las
+   * pasadas **nunca** se editan, son el historico de lo que de verdad ocurrio.
+   */
+  async futureOfTemplate(templateId: string, now: Temporal.Instant): Promise<ClassSessionDoc[]> {
+    return ClassSessionModel.find(
+      this.scope({
+        templateId,
+        startAt: { $gt: toBsonDate(now) },
+        status: { $nin: ['cancelled', 'completed'] },
+      } as FilterQuery<ClassSessionDoc>),
+    )
+      .lean<ClassSessionDoc[]>()
+      .exec();
+  }
+
   /** Los inicios ya materializados de una plantilla, para no duplicarlos. */
   async startsOfTemplate(
     templateId: string,
@@ -102,5 +119,34 @@ export class ClassSessionRepository extends TenantRepository<ClassSessionDoc> {
       .exec();
 
     return new Set(existentes.map((session) => session.startAt.getTime()));
+  }
+}
+
+/** Feriados y cierres del centro. */
+export class VenueClosureRepository extends TenantRepository<VenueClosureDoc> {
+  constructor() {
+    super(VenueClosureModel, 'venueClosure');
+  }
+
+  /** Los cierres de una sede que tocan un rango de dias, en `YYYY-MM-DD`. */
+  async coveringRange(venueId: string, from: string, to: string): Promise<VenueClosureDoc[]> {
+    return VenueClosureModel.find(
+      this.scope({
+        venueId,
+        // Se solapan si empieza antes de que termine el rango y termina despues
+        // de que empieza. Las fechas son strings ISO, asi que comparan bien.
+        from: { $lte: to },
+        to: { $gte: from },
+      } as FilterQuery<VenueClosureDoc>),
+    )
+      .lean<VenueClosureDoc[]>()
+      .exec();
+  }
+
+  async ofVenue(venueId: string): Promise<VenueClosureDoc[]> {
+    return VenueClosureModel.find(this.scope({ venueId } as FilterQuery<VenueClosureDoc>))
+      .sort({ from: 1 })
+      .lean<VenueClosureDoc[]>()
+      .exec();
   }
 }

@@ -19,6 +19,7 @@ export const COLLECTIONS = {
   refund: 'refunds',
   classTemplate: 'classTemplates',
   classSession: 'classSessions',
+  venueClosure: 'venueClosures',
   booking: 'bookings',
   exercise: 'exercises',
   planning: 'plannings',
