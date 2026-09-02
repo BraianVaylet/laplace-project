@@ -119,6 +119,11 @@ export const bookingPolicySchema = z
       .default(48 * 60),
     /** Tamaño máximo de la lista de espera. */
     waitlistMaxSize: z.number().int().min(0).max(200).default(20),
+    /**
+     * Tope anual de días de congelamiento por contrato (§2.1.9). Default: 30.
+     * `0` desactiva la función para el centro.
+     */
+    maxFreezeDaysPerYear: z.number().int().min(0).max(365).default(30),
     /** Cuánto tiene para confirmar quien es promovido. Default: 15 minutos. */
     waitlistHoldMinutes: z
       .number()

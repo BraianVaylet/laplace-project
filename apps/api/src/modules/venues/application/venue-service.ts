@@ -110,6 +110,15 @@ export class VenueService {
     return (await this.getByPublicId(publicId)).timeZone;
   }
 
+  /** Tope anual de dias de congelamiento del centro (§2.1.9). */
+  async maxFreezeDaysOf(publicId: string): Promise<number> {
+    const policy = (await this.getByPublicId(publicId)).bookingPolicy as {
+      maxFreezeDaysPerYear?: number;
+    };
+
+    return policy.maxFreezeDaysPerYear ?? DEFAULT_BOOKING_POLICY.maxFreezeDaysPerYear;
+  }
+
   /**
    * ¿Existe esa sede en este tenant? Es el puerto que consume Rooms (ADR-003):
    * la alternativa seria que Rooms importara el modelo de Venues.

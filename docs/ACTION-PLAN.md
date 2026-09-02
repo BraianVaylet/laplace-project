@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |      7 |
+| Fase 1 — MVP vendible   |       32 |          186 |      8 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -792,7 +792,7 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   - `expired`, `exhausted` y `cancelled` son terminales. La renovación crea un contrato nuevo, que
     es lo que mantiene legible el histórico de lo cobrado.
 
-## [ ] F1-09 · Congelamiento y vencimiento de contratos
+## [x] F1-09 · Congelamiento y vencimiento de contratos
 
 - **module:** contracts
 - **description:** El freeze por vacaciones o lesión (§2.1.9: muy pedida y ausente en la v1) y el
@@ -817,7 +817,21 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   freeze: corrimiento de fecha, cancelación de futuras, devolución de créditos, salida de waitlist.
   Test de idempotencia de ambos jobs. Test del máximo anual de días.
 - **error-codes:** `LP-CTRT-422-006` (máximo de días de freeze superado)
-- **data-model-impact:** `Contract.freeze { days, from, to }`, `Contract.freezeDaysUsedThisYear`.
+- **data-model-impact:** `Contract.freeze { days, from, to }`, `Contract.freezeDaysUsedThisYear`,
+  `Contract.freezeYear` y `Contract.lastExpiryNoticeDays`. En `Venue.bookingPolicy` entra
+  `maxFreezeDaysPerYear` (default 30).
+- **decisiones de diseño:**
+  - El vencimiento se corre **al congelar**, no al descongelar. Si se corriera al final, el socio
+    que se olvida de avisar que volvió tendría el pack parado para siempre.
+  - `lastExpiryNoticeDays` es lo que hace idempotente a `notifyExpiring`: sin él, correr el job dos
+    veces el mismo día manda el mismo mail dos veces, que es la clase de error que hace que el
+    centro apague las notificaciones.
+  - Los jobs son el **segundo uso legítimo** de `skipTenantScope`: no corren dentro del pedido de
+    nadie, así que recorren todos los centros y abren el contexto de cada uno antes de tocar sus
+    datos. Está documentado en el plugin de tenancy.
+- **cerrada con una deuda declarada:** cancelar las reservas futuras y devolver esos créditos se
+  pide a través del puerto `FutureBookingReleaser`, que hasta F1-14 responde 0. El pedido sale con
+  su motivo (`frozen` / `expired`) y hay un test que lo verifica; lo que falta es quien lo conteste.
 
 ## [ ] F1-10 · Billing: cargos, pagos manuales y estado de cuenta
 
@@ -941,6 +955,10 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **data-model-impact:** `ClassSession.status`, `VenueClosure { tenantId, venueId, from, to, reason }`.
 
 ## [ ] F1-14 · Booking: reserva atómica con descuento de crédito
+
+> **Hereda una deuda de F1-09:** conectar el puerto `FutureBookingReleaser` de Contracts con la
+> cancelación real de reservas futuras y la devolución de sus créditos (ADR-001). Hasta que se haga,
+> congelar y vencer un contrato piden la liberación pero nadie la ejecuta.
 
 - **module:** booking
 - **description:** El corazón del producto y su condición de carrera clásica: dos personas tomando

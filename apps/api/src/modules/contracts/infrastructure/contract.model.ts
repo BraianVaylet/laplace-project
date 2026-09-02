@@ -29,6 +29,13 @@ export interface ContractDoc extends Record<string, unknown> {
   endsAt?: Date | null;
   status: string;
   autoRenew: boolean;
+  /** El congelamiento vigente, si lo hay. */
+  freeze?: { days: number; from: Date; to: Date } | null;
+  /** Dias de congelamiento usados en el año calendario de `freezeYear`. */
+  freezeDaysUsedThisYear: number;
+  freezeYear?: number;
+  /** Ultimo hito de aviso ya enviado (7, 3 o 1). Evita avisar dos veces. */
+  lastExpiryNoticeDays?: number | null;
 }
 
 const contractSchema = new Schema<ContractDoc>(
@@ -50,6 +57,19 @@ const contractSchema = new Schema<ContractDoc>(
     endsAt: { type: Date, required: false, default: null },
     status: { type: String, required: true, default: 'pending_payment' },
     autoRenew: { type: Boolean, required: true, default: false },
+    freeze: {
+      type: { days: Number, from: Date, to: Date },
+      required: false,
+      default: null,
+      _id: false,
+    },
+    freezeDaysUsedThisYear: { type: Number, required: true, default: 0, min: 0 },
+    freezeYear: { type: Number, required: false },
+    /**
+     * El hito ya avisado. Es lo que hace idempotente a `notifyExpiring`: sin
+     * esto, correr el job dos veces el mismo dia manda el aviso dos veces.
+     */
+    lastExpiryNoticeDays: { type: Number, required: false, default: null },
   },
   { collection: COLLECTIONS.contract },
 );

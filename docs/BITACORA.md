@@ -23,6 +23,56 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-02 — F1-09: congelamiento y vencimiento de contratos
+
+- **Módulo:** `contracts`
+- **Tipo:** feature
+- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/SeFAtiva (F1-09) — movida a **Completadas**
+- **Qué cambió:** el staff congela un contrato por vacaciones o lesión y el vencimiento se corre por
+  los días declarados, respetando el tope anual del centro. Dos jobs diarios expiran los vencidos y
+  avisan 7, 3 y 1 día antes.
+- **Por qué:** el freeze es la feature más pedida que la v1 no tenía (§2.1.9), y los avisos de
+  vencimiento son ingreso directo: es el momento en que el socio renueva.
+- **Impacto:** `Contract.freeze`, `freezeDaysUsedThisYear`, `freezeYear` y `lastExpiryNoticeDays` ·
+  `Venue.bookingPolicy.maxFreezeDaysPerYear` (default 30) · dos rutas nuevas · dos jobs registrados
+  en el runner de F0-08.
+- **Pendiente:** ver la deuda declarada abajo.
+
+**Decisiones:**
+
+- **El vencimiento se corre al congelar, no al descongelar.** Los días se declaran por adelantado.
+  Si se corriera al final, el socio que se olvida de avisar que volvió tendría el pack parado para
+  siempre, y el centro no podría planificar nada.
+- **30 días son 30 días, no 30×24 horas.** Es el test que §Testing.6 marca como obligatorio y está
+  escrito contra Santiago de Chile, que sí cambia de hora: un pack vendido venciendo a las 19:00
+  pasaría a vencer a las 20:00 con la cuenta ingenua. Argentina no cambia de hora desde 2009, así
+  que con una sola zona de prueba el bug sería invisible para siempre.
+- **El tope de días es del centro, no del producto.** Vive en `bookingPolicy`, que es donde ya
+  estaban las demás ventanas configurables. Con el tope en `0`, el centro simplemente no habilita
+  la función.
+- **El contador de días se reinicia con el año calendario.** El tope es "por año", así que el
+  contrato guarda también de qué año es el número.
+- **`lastExpiryNoticeDays` hace idempotente al aviso.** Sin él, correr el job dos veces el mismo día
+  manda el mismo mail dos veces — que es exactamente la clase de error que hace que el centro apague
+  las notificaciones y pierda el canal de renovación.
+- **El job de expiración es idempotente por su filtro:** solo trae los que siguen `active` o
+  `frozen`, así que la segunda corrida del día no encuentra nada.
+- **Los jobs son el segundo uso legítimo de `skipTenantScope`.** No corren dentro del pedido de
+  nadie: recorren todos los centros y abren el contexto de cada uno antes de tocar sus datos. Quedó
+  documentado en el plugin de tenancy, al lado del primero.
+- **Los avisos salen a las 10:00 y la expiración a las 03:00.** Un mail que llega de madrugada se
+  lee entre otros veinte; el proceso pesado va cuando no hay nadie entrenando.
+
+**Deuda declarada:** §2.1.9 pide que congelar cancele las reservas futuras y **devuelva esos
+créditos**. El pedido sale con su motivo a través del puerto `FutureBookingReleaser` y hay un test
+que lo verifica, pero hasta F1-14 nadie lo contesta. Anotado en esa tarea.
+
+**Verificación:** 1357 tests verdes (967 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido.
+
+---
+
 ## 2026-09-02 — F1-08: módulo Contracts y el orden de consumo
 
 - **Módulo:** `contracts`

@@ -6,7 +6,7 @@ import type { AppEnv } from '../app.js';
 import type { EntitlementsLoader } from '../entitlements/middleware.js';
 import type { DomainEventBus } from '../events/bus.js';
 import { createMembersModule, type OrganizationMembershipPort } from './members/index.js';
-import { createContractsModule } from './contracts/index.js';
+import { createContractsModule, type FutureBookingReleaser } from './contracts/index.js';
 import { createProductsModule } from './products/index.js';
 import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
 import { createVenuesModule } from './venues/index.js';
@@ -29,6 +29,11 @@ export interface ModuleDeps {
    * desde `index.ts`: los modulos no conocen la libreria de identidad.
    */
   memberships: OrganizationMembershipPort;
+  /**
+   * Libera las reservas futuras de un contrato al congelarlo o vencerlo. Lo va a
+   * contestar Booking (F1-14); hasta entonces no hay reservas que liberar.
+   */
+  bookings?: FutureBookingReleaser | undefined;
 }
 
 /**
@@ -85,7 +90,10 @@ export function createModules(deps: ModuleDeps) {
       registerSale: (productId) => products.service.registerSale(productId),
       releaseSale: (productId) => products.service.releaseSale(productId),
     },
-    venues: { timeZoneOf: (venueId) => venues.service.timeZoneOf(venueId) },
+    venues: {
+      timeZoneOf: (venueId) => venues.service.timeZoneOf(venueId),
+      maxFreezeDaysOf: (venueId) => venues.service.maxFreezeDaysOf(venueId),
+    },
   });
 
   routes.route('/', venues.routes);
@@ -94,7 +102,10 @@ export function createModules(deps: ModuleDeps) {
   routes.route('/', products.routes);
   routes.route('/', contracts.routes);
 
-  return { routes, venues, rooms, members, products, contracts };
+  /** Todo lo que el runner tiene que programar (§10). */
+  const jobs = [...contracts.jobs];
+
+  return { routes, jobs, venues, rooms, members, products, contracts };
 }
 
 /**

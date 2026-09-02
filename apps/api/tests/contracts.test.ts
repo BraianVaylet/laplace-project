@@ -37,6 +37,14 @@ const entitlements = createEntitlementsLoader(() => Promise.resolve({ planId: 'p
 /** Reloj del servicio. Se mueve a mano para probar vencimientos sin esperar. */
 let ahora = Temporal.Instant.from('2026-03-01T12:00:00Z');
 
+/**
+ * Reemplaza a Booking (F1-14), que todavía no existe. Guarda qué se pidió
+ * liberar: §2.1.9 exige que congelar y expirar cancelen las reservas futuras, y
+ * esto verifica que el pedido salga con el motivo correcto.
+ */
+const liberaciones: Array<{ contractId: string; memberId: string; reason: string }> = [];
+const RESERVAS_FUTURAS = 2;
+
 interface ContractBody {
   publicId: string;
   memberId: string;
@@ -179,6 +187,12 @@ beforeAll(async () => {
     logger,
     now: () => ahora,
     memberships: { add: () => Promise.resolve() },
+    bookings: {
+      releaseFuture: (params: { contractId: string; memberId: string; reason: string }) => {
+        liberaciones.push(params);
+        return Promise.resolve(RESERVAS_FUTURAS);
+      },
+    },
   });
 
   app = createApp({
@@ -197,6 +211,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   ahora = Temporal.Instant.from('2026-03-01T12:00:00Z');
+  liberaciones.length = 0;
   entitlements.invalidateAll();
   for (const coleccion of ['contracts', 'products', 'members', 'venues', 'auditLogs']) {
     await mongoose.connection.db?.collection(coleccion).deleteMany({});
@@ -713,6 +728,253 @@ describe('contratos inexistentes', () => {
   });
 });
 
+describe('congelamiento (§2.1.9)', () => {
+  /** Un socio con un pack activo, listo para congelar. */
+  async function conPackActivo(nombre: string, extra: Record<string, unknown> = {}) {
+    const centro = await centroConSocio(nombre);
+    const pack = await publicarPack(centro.cookie, centro.venueId, extra);
+    const contrato = await vender(centro.cookie, centro, pack.publicId);
+    await activar(centro.cookie, contrato.publicId);
+
+    return { ...centro, contractId: contrato.publicId, endsAt: contrato.endsAt };
+  }
+
+  const congelar = (cookie: string, contractId: string, body: unknown) =>
+    app.request(`/api/v1/contracts/${contractId}/freeze`, req(cookie, 'POST', body));
+
+  it('corre el vencimiento por los días declarados y deja el contrato congelado', async () => {
+    const centro = await conPackActivo('freeze');
+
+    const res = await congelar(centro.cookie, centro.contractId, {
+      days: 10,
+      reason: 'Vacaciones.',
+    });
+    const body = (await res.json()) as ContractBody;
+
+    expect(res.status).toBe(200);
+    expect(body.status).toBe('frozen');
+    // El pack vencía el 31/03: con 10 días congelados pasa al 10/04.
+    expect(body.endsAt?.slice(0, 10)).toBe('2026-04-10');
+  });
+
+  it('un contrato congelado no se puede usar', async () => {
+    const centro = await conPackActivo('freeze-no-usa');
+    await congelar(centro.cookie, centro.contractId, { days: 5 });
+
+    await expect(consumir(centro.organizationId, centro.memberId)).rejects.toThrow();
+  });
+
+  it('descongelar lo devuelve a activo sin volver a mover la fecha', async () => {
+    const centro = await conPackActivo('unfreeze');
+    const congelado = (await (
+      await congelar(centro.cookie, centro.contractId, { days: 10 })
+    ).json()) as ContractBody;
+
+    const res = await app.request(
+      `/api/v1/contracts/${centro.contractId}/unfreeze`,
+      req(centro.cookie, 'POST', {}),
+    );
+    const body = (await res.json()) as ContractBody;
+
+    /*
+     * La fecha se corrió al congelar, no al descongelar: si se corriera al
+     * final, el socio que se olvida de avisar que volvió tendría el pack parado
+     * para siempre.
+     */
+    expect(body.status).toBe('active');
+    expect(body.endsAt).toBe(congelado.endsAt);
+    expect((await consumir(centro.organizationId, centro.memberId)).creditsLeft).toBe(7);
+  });
+
+  it('respeta el tope anual del centro y dice cuántos días quedan', async () => {
+    const centro = await conPackActivo('freeze-tope');
+    // El default del centro son 30 días al año (§2.1.9).
+    await congelar(centro.cookie, centro.contractId, { days: 25 });
+    await app.request(
+      `/api/v1/contracts/${centro.contractId}/unfreeze`,
+      req(centro.cookie, 'POST', {}),
+    );
+
+    const res = await congelar(centro.cookie, centro.contractId, { days: 10 });
+    const body = (await res.json()) as ErrorBody;
+
+    expect(res.status).toBe(422);
+    expect(body.error.code).toBe('LP-CTRT-422-006');
+    expect(body.error.message).toContain('5');
+  });
+
+  it('un centro que baja el tope a 0 no habilita congelar', async () => {
+    const centro = await centroConSocio('freeze-apagado');
+    await app.request(
+      `/api/v1/venues/${centro.venueId}`,
+      req(centro.cookie, 'PATCH', { bookingPolicy: { maxFreezeDaysPerYear: 0 } }),
+    );
+    const pack = await publicarPack(centro.cookie, centro.venueId);
+    const contrato = await vender(centro.cookie, centro, pack.publicId);
+    await activar(centro.cookie, contrato.publicId);
+
+    const res = await congelar(centro.cookie, contrato.publicId, { days: 1 });
+
+    expect(res.status).toBe(422);
+  });
+
+  it('no se congela lo que no está activo', async () => {
+    const centro = await centroConSocio('freeze-pendiente');
+    const pack = await publicarPack(centro.cookie, centro.venueId);
+    const contrato = await vender(centro.cookie, centro, pack.publicId);
+
+    const res = await congelar(centro.cookie, contrato.publicId, { days: 5 });
+
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-CTRT-422-004');
+  });
+
+  it('deja el congelamiento en el AuditLog', async () => {
+    const centro = await conPackActivo('freeze-audit');
+
+    await congelar(centro.cookie, centro.contractId, { days: 7, reason: 'Lesión de rodilla.' });
+
+    const auditoria = await mongoose.connection.db
+      ?.collection('auditLogs')
+      .findOne<{ action: string; reason: string }>({ targetId: centro.contractId });
+
+    expect(auditoria?.action).toBe('contract.frozen');
+    expect(auditoria?.reason).toBe('Lesión de rodilla.');
+  });
+
+  it('libera las reservas futuras del socio y lo deja anotado', async () => {
+    const centro = await conPackActivo('freeze-reservas');
+
+    await congelar(centro.cookie, centro.contractId, { days: 5 });
+
+    // §2.1.9: al congelar se cancelan las futuras y se devuelven esos créditos.
+    // La devolución la hace Booking, que es quien sabe cuáles canceló.
+    expect(liberaciones).toEqual([
+      { contractId: centro.contractId, memberId: centro.memberId, reason: 'frozen' },
+    ]);
+
+    const auditoria = await mongoose.connection.db
+      ?.collection('auditLogs')
+      .findOne<{ after: { bookingsReleased: number } }>({ targetId: centro.contractId });
+
+    expect(auditoria?.after.bookingsReleased).toBe(RESERVAS_FUTURAS);
+  });
+});
+
+describe('jobs diarios (§10)', () => {
+  async function conPackActivo(nombre: string, extra: Record<string, unknown> = {}) {
+    const centro = await centroConSocio(nombre);
+    const pack = await publicarPack(centro.cookie, centro.venueId, extra);
+    const contrato = await vender(centro.cookie, centro, pack.publicId);
+    await activar(centro.cookie, contrato.publicId);
+
+    return { ...centro, contractId: contrato.publicId };
+  }
+
+  /** Corre el handler del job tal como lo correria el runner. */
+  const correrJob = async (name: string) => {
+    const job = modules.jobs.find((candidate) => candidate.name === name);
+    if (!job) throw new Error(`no existe el job ${name}`);
+
+    await job.handler();
+  };
+
+  const estadoDe = async (contractId: string) =>
+    (await mongoose.connection.db
+      ?.collection('contracts')
+      .findOne<{ status: string; lastExpiryNoticeDays: number | null }>({
+        publicId: contractId,
+      })) ?? null;
+
+  it('los dos jobs están declarados con su cron', () => {
+    expect(modules.jobs.map((job) => job.name)).toEqual([
+      'expireContracts',
+      'notifyExpiringContracts',
+    ]);
+  });
+
+  it('`expireContracts` pasa a `expired` los vencidos', async () => {
+    const centro = await conPackActivo('job-expira', { durationDays: 1 });
+
+    ahora = Temporal.Instant.from('2026-03-05T12:00:00Z');
+    await correrJob('expireContracts');
+
+    expect((await estadoDe(centro.contractId))?.status).toBe('expired');
+    // Vencer también libera las reservas futuras: la clase ya no se puede tomar.
+    expect(liberaciones).toEqual([
+      { contractId: centro.contractId, memberId: centro.memberId, reason: 'expired' },
+    ]);
+  });
+
+  it('no toca los que todavía no vencieron', async () => {
+    const centro = await conPackActivo('job-vigente', { durationDays: 30 });
+
+    await correrJob('expireContracts');
+
+    expect((await estadoDe(centro.contractId))?.status).toBe('active');
+  });
+
+  it('es idempotente: correrlo dos veces no cambia nada la segunda', async () => {
+    await conPackActivo('job-idempotente', { durationDays: 1 });
+    ahora = Temporal.Instant.from('2026-03-05T12:00:00Z');
+
+    expect(await modules.contracts.service.expireDueContracts()).toBe(1);
+    // El runner garantiza que no corran dos a la vez, no que no corran dos veces.
+    expect(await modules.contracts.service.expireDueContracts()).toBe(0);
+  });
+
+  it('expira los de todos los centros, cada uno en su contexto', async () => {
+    const uno = await conPackActivo('job-tenant-a', { durationDays: 1 });
+    const otro = await conPackActivo('job-tenant-b', { durationDays: 1 });
+
+    ahora = Temporal.Instant.from('2026-03-05T12:00:00Z');
+    await correrJob('expireContracts');
+
+    expect((await estadoDe(uno.contractId))?.status).toBe('expired');
+    expect((await estadoDe(otro.contractId))?.status).toBe('expired');
+  });
+
+  it('`notifyExpiring` avisa en los hitos 7, 3 y 1', async () => {
+    const centro = await conPackActivo('job-avisa', { durationDays: 30 });
+
+    // El pack vence el 31/03 a las 09:00 local. El hito de 7 días cae el 24/03.
+    ahora = Temporal.Instant.from('2026-03-24T13:00:00Z');
+    await correrJob('notifyExpiringContracts');
+
+    expect((await estadoDe(centro.contractId))?.lastExpiryNoticeDays).toBe(7);
+  });
+
+  it('no avisa dos veces por el mismo hito', async () => {
+    await conPackActivo('job-una-vez', { durationDays: 30 });
+    ahora = Temporal.Instant.from('2026-03-24T13:00:00Z');
+    await modules.contracts.service.notifyExpiringContracts();
+
+    // El aviso es un mail al socio: mandarlo dos veces por correr el job de
+    // nuevo es la clase de error que hace que el centro apague las
+    // notificaciones.
+    expect(await modules.contracts.service.notifyExpiringContracts()).toBe(0);
+  });
+
+  it('vuelve a avisar cuando cambia el hito', async () => {
+    const centro = await conPackActivo('job-hitos', { durationDays: 30 });
+
+    ahora = Temporal.Instant.from('2026-03-24T13:00:00Z');
+    await modules.contracts.service.notifyExpiringContracts();
+
+    ahora = Temporal.Instant.from('2026-03-28T13:00:00Z');
+    expect(await modules.contracts.service.notifyExpiringContracts()).toBe(1);
+    expect((await estadoDe(centro.contractId))?.lastExpiryNoticeDays).toBe(3);
+  });
+
+  it('los días que no son hito no avisan', async () => {
+    await conPackActivo('job-sin-hito', { durationDays: 30 });
+
+    ahora = Temporal.Instant.from('2026-03-26T13:00:00Z');
+
+    expect(await modules.contracts.service.notifyExpiringContracts()).toBe(0);
+  });
+});
+
 describe('aislamiento de tenant', () => {
   it('el atacante no ve ni toca los contratos del otro centro', async () => {
     const victima = await centroConSocio('ctr-victima');
@@ -763,7 +1025,7 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
       route.path.startsWith('/api/v1/contracts'),
     );
 
-    expect(rutas).toHaveLength(6);
+    expect(rutas).toHaveLength(8);
     for (const route of rutas) {
       expect(route.tenantScoped, `${route.method} ${route.path}`).toBe(true);
       expect(route.isolationFixture, `${route.method} ${route.path}`).toBeDefined();

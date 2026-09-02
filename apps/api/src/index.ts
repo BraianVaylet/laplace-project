@@ -9,7 +9,7 @@ import { createEntitlementsLoader } from './entitlements/middleware.js';
 import { createOrganizationPlanReader } from './entitlements/organization-plan-reader.js';
 import { createEventBus } from './events/bus.js';
 import { createJobRunner } from './jobs/runner.js';
-import { createModuleRoutes } from './modules/index.js';
+import { createModules } from './modules/index.js';
 import { loadEnv } from './config/env.js';
 import { createLogger } from './observability/logger.js';
 
@@ -42,25 +42,27 @@ async function main() {
   const events = createEventBus(logger);
   const entitlements = createEntitlementsLoader(createOrganizationPlanReader(db as Db));
 
+  const modules = createModules({
+    events,
+    entitlements,
+    logger,
+    /*
+     * El canje de un codigo suma al usuario a la organizacion del centro con rol
+     * `member`. El rol viaja acotado a proposito: el codigo da acceso de socio,
+     * nunca de staff.
+     */
+    memberships: {
+      add: async ({ userId, organizationId }) => {
+        await auth.api.addMember({ body: { userId, organizationId, role: 'member' } });
+      },
+    },
+  });
+
   const app = createApp({
     logger,
     corsOrigins: env.CORS_ORIGINS,
     auth,
-    modules: createModuleRoutes({
-      events,
-      entitlements,
-      logger,
-      /*
-       * El canje de un codigo suma al usuario a la organizacion del centro con
-       * rol `member`. El rol viaja acotado a proposito: el codigo da acceso de
-       * socio, nunca de staff.
-       */
-      memberships: {
-        add: async ({ userId, organizationId }) => {
-          await auth.api.addMember({ body: { userId, organizationId, role: 'member' } });
-        },
-      },
-    }),
+    modules: modules.routes,
     lockoutGuard: createLockoutGuard({ store: createMongoLockoutStore(db as Db) }),
     openapi: {
       version: '1.0.0',
@@ -69,8 +71,9 @@ async function main() {
     },
   });
 
-  // Los jobs de §10 se registran en sus modulos; el runner solo los programa.
+  // Los jobs de §10 los declara cada modulo; el runner solo los programa.
   const jobs = createJobRunner({ db: db as Db, logger, enabled: env.JOBS_ENABLED });
+  for (const job of modules.jobs) jobs.register(job);
   jobs.start();
 
   serve({ fetch: app.fetch, port: env.API_PORT }, (info) => {
