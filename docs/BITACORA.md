@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `booking`
 - **Tipo:** feature
-- **Commit/PR:** pendiente (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `8c3a162` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/bQrvQ9gC (F1-16) — movida a **Completadas**
 - **Qué cambió:** la fila es FIFO de verdad y se mueve sola. Cuando alguien cancela, el primero de
   la lista recibe el lugar guardado y quince minutos para confirmar; si no contesta, el job de cada
