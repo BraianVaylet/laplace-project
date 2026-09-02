@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `members`
 - **Tipo:** feature
-- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `4a792a5` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/B66fpRsh (F1-03) — movida a **Completadas**
 - **Qué cambió:** el staff da de alta y gestiona socios desde `/api/v1/members`, con máquina de
   estados, etiquetas, flags de mora y sanción, y notas internas. El límite del plan se aplica de
