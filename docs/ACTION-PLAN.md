@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     10 |
+| Fase 1 — MVP vendible   |       32 |          186 |     11 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -918,7 +918,7 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
     turno, y es donde aparecen las diferencias.
 - **ya cubierto en F1-10:** los reembolsos con motivo obligatorio, tope y `AuditLog`.
 
-## [ ] F1-12 · Schedule: plantillas y materialización de sesiones
+## [x] F1-12 · Schedule: plantillas y materialización de sesiones
 
 - **module:** schedule
 - **description:** La agenda del centro (§2.1.5.a): plantillas recurrentes tipo RRULE y sesiones
@@ -946,11 +946,24 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **error-codes:** `LP-SCHD-422-004` (recurrencia inválida), `LP-SCHD-409-003` (sala ocupada)
 - **data-model-impact:** `ClassTemplate` y `ClassSession` de §5.2.2. Índice
   `{ tenantId, venueId, startAt }`.
-- **hereda una deuda de F1-02:** conectar el puerto `FutureSessionCounter` de Rooms con el contador
-  real de sesiones (`apps/api/src/modules/index.ts`). Hasta que se haga, el bloqueo de borrado de
-  una sala con clases programadas está escrito y testeado pero nunca se dispara, porque el default
-  responde 0. También hay que usar `resolveSessionCapacity` del dominio de Rooms para heredar el
-  cupo de la sala (§2.1.5.b).
+- **deuda de F1-02, saldada:** el puerto `FutureSessionCounter` de Rooms está conectado al contador
+  real, y hay tres tests que lo verifican de punta a punta. La herencia de capacidad de la sala
+  también quedó: la sesión materializada toma el cupo de la sala salvo que la plantilla declare el
+  suyo.
+- **decisiones de diseño:**
+  - La recurrencia se modela **nativa**, no como un string RRULE: es el subconjunto
+    `FREQ=WEEKLY;BYDAY;BYHOUR` de RFC 5545, que es la forma que de verdad tiene una grilla de
+    clases. El expansor no parsea nada y el formulario del SMU son seis campos, no una gramática.
+    Ensancharla (mensual, por día del mes) es aditivo.
+  - El job es **idempotente por doble vía**: consulta los inicios ya materializados antes de
+    escribir, y un índice único `{ tenantId, templateId, startAt }` (migración
+    `20260902150000`) cierra la ventana entre esa consulta y el `insert`.
+  - Archivar una plantilla **no borra** las clases ya materializadas: la del jueves ya está
+    publicada y puede tener gente anotada. Para bajarla hay que cancelarla, que avisa y devuelve
+    créditos (F1-13).
+  - La vista por día, semana y mes es **un solo endpoint por rango**: la agenda se pide entre dos
+    instantes y el front decide cómo la dibuja. La vista horizontal por sala de §2.1.5.f es
+    presentación, y entra con el DFSM.
 
 ## [ ] F1-13 · Schedule: edición, excepciones y cancelación de clase
 

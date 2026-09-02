@@ -9,6 +9,7 @@ import { createMembersModule, type OrganizationMembershipPort } from './members/
 import { createBillingModule } from './billing/index.js';
 import { createContractsModule, type FutureBookingReleaser } from './contracts/index.js';
 import { createProductsModule } from './products/index.js';
+import { createScheduleModule } from './schedule/index.js';
 import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
 import { createVenuesModule } from './venues/index.js';
 
@@ -54,6 +55,22 @@ export function createModules(deps: ModuleDeps) {
   const rooms = createRoomsModule({
     ...deps,
     venues: { exists: (venueId) => venues.service.exists(venueId) },
+    /*
+     * Salda la deuda de F1-02: el bloqueo de borrado de una sala con clases
+     * programadas ya no responde 0, lo contesta Schedule de verdad.
+     *
+     * Un `sessions` explicito gana: es el que le deja a un test probar la logica
+     * de Rooms sin montar la agenda entera.
+     */
+    sessions: deps.sessions ?? {
+      countFutureSessions: (roomId) => schedule.service.countFutureSessions(roomId),
+    },
+  });
+
+  const schedule = createScheduleModule({
+    ...deps,
+    rooms: { capacityOf: (roomId) => rooms.service.capacityOf(roomId) },
+    venues: { timeZoneOf: (venueId) => venues.service.timeZoneOf(venueId) },
   });
 
   const members = createMembersModule(deps);
@@ -119,11 +136,12 @@ export function createModules(deps: ModuleDeps) {
   routes.route('/', products.routes);
   routes.route('/', contracts.routes);
   routes.route('/', billing.routes);
+  routes.route('/', schedule.routes);
 
   /** Todo lo que el runner tiene que programar (§10). */
-  const jobs = [...contracts.jobs, ...billing.jobs];
+  const jobs = [...contracts.jobs, ...billing.jobs, ...schedule.jobs];
 
-  return { routes, jobs, venues, rooms, members, products, contracts, billing };
+  return { routes, jobs, venues, rooms, members, products, contracts, billing, schedule };
 }
 
 /**

@@ -23,6 +23,61 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-02 — F1-12: la agenda y la materialización de clases
+
+- **Módulo:** `schedule`
+- **Tipo:** feature
+- **Commit/PR:** `COMMIT_SHA` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/wHIRoAUH (F1-12) — movida a **Completadas**
+- **Qué cambió:** el centro define plantillas recurrentes y un job diario materializa las clases de
+  los próximos 60 días. También se pueden cargar clases sueltas, y dos clases no pueden ocupar la
+  misma sala a la misma hora.
+- **Por qué:** es el módulo del que cuelga el corazón del producto. Sin grilla no hay reserva
+  (F1-14), ni lista de clase (F1-18), ni check-in (F1-19).
+- **Impacto:** colecciones `classTemplates` y `classSessions` · ocho rutas nuevas · un job nuevo ·
+  **migración nueva** (`20260902150000-session-materialization-unique.cjs`) · dos eventos.
+- **Pendiente:** la edición "solo esta / esta y futuras" y la cancelación de clase son F1-13.
+
+**Decisiones:**
+
+- **La recurrencia se modela nativa, no como un string RRULE.** Es el subconjunto
+  `FREQ=WEEKLY;BYDAY;BYHOUR` de RFC 5545, que es la forma que de verdad tiene una grilla de clases:
+  "lunes a viernes a las 7:00". El expansor no tiene que parsear nada y el formulario del SMU son
+  seis campos en vez de una gramática. Ensancharla más adelante —mensual, por día del mes— es
+  aditivo: se suma un `freq` y el expansor crece con un caso.
+- **La clase de las 7:00 es a las 7:00 todo el año.** El expansor recorre día por día en el
+  calendario del centro y arma cada fecha con su hora local. Hay cuatro tests contra Santiago de
+  Chile, que sí cambia de hora: expandiendo con sumas de 24 h, la clase del lunes siguiente al
+  cambio caería a las 8:00 y el socio se encontraría el gimnasio cerrado. Y uno que verifica que la
+  hora que **no existe** el día del salto se corre hacia adelante en vez de perderse.
+- **El job es idempotente por doble vía.** Consulta los inicios ya materializados antes de escribir,
+  y un índice único `{ tenantId, templateId, startAt }` cierra la ventana entre esa consulta y el
+  `insert`. Sin el índice, dos instancias del runner arrancando a la vez duplicarían la grilla y el
+  socio la vería dos veces. El índice es **parcial** sobre `templateId`, porque una clase suelta no
+  tiene plantilla y con un `sparse` compuesto todas colisionarían en `null` — la misma trampa que
+  ya documentaba F0-10.
+- **El intervalo se cuenta desde la vigencia, no desde hoy.** Con "una semana sí y una no", correr
+  el job un mes después no puede correr la grilla media semana.
+- **El job no materializa hacia atrás.** Una clase cuya hora ya pasó hoy no se crea: nadie podría
+  reservarla, y aparecería en la grilla como un hueco raro.
+- **Archivar una plantilla no borra las clases ya materializadas.** La del jueves ya está publicada
+  y puede tener gente anotada; bajarla es cancelarla, que avisa y devuelve créditos (F1-13).
+- **Los bordes que se tocan no chocan.** La clase de 10 a 11 y la de 11 a 12 conviven en la misma
+  sala: es la grilla normal de un box, y tratarlas como colisión haría el producto inusable.
+- **El error de colisión dice cuál choca y a qué hora.** Sin eso, el SMU tiene que salir a buscarla
+  en la grilla.
+- **La agenda es un solo endpoint por rango.** Día, semana y mes son la misma consulta con otras
+  fechas; cómo se dibuja es del front.
+
+**Deuda de F1-02, saldada:** el puerto `FutureSessionCounter` de Rooms ahora lo contesta Schedule.
+Una sala con clases programadas ya no se puede borrar, una sin ellas sí, y las clases que ya pasaron
+no bloquean — los tres casos tienen test. La herencia de capacidad de §2.1.5.b también quedó.
+
+**Verificación:** 1482 tests verdes (1092 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido.
+
+---
+
 ## 2026-09-02 — F1-11: mora automática y caja diaria
 
 - **Módulo:** `billing`

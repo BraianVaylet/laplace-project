@@ -46,6 +46,18 @@ export interface DomainEvents {
     to: string;
   };
 
+  /** Clase publicada en la grilla. La escuchan Notifications y Metrics. */
+  'session.scheduled': {
+    sessionId: string;
+    venueId: string;
+    startAt: string;
+  };
+  'session.status_changed': {
+    sessionId: string;
+    from: string;
+    to: string;
+  };
+
   'booking.created': {
     bookingId: string;
     sessionId: string;
