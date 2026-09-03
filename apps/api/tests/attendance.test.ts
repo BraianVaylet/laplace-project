@@ -29,6 +29,7 @@ const migrations = [
   require('../../../migrations/20260902150000-session-materialization-unique.cjs'),
   require('../../../migrations/20260902160000-venue-closures.cjs'),
   require('../../../migrations/20260902170000-booking-unique.cjs'),
+  require('../../../migrations/20260903120000-check-in-tokens.cjs'),
 ] as Array<{ up(db: Db): Promise<void> }>;
 
 let replSet: MongoMemoryReplSet;
@@ -232,7 +233,11 @@ beforeAll(async () => {
     entitlements,
     logger,
     now: () => ahora,
-    memberships: { add: () => Promise.resolve() },
+    memberships: {
+      add: async ({ userId, organizationId }) => {
+        await auth.api.addMember({ body: { userId, organizationId, role: 'member' } });
+      },
+    },
   });
 
   app = createApp({
@@ -261,10 +266,79 @@ beforeEach(async () => {
     'charges',
     'rooms',
     'venues',
+    'checkInTokens',
   ]) {
     await mongoose.connection.db?.collection(coleccion).deleteMany({});
   }
 });
+
+/**
+ * Un socio con sesión propia: canjea un código de invitación y queda ligado a
+ * su ficha. Es lo que necesita el QR — el token sale de la sesión de quien lo
+ * pide, nunca de un `memberId` en el cuerpo (ADR-000).
+ */
+async function atletaDe(centro: Centro, nombre: string) {
+  const codigo = await post<{ code: string }>(centro.cookie, '/api/v1/invite-codes', {
+    venueId: centro.venueId,
+    maxUses: 5,
+    expiresAt: '2026-12-31T00:00:00Z',
+  });
+
+  const cookie = await signUp(`${nombre}-${++creados}@laplace.test`);
+  const canje = await post<{ memberId: string; organizationId: string }>(
+    cookie,
+    '/api/v1/invite-codes/redeem',
+    { code: codigo.code, firstName: nombre, lastName: 'Socio' },
+  );
+
+  await app.request(
+    '/api/v1/auth/organization/set-active',
+    req(cookie, 'POST', { organizationId: canje.organizationId }),
+  );
+
+  return { cookie, memberId: canje.memberId };
+}
+
+/** Le vende un pack al socio y activa el contrato. Devuelve el `contractId`. */
+async function darPack(centro: Centro, memberId: string): Promise<string> {
+  const contrato = await post<{ publicId: string }>(centro.cookie, '/api/v1/contracts', {
+    memberId,
+    productId: centro.productId,
+    venueId: centro.venueId,
+  });
+  await post(centro.cookie, `/api/v1/contracts/${contrato.publicId}/activate`, {});
+
+  return contrato.publicId;
+}
+
+const contratoEnBase = async (contractId: string) =>
+  mongoose.connection.db
+    ?.collection('contracts')
+    .findOne<{ creditsUsed: number }>({ publicId: contractId });
+
+const claseEnBase2 = async (sessionId: string) =>
+  mongoose.connection.db
+    ?.collection('classSessions')
+    .findOne<{ bookedCount: number }>({ publicId: sessionId });
+
+const pedirQr = (cookie: string) => app.request('/api/v1/check-in-tokens', req(cookie, 'POST', {}));
+
+const canjearQr = (centro: Centro, body: unknown) =>
+  app.request(
+    '/api/v1/check-in-tokens/redeem',
+    req(centro.cookie, 'POST', body, { 'Idempotency-Key': nuevaClave() }),
+  );
+
+const walkIn = (
+  centro: Centro,
+  memberId: string,
+  sessionId = centro.sessionId,
+  key = nuevaClave(),
+) =>
+  app.request(
+    `/api/v1/sessions/${sessionId}/walk-in`,
+    req(centro.cookie, 'POST', { memberId }, { 'Idempotency-Key': key }),
+  );
 
 describe('la lista de clase del coach (§2.1.18)', () => {
   it('trae inscriptos, presentes y lista de espera en una sola llamada', async () => {
@@ -559,6 +633,266 @@ describe('"todos presentes" de un toque', () => {
   });
 });
 
+describe('el QR de la WAFM (§2.1.18)', () => {
+  it('dura 30 segundos y llega en 1 tap desde la sesión del socio', async () => {
+    const centro = await centroListo('qr-emitir');
+    const socio = await atletaDe(centro, 'Micaela');
+
+    const res = await pedirQr(socio.cookie);
+    const body = (await res.json()) as { token: string; expiresInSeconds: number };
+
+    expect(res.status).toBe(201);
+    expect(body.token.length).toBeGreaterThanOrEqual(16);
+    expect(body.expiresInSeconds).toBe(30);
+  });
+
+  it('sin ficha en el centro no hay QR que emitir', async () => {
+    const centro = await centroListo('qr-sin-ficha');
+    const cookie = await signUp(`sin-ficha-qr-${++creados}@laplace.test`);
+    const sesion = await auth.api.getSession({ headers: new Headers({ cookie }) });
+    await auth.api.addMember({
+      body: {
+        userId: sesion?.user.id as string,
+        organizationId: centro.organizationId,
+        role: 'member',
+      },
+    });
+    await app.request(
+      '/api/v1/auth/organization/set-active',
+      req(cookie, 'POST', { organizationId: centro.organizationId }),
+    );
+
+    const res = await pedirQr(cookie);
+
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-MEMB-404-003');
+  });
+
+  it('escaneado dentro de la ventana, registra el check-in con `method: self`', async () => {
+    const centro = await centroListo('qr-canje');
+    const socio = await atletaDe(centro, 'Micaela');
+    await darPack(centro, socio.memberId);
+    await reservar(centro, socio.memberId);
+    enLaPuerta();
+
+    const token = ((await (await pedirQr(socio.cookie)).json()) as { token: string }).token;
+    const res = await canjearQr(centro, { token });
+    const body = (await res.json()) as { status: string; checkInMethod: string };
+
+    expect(res.status).toBe(200);
+    expect(body.status).toBe('checked_in');
+    expect(body.checkInMethod).toBe('self');
+  });
+
+  it('resuelve la clase sin que la tablet tenga que saber cuál es', async () => {
+    // La tablet de la puerta no manda `sessionId`: el backend elige la reserva
+    // cuya ventana de check-in está abierta ahora.
+    const centro = await centroListo('qr-sin-sesion');
+    const socio = await atletaDe(centro, 'Micaela');
+    await darPack(centro, socio.memberId);
+    await reservar(centro, socio.memberId);
+    enLaPuerta();
+
+    const token = ((await (await pedirQr(socio.cookie)).json()) as { token: string }).token;
+    const res = await canjearQr(centro, { token });
+
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { sessionId: string }).sessionId).toBe(centro.sessionId);
+  });
+
+  it('vencido, responde LP-ATTD-422-004 y no marca nada', async () => {
+    const centro = await centroListo('qr-vencido');
+    const socio = await atletaDe(centro, 'Micaela');
+    await darPack(centro, socio.memberId);
+    const reserva = await reservar(centro, socio.memberId);
+
+    const token = ((await (await pedirQr(socio.cookie)).json()) as { token: string }).token;
+    // 30 segundos de vida; la puerta lo escanea un minuto después.
+    ahora = Temporal.Instant.from('2026-03-03T09:46:00Z');
+    const res = await canjearQr(centro, { token });
+
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-ATTD-422-004');
+
+    const enBase = await mongoose.connection.db
+      ?.collection('bookings')
+      .findOne<{ status: string }>({ publicId: reserva.booking.publicId });
+    expect(enBase?.status).toBe('booked');
+  });
+
+  it('🔴 ya usado, el segundo escaneo también falla: la captura no sirve dos veces', async () => {
+    const centro = await centroListo('qr-reusado');
+    const socio = await atletaDe(centro, 'Micaela');
+    await darPack(centro, socio.memberId);
+    await reservar(centro, socio.memberId);
+    enLaPuerta();
+    const token = ((await (await pedirQr(socio.cookie)).json()) as { token: string }).token;
+
+    const primero = await canjearQr(centro, { token });
+    const segundo = await canjearQr(centro, { token });
+
+    expect(primero.status).toBe(200);
+    expect(segundo.status).toBe(422);
+    expect(((await segundo.json()) as ErrorBody).error.code).toBe('LP-ATTD-422-004');
+  });
+
+  it('un token que no existe da el mismo error que uno vencido', async () => {
+    const centro = await centroListo('qr-inexistente');
+    enLaPuerta();
+
+    const res = await canjearQr(centro, { token: 'esto-no-es-un-token-real-de-nadie' });
+
+    // Distinguir "vencido" de "inexistente" le diría a quien prueba códigos
+    // ajenos cuál de los dos casi funcionó.
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-ATTD-422-004');
+  });
+
+  it('sin reserva para esta hora, LP-ATTD-404-005: que se anote como walk-in', async () => {
+    const centro = await centroListo('qr-sin-reserva');
+    const socio = await atletaDe(centro, 'Micaela');
+    enLaPuerta();
+
+    const token = ((await (await pedirQr(socio.cookie)).json()) as { token: string }).token;
+    const res = await canjearQr(centro, { token });
+
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-ATTD-404-005');
+  });
+
+  it('un token de otro centro no canjea nada acá', async () => {
+    const victima = await centroListo('qr-tenant-victima');
+    const socio = await atletaDe(victima, 'Micaela');
+    await darPack(victima, socio.memberId);
+    await reservar(victima, socio.memberId);
+    const token = ((await (await pedirQr(socio.cookie)).json()) as { token: string }).token;
+
+    const atacante = await centroListo('qr-tenant-atacante');
+    enLaPuerta();
+    const res = await canjearQr(atacante, { token });
+
+    expect(res.status).toBe(422);
+  });
+});
+
+describe('walk-in: el único check-in que descuenta el crédito al entrar (§2.1.9)', () => {
+  it('crea la reserva ya marcada presente, sin pasar por `booked`', async () => {
+    const centro = await centroListo('walkin-ok');
+    const socio = await post<{ publicId: string }>(centro.cookie, '/api/v1/members', {
+      firstName: 'Walk',
+      lastName: 'In',
+      venueIds: [centro.venueId],
+    });
+    await darPack(centro, socio.publicId);
+    enLaPuerta();
+
+    const res = await walkIn(centro, socio.publicId);
+    const body = (await res.json()) as BookingResult;
+
+    expect(res.status).toBe(201);
+    expect(body.booking.status).toBe('checked_in');
+  });
+
+  it('🔴 el crédito se descuenta en el check-in, no antes', async () => {
+    const centro = await centroListo('walkin-credito');
+    const socio = await post<{ publicId: string }>(centro.cookie, '/api/v1/members', {
+      firstName: 'Walk',
+      lastName: 'In',
+      venueIds: [centro.venueId],
+    });
+    const contractId = await darPack(centro, socio.publicId);
+    expect((await contratoEnBase(contractId))?.creditsUsed).toBe(0);
+
+    enLaPuerta();
+    await walkIn(centro, socio.publicId);
+
+    expect((await contratoEnBase(contractId))?.creditsUsed).toBe(1);
+  });
+
+  it('fuera de la ventana de check-in no entra', async () => {
+    const centro = await centroListo('walkin-ventana');
+    const socio = await post<{ publicId: string }>(centro.cookie, '/api/v1/members', {
+      firstName: 'Walk',
+      lastName: 'In',
+      venueIds: [centro.venueId],
+    });
+    await darPack(centro, socio.publicId);
+
+    const res = await walkIn(centro, socio.publicId);
+
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-ATTD-422-002');
+  });
+
+  it('la clase completa no admite un walk-in más', async () => {
+    const centro = await centroListo('walkin-lleno', { capacity: 1 });
+    await anotado(centro, 'YaAdentro');
+    const socio = await post<{ publicId: string }>(centro.cookie, '/api/v1/members', {
+      firstName: 'Walk',
+      lastName: 'In',
+      venueIds: [centro.venueId],
+    });
+    await darPack(centro, socio.publicId);
+    enLaPuerta();
+
+    const res = await walkIn(centro, socio.publicId);
+
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-BOOK-409-002');
+  });
+
+  it('quien ya tiene reserva no se duplica: se le marca el ingreso, no un walk-in', async () => {
+    const centro = await centroListo('walkin-ya-reservado');
+    const yaReservado = await anotado(centro, 'YaReservado');
+    enLaPuerta();
+
+    const res = await walkIn(centro, yaReservado.memberId);
+
+    expect(res.status).toBe(409);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-BOOK-409-001');
+  });
+
+  it('§5.0: la misma clave de idempotencia no crea un segundo ingreso', async () => {
+    const centro = await centroListo('walkin-idempotente');
+    const socio = await post<{ publicId: string }>(centro.cookie, '/api/v1/members', {
+      firstName: 'Walk',
+      lastName: 'In',
+      venueIds: [centro.venueId],
+    });
+    await darPack(centro, socio.publicId);
+    enLaPuerta();
+    const clave = nuevaClave();
+
+    const primero = await walkIn(centro, socio.publicId, centro.sessionId, clave);
+    const segundo = await walkIn(centro, socio.publicId, centro.sessionId, clave);
+    const [cuerpo1, cuerpo2] = await Promise.all([
+      primero.json() as Promise<BookingResult>,
+      segundo.json() as Promise<BookingResult>,
+    ]);
+
+    expect(cuerpo1.booking.publicId).toBe(cuerpo2.booking.publicId);
+    const cuantas = await mongoose.connection.db
+      ?.collection('bookings')
+      .countDocuments({ memberId: socio.publicId });
+    expect(cuantas).toBe(1);
+  });
+
+  it('sin contrato válido no entra, y no le cobra a nadie', async () => {
+    const centro = await centroListo('walkin-sin-pack');
+    const socio = await post<{ publicId: string }>(centro.cookie, '/api/v1/members', {
+      firstName: 'Sin',
+      lastName: 'Pack',
+      venueIds: [centro.venueId],
+    });
+    enLaPuerta();
+
+    const res = await walkIn(centro, socio.publicId);
+
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect((await claseEnBase2(centro.sessionId))?.bookedCount).toBe(0);
+  });
+});
+
 describe('aislamiento de tenant', () => {
   it('el atacante no ve la lista de una clase de otro centro', async () => {
     const victima = await centroListo('attd-victima');
@@ -585,13 +919,18 @@ describe('aislamiento de tenant', () => {
   });
 });
 
-describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
-  it('las tres rutas traen su fixture de ataque', () => {
-    const rutas = allRegisteredRoutes().filter(
-      (route) => route.path.includes('/roster') || route.path.includes('check-in'),
-    );
+/** Las seis rutas de Attendance: lista, check-in individual y masivo, QR y walk-in. */
+const esDeAttendance = (path: string) =>
+  path.includes('/roster') ||
+  path.includes('check-in') ||
+  path.includes('check-in-tokens') ||
+  path.endsWith('/walk-in');
 
-    expect(rutas).toHaveLength(3);
+describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
+  it('las seis rutas traen su fixture de ataque', () => {
+    const rutas = allRegisteredRoutes().filter((route) => esDeAttendance(route.path));
+
+    expect(rutas).toHaveLength(6);
     for (const route of rutas) {
       expect(route.tenantScoped, `${route.method} ${route.path}`).toBe(true);
       expect(route.isolationFixture, `${route.method} ${route.path}`).toBeDefined();
@@ -603,8 +942,7 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
     const victima = await nuevoCentro('attd-fixtures-victima');
 
     for (const route of allRegisteredRoutes()) {
-      const propia = route.path.includes('/roster') || route.path.includes('check-in');
-      if (!propia || !route.isolationFixture) continue;
+      if (!esDeAttendance(route.path) || !route.isolationFixture) continue;
 
       const attack = await route.isolationFixture({ victimTenantId: victima.organizationId });
       const res = await app.request(attack.path, {

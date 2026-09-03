@@ -57,3 +57,13 @@ export {
   type UpdateController,
   type UpdateState,
 } from './pwa/update.js';
+
+export {
+  createOfflineQueue,
+  localStorageQueue,
+  type FlushResult,
+  type OfflineQueue,
+  type OfflineQueueOptions,
+  type OfflineQueueStorage,
+  type QueuedRequest,
+} from './pwa/offline-queue.js';

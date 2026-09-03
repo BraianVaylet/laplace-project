@@ -1,14 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { App } from './App.js';
+import { Home } from './Home.js';
+import { Shell } from './Shell.js';
 
 /**
  * Shell de la WAFM (§5.1.3). Mobile first: la navegacion va abajo en el
  * telefono, que es donde llega el pulgar.
  */
+function renderShell() {
+  return render(
+    <Shell>
+      <Home />
+    </Shell>,
+  );
+}
+
 describe('shell de la WAFM', () => {
   it('tiene header y navegacion', () => {
-    render(<App />);
+    renderShell();
 
     expect(screen.getByRole('banner')).toBeDefined();
     expect(
@@ -17,7 +26,7 @@ describe('shell de la WAFM', () => {
   });
 
   it('la navegacion existe dos veces: bottom nav en mobile, barra superior desde 768px', () => {
-    render(<App />);
+    renderShell();
 
     // Las dos estan en el DOM y CSS decide cual se ve. Es lo que permite cumplir
     // a la vez lo que pide §5.1.3 y lo que recomienda su `[+]`.
@@ -25,13 +34,13 @@ describe('shell de la WAFM', () => {
   });
 
   it('Mi QR esta en la navegacion: es lo que abre la puerta, a 1 tap', () => {
-    render(<App />);
+    renderShell();
 
     expect(screen.getAllByRole('link', { name: 'Mi QR' }).length).toBeGreaterThan(0);
   });
 
   it('estan las secciones del socio', () => {
-    render(<App />);
+    renderShell();
 
     for (const label of ['Inicio', 'Horario', 'Mis packs', 'Mi QR', 'Perfil']) {
       expect(screen.getAllByRole('link', { name: label }).length, label).toBeGreaterThan(0);
@@ -39,7 +48,7 @@ describe('shell de la WAFM', () => {
   });
 
   it('sin reservas, dice que hacer', () => {
-    render(<App />);
+    renderShell();
 
     expect(screen.getByRole('button', { name: 'Ver horario' })).toBeDefined();
   });

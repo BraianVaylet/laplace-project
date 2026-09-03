@@ -100,6 +100,21 @@ export class BookingRepository extends TenantRepository<BookingDoc> {
   }
 
   /**
+   * Las reservas del socio que todavia esperan su check-in.
+   *
+   * Es lo que necesita el QR: el token identifica a la persona, no a la clase,
+   * asi que hay que encontrarle la reserva de la clase que esta por empezar.
+   */
+  async awaitingCheckInOfMember(memberId: string, limit = 20): Promise<BookingDoc[]> {
+    return BookingModel.find(this.scope({ memberId, status: 'booked' } as FilterQuery<BookingDoc>))
+      .sort({ bookedAt: -1 })
+      .limit(limit)
+      .setOptions(sessionOption())
+      .lean<BookingDoc[]>()
+      .exec();
+  }
+
+  /**
    * Las faltas del socio dentro de la ventana movil (§2.1.5.d).
    *
    * Se cuentan las reservas en `no_show` y no un contador guardado: un contador

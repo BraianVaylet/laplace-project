@@ -78,6 +78,40 @@ export const checkInResultSchema = z.object({
 export type CheckInResult = z.infer<typeof checkInResultSchema>;
 
 /**
+ * El QR del socio (§2.1.18).
+ *
+ * Vale **30 segundos y un solo uso**: la captura de pantalla que se comparte por
+ * WhatsApp no tiene que servir para entrar. La app lo renueva sola mientras la
+ * pantalla está abierta.
+ */
+export const qrTokenSchema = z.object({
+  token: z.string(),
+  expiresAt: z.string(),
+  expiresInSeconds: z.number().int(),
+});
+
+export type QrToken = z.infer<typeof qrTokenSchema>;
+
+export const redeemQrSchema = z.object({
+  token: z.string().min(16, 'Ese código no parece un QR de Laplace.'),
+  /**
+   * La clase, si la tablet la sabe. Sin esto la resuelve el backend: pedirle a
+   * la puerta que sepa qué clase corre ahora sería reconfigurarla cada vez que
+   * cambia el horario.
+   */
+  sessionId: z.string().optional(),
+});
+
+export type RedeemQrInput = z.infer<typeof redeemQrSchema>;
+
+/** El walk-in: entra sin reserva y el crédito se descuenta acá (§2.1.9). */
+export const walkInSchema = z.object({
+  memberId: z.string().min(1, 'Elegí a quién estás registrando.'),
+});
+
+export type WalkInInput = z.infer<typeof walkInSchema>;
+
+/**
  * El resultado de marcar a todos presentes de un toque.
  *
  * Los que no entraron vienen con su motivo: si el coach toca "todos" y dos

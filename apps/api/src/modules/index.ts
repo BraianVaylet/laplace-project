@@ -222,8 +222,11 @@ export function createModules(deps: ModuleDeps) {
       },
       ofSession: async (sessionId) =>
         (await booking.service.ofSession(sessionId)).map(toAttendanceBooking),
+      awaitingCheckInOf: async (memberId) =>
+        (await booking.service.awaitingCheckInOf(memberId)).map(toAttendanceBooking),
       markCheckedIn: async (bookingId, data) =>
         toAttendanceBooking(await booking.service.markCheckedIn(bookingId, data)),
+      createWalkIn: (data) => booking.service.walkIn(data),
     },
     sessions: {
       find: async (sessionId) => {
@@ -254,6 +257,7 @@ export function createModules(deps: ModuleDeps) {
     venues: {
       policyFor: (venueId, categoryId) => venues.service.policyOf(venueId, categoryId),
     },
+    resolveMember: (userId) => members.service.findIdByUserId(userId),
     seedVictim: async (victimTenantId) => ({
       sessionId: (await schedule.seedVictim(victimTenantId)).sessionId,
       bookingId: await booking.seedVictim(victimTenantId),

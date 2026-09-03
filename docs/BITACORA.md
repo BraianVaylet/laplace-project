@@ -23,6 +23,60 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-03 — F1-19: QR con token rotativo y walk-in
+
+- **Módulo:** `attendance` · `booking` · `wafm` · `dfsm`
+- **Tipo:** feature
+- **Commit/PR:** pendiente (rama `feat/phase-1-mvp`)
+- **Trello:** F1-19 — movida a **Completadas**
+- **Qué cambió:** el socio tiene "Mi QR" a un toque desde el home de la WAFM: un código que se
+  renueva solo cada 30 segundos y se muestra en la tablet de la puerta para entrar. La tablet no
+  lee cámara — es un lector de hardware que "escribe" el código, como en cualquier kiosko de
+  retail — y si se queda sin red, encola el escaneo local y lo sincroniza solo al volver la
+  conexión. El mostrador puede registrar a alguien que llegó sin reserva (walk-in): ahí, y solo
+  ahí, el crédito se descuenta en el check-in y no al reservar.
+- **Por qué:** es el camino de entrada que usa la mayoría de los socios en el día a día (§2.1.18),
+  y el WiFi de un gimnasio es el peor lugar del mundo para depender de la conexión.
+- **Impacto:** colección `checkInTokens` nueva, con **migración** (`20260903120000`) que le pone
+  TTL — el documento se borra solo cuando vence — y único por `{tenantId, tokenHash}` para que el
+  canje sea de un solo uso incluso con dos escaneos simultáneos (sin filtro parcial: a diferencia
+  de `bookings` o `payments`, acá `tokenHash` está en todas las filas, nunca falta) · tres rutas
+  (`POST /check-in-tokens`, `POST /check-in-tokens/redeem`, `POST /sessions/:id/walk-in`) ·
+  `createOfflineQueue` nuevo en `@laplace/client`, reusable por cualquier pantalla que no pueda
+  perder lo que el usuario ya hizo · la WAFM estrena router y su primera pantalla real · el DFSM
+  suma la pantalla de kiosko, fuera del chrome del coach.
+- **Pendiente:** el waiver se sigue pidiendo por el puerto `WaiverGate`, que hasta F1-20 contesta
+  que está todo firmado.
+
+### El QR guarda el hash, nunca el código
+
+El documento de `checkInTokens` vive 30 segundos y se emite uno cada vez que alguien abre su QR,
+pero una colección con los códigos en claro sería una colección de llaves de la puerta — y el TTL
+de Mongo corre cada 60 segundos, así que un documento puede sobrevivir hasta un minuto a su propio
+vencimiento. Lo que valida el canje no es que el documento siga existiendo: es que
+`assertTokenUsable` compare el vencimiento guardado contra el reloj. El índice es higiene de la
+colección, no la regla de negocio.
+
+### La cola offline encola antes de intentar mandar
+
+Si encolara solo después de que la primera mandada fallara, un corte de batería o de red justo en
+el medio del primer intento perdería el escaneo sin dejar rastro. Encolando primero, lo peor que
+puede pasar es un reintento — y como la clave de idempotencia se fija al encolar y no al mandar,
+el reintento es el mismo pedido, no uno nuevo. Vive en `@laplace/client` y no en el kiosko porque
+cualquier pantalla de Laplace que no pueda darse el lujo de perder lo que el usuario ya hizo la
+puede reusar.
+
+### Verificado en un navegador, no solo en jsdom
+
+Las dos pantallas nuevas se probaron contra servers de desarrollo reales (se agregó
+`.claude/launch.json`): el QR de la WAFM pasa de cargando a un estado de error legible cuando no
+hay backend, y el kiosko del DFSM encola de verdad en `localStorage` y muestra "1 escaneo esperando
+para sincronizar" cuando se le corta la red. De paso apareció un bug preexistente, ajeno a esta
+tarea — la utilidad `hidden` de Tailwind no genera CSS en este build, así que el toggle de nav
+mobile/desktop de `MobileShell` no esconde nada — quedó anotado como tarea aparte, no se tocó acá.
+
+---
+
 ## 2026-09-03 — F1-18: check-in manual y lista de clase del coach
 
 - **Módulo:** `attendance` (nuevo) · `dfsm`

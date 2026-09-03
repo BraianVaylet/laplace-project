@@ -21,6 +21,7 @@ export const ID_PREFIXES = {
   classSession: 'ses',
   venueClosure: 'cls',
   booking: 'bkg',
+  checkInToken: 'qrt',
   exercise: 'exr',
   planning: 'pln',
   result: 'rsl',

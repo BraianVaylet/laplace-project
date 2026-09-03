@@ -15,6 +15,11 @@ const require = createRequire(import.meta.url);
 const closures = require('../../../migrations/20260902160000-venue-closures.cjs') as {
   COLLECTIONS: Record<string, string>;
 };
+const tokens = require('../../../migrations/20260903120000-check-in-tokens.cjs') as {
+  COLLECTIONS: Record<string, string>;
+  up(db: Db): Promise<void>;
+  INDEXES: Array<[string, Record<string, number>, Record<string, unknown>]>;
+};
 const migration = require('../../../migrations/20260901120000-mandatory-indexes.cjs') as {
   up(db: Db): Promise<void>;
   down(db: Db): Promise<void>;
@@ -51,9 +56,34 @@ describe('las migraciones y el codigo hablan de las mismas colecciones', () => {
      * exactamente lo que el codigo usa. Una coleccion nueva sin su migracion
      * rompe acá, que es antes de que exista sin indices en produccion.
      */
-    const declaradas = { ...migration.COLLECTIONS, ...closures.COLLECTIONS };
+    const declaradas = { ...migration.COLLECTIONS, ...closures.COLLECTIONS, ...tokens.COLLECTIONS };
 
     expect(declaradas).toEqual(COLLECTIONS);
+  });
+});
+
+describe('los tokens del QR se limpian solos (F1-19)', () => {
+  it('el TTL borra el token cuando vence, sin que nadie lo barra', async () => {
+    await tokens.up(db);
+    const indices = await indexesOf('checkInTokens');
+    const ttl = indices.find((indice) => indice.name === 'checkin_token_ttl');
+
+    /*
+     * Se emite un token cada vez que alguien abre su QR: sin TTL la coleccion
+     * crece para siempre. `expireAfterSeconds: 0` borra el documento cuando pasa
+     * su propia `expiresAt`.
+     */
+    expect(ttl?.expireAfterSeconds).toBe(0);
+    expect(ttl?.key).toEqual({ expiresAt: 1 });
+  });
+
+  it('el hash es unico por tenant: el canje es de un solo uso', async () => {
+    await tokens.up(db);
+    const indices = await indexesOf('checkInTokens');
+    const unico = indices.find((indice) => indice.name === 'tenant_token_hash_unique');
+
+    expect(unico?.unique).toBe(true);
+    expect(unico?.key).toEqual({ tenantId: 1, tokenHash: 1 });
   });
 });
 

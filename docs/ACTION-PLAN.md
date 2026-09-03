@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     17 |
+| Fase 1 — MVP vendible   |       32 |          186 |     18 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1274,7 +1274,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   crédito al entrar la trae F1-19 con el walk-in: en una reserva el crédito ya se descontó
   (ADR-001).
 
-## [ ] F1-19 · Attendance: QR con token rotativo y walk-in
+## [x] F1-19 · Attendance: QR con token rotativo y walk-in
 
 - **module:** attendance
 - **description:** El QR de la WAFM que abre la puerta (§2.1.18), con token de vida corta para que
@@ -1302,6 +1302,33 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   Test de la cola offline y su sincronización.
 - **error-codes:** `LP-ATTD-422-004` (token inválido o vencido), `LP-ATTD-404-005`
 - **data-model-impact:** `CheckInToken { userId, tokenHash, expiresAt, usedAt }` con TTL.
+- **decisiones de diseño:**
+  - **Se guarda el hash del token, nunca el token.** El QR vive 30 segundos, pero una colección con
+    los códigos en claro sería una colección de llaves de la puerta, y el documento tarda hasta un
+    minuto en borrarse (el TTL de Mongo corre cada 60s). El hash no sirve para nada si se filtra.
+  - **Un token vencido y uno inexistente dan el mismo error** (`LP-ATTD-422-004`). Distinguirlos le
+    diría a quien prueba códigos ajenos cuál de los dos casi funcionó — la misma decisión que ya
+    tomó F1-15 para las dos puntas de la ventana de reserva.
+  - **El canje no manda `sessionId`.** El backend resuelve la clase eligiendo, entre las reservas del
+    socio, la que tiene la ventana de check-in abierta ahora. Pedirle a la tablet de la puerta que
+    supiera qué clase corre en cada momento significaría reconfigurarla cada vez que cambia el
+    horario del centro.
+  - **El walk-in reusa el orden atómico de la reserva** (lugar → crédito → documento) y no una
+    versión simplificada: dos walk-ins simultáneos sobre el último cupo tienen la misma condición de
+    carrera que dos reservas, así que necesitan la misma solución.
+  - **El kiosko no lee la cámara.** Un lector de QR de hardware "escribe" el código en un input
+    enfocado y manda un Enter, como cualquier lector de código de barras de retail — sin librería de
+    cámara, sin permisos del navegador, sin nada que pedirle al sistema operativo de la tablet.
+  - **La cola offline encola antes de intentar mandar, no después de que falle.** Así un corte de
+    batería o de red a mitad de camino no pierde el escaneo, y como la clave de idempotencia se fija
+    al encolar (no al reintentar), el reintento es el mismo pedido, no uno nuevo — reintentarlo no
+    duplica el check-in. Vive en `@laplace/client` porque cualquier pantalla que necesite "no perder
+    lo que el usuario ya hizo" la puede reusar, no solo el kiosko.
+  - **Un 4xx de la cola no se reintenta; un error de red o un 5xx sí, hasta un tope.** El primero es
+    un problema del pedido (el código venció, por ejemplo) que reintentar no arregla; el segundo es
+    la razón por la que existe la cola.
+  - Se agregó `.claude/launch.json` para poder levantar `wafm` y `dfsm` con el navegador integrado:
+    es lo que permitió probar las dos pantallas nuevas contra un server real, no solo con jsdom.
 
 ## [ ] F1-20 · Módulo Waivers
 

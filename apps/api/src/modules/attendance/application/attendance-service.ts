@@ -1,6 +1,7 @@
 import { Temporal } from '@js-temporal/polyfill';
 import type {
   BookingPolicy,
+  BookingResult,
   BulkCheckInResult,
   CheckInMethod,
   ClassRoster,
@@ -10,6 +11,12 @@ import type {
 import type { DomainEventBus } from '../../../events/bus.js';
 import { AppError } from '../../../http/errors.js';
 import { assertWithinCheckInWindow, checkInWindowOf } from '../domain/check-in-window.js';
+import {
+  QR_TOKEN_TTL_SECONDS,
+  assertTokenUsable,
+  hashToken,
+  newCheckInToken,
+} from '../domain/qr-token.js';
 
 /**
  * Casos de uso de Attendance (§2.1.18): la lista de clase del coach y el
@@ -23,11 +30,50 @@ import { assertWithinCheckInWindow, checkInWindowOf } from '../domain/check-in-w
 export interface AttendanceBookings {
   find(bookingId: string): Promise<AttendanceBooking | null>;
   ofSession(sessionId: string): Promise<AttendanceBooking[]>;
+  /** Las reservas del socio que esperan su check-in. Las busca el QR. */
+  awaitingCheckInOf(memberId: string): Promise<AttendanceBooking[]>;
   /** Marca el ingreso. Lo escribe Booking, que es el dueño del documento. */
   markCheckedIn(
     bookingId: string,
     data: { method: CheckInMethod; by: string; at: Temporal.Instant },
   ): Promise<AttendanceBooking>;
+  /**
+   * Crea la reserva del walk-in **ya con el ingreso hecho**, descontando el
+   * crédito en el momento (fila 7 de §2.1.9). El cupo y el crédito son de
+   * Booking; acá solo se piden.
+   */
+  createWalkIn(data: {
+    sessionId: string;
+    memberId: string;
+    by: string;
+    idempotencyKey: string;
+  }): Promise<BookingResult>;
+}
+
+/** El QR que la WAFM le muestra al socio. El token no se guarda en claro. */
+export interface IssuedQrToken {
+  token: string;
+  expiresAt: string;
+  expiresInSeconds: number;
+}
+
+export interface CheckInTokens {
+  issue(data: {
+    memberId: string;
+    userId: string;
+    tokenHash: string;
+    expiresAt: Temporal.Instant;
+  }): Promise<unknown>;
+  byHash(tokenHash: string): Promise<StoredCheckInToken | null>;
+  /** Marca el token como usado. `null` si otro escaneo llegó primero. */
+  consume(tokenHash: string, at: Temporal.Instant): Promise<unknown | null>;
+}
+
+export interface StoredCheckInToken {
+  memberId: string;
+  userId: string;
+  expiresAt: Temporal.Instant;
+  usedAt: Temporal.Instant | null;
 }
 
 export interface AttendanceBooking {
@@ -95,6 +141,7 @@ export interface AttendanceServiceDeps {
   members: AttendanceMembers;
   arrears: AttendanceArrears;
   venues: VenuePolicyPort;
+  tokens: CheckInTokens;
   waivers?: WaiverGate | undefined;
   events: DomainEventBus;
   now: () => Temporal.Instant;
@@ -106,6 +153,7 @@ export class AttendanceService {
   private readonly members: AttendanceMembers;
   private readonly arrears: AttendanceArrears;
   private readonly venues: VenuePolicyPort;
+  private readonly tokens: CheckInTokens;
   private readonly waivers: WaiverGate;
   private readonly events: DomainEventBus;
   private readonly now: () => Temporal.Instant;
@@ -116,6 +164,7 @@ export class AttendanceService {
     this.members = deps.members;
     this.arrears = deps.arrears;
     this.venues = deps.venues;
+    this.tokens = deps.tokens;
     this.waivers = deps.waivers ?? NO_WAIVERS_YET;
     this.events = deps.events;
     this.now = deps.now;
@@ -219,6 +268,107 @@ export class AttendanceService {
   }
 
   /**
+   * 🔴 Emite el token del QR del socio (§2.1.18).
+   *
+   * Vale 30 segundos y una sola vez. Se guarda el hash: la captura de pantalla
+   * que el socio le manda a su amiga no tiene que servir, y una colección con
+   * los códigos en claro sería una colección de llaves de la puerta.
+   */
+  async issueQrToken(memberId: string, userId: string): Promise<IssuedQrToken> {
+    const emitido = newCheckInToken(this.now());
+    await this.tokens.issue({
+      memberId,
+      userId,
+      tokenHash: emitido.tokenHash,
+      expiresAt: emitido.expiresAt,
+    });
+
+    return {
+      token: emitido.token,
+      expiresAt: emitido.expiresAt.toString(),
+      expiresInSeconds: QR_TOKEN_TTL_SECONDS,
+    };
+  }
+
+  /**
+   * 🔴 Canjea el QR en la puerta: resuelve al socio y le marca el ingreso.
+   *
+   * El token identifica a la **persona**, no a la clase, así que la clase la
+   * resuelve el backend: la que está dentro de su ventana de check-in. Pedirle a
+   * la tablet de la puerta que sepa qué clase corre ahora sería configurar la
+   * tablet cada vez que cambia el horario.
+   *
+   * El consumo es atómico (`usedAt: null` en el mismo `findOneAndUpdate`): dos
+   * escaneos simultáneos de la misma captura no pueden entrar los dos.
+   */
+  async redeemQrToken(token: string, by: string, sessionId?: string): Promise<AttendanceBooking> {
+    const guardado = await this.tokens.byHash(hashToken(token));
+    if (!guardado) throw invalidToken();
+
+    assertTokenUsable({ expiresAt: guardado.expiresAt, usedAt: guardado.usedAt }, this.now());
+
+    const reserva = await this.bookingForCheckIn(guardado.memberId, sessionId);
+
+    // Recién acá se quema el token: si no hay reserva que marcar, el socio
+    // puede volver a mostrar el mismo código en vez de generar otro.
+    if (!(await this.tokens.consume(hashToken(token), this.now()))) throw invalidToken();
+
+    return this.checkIn(reserva.publicId, 'self', by);
+  }
+
+  /**
+   * 🔴 El walk-in: alguien que llega sin reserva y entra en el mostrador.
+   *
+   * Es el **único** camino donde el crédito se descuenta en el check-in y no al
+   * reservar (fila 7 de §2.1.9, ADR-001). Las validaciones son las mismas que
+   * las de cualquier ingreso; lo que cambia es que la reserva se crea acá.
+   */
+  async walkIn(sessionId: string, memberId: string, by: string, idempotencyKey: string) {
+    const session = await this.sessions.find(sessionId);
+    if (!session) throw sessionNotFound(sessionId);
+
+    const policy = await this.venues.policyFor(session.venueId, session.categoryId);
+    assertWithinCheckInWindow(policy, session.startAt, this.now(), session.timeZone);
+    await this.assertCanEnter(memberId, policy);
+
+    const entrada = await this.bookings.createWalkIn({
+      sessionId,
+      memberId,
+      by,
+      idempotencyKey,
+    });
+    await this.members.recordAttendance(memberId, this.now());
+
+    return entrada;
+  }
+
+  /** La reserva que este socio tiene que marcar ahora. */
+  private async bookingForCheckIn(
+    memberId: string,
+    sessionId?: string,
+  ): Promise<AttendanceBooking> {
+    const candidatas = await this.bookings.awaitingCheckInOf(memberId);
+    const ahora = this.now();
+
+    for (const reserva of candidatas) {
+      if (sessionId !== undefined && reserva.sessionId !== sessionId) continue;
+
+      const session = await this.sessions.find(reserva.sessionId);
+      if (!session) continue;
+
+      const policy = await this.venues.policyFor(session.venueId, session.categoryId);
+      const ventana = checkInWindowOf(policy, session.startAt);
+      const abierta =
+        Temporal.Instant.compare(ahora, ventana.opensAt) >= 0 &&
+        Temporal.Instant.compare(ahora, ventana.closesAt) <= 0;
+
+      if (abierta) return reserva;
+    }
+
+    throw noBookingToCheckIn(memberId);
+  }
+
+  /**
    * "Todos presentes" de un toque (§2.1.18).
    *
    * Los que no pasan la validación **no rompen la operación**: vuelven con su
@@ -319,6 +469,30 @@ function notCheckable(bookingId: string, status: string): AppError {
       : 'Esa reserva ya no está activa.',
     ...(enLaFila ? { action: 'Confirmá el lugar y volvé a intentar.' } : {}),
     meta: { bookingId, status },
+  });
+}
+
+/**
+ * Un token que no existe da el **mismo** error que uno vencido: distinguirlos le
+ * diría a quien prueba códigos ajenos cuál de los dos casi funcionó.
+ */
+function invalidToken(): AppError {
+  return new AppError({
+    code: 'LP-ATTD-422-004',
+    status: 422,
+    message: 'El código venció. Abrí de nuevo tu QR.',
+    action: 'Mostrá el código nuevo en la puerta.',
+  });
+}
+
+/** El QR era válido pero no hay clase que marcar: el socio no reservó. */
+function noBookingToCheckIn(memberId: string): AppError {
+  return new AppError({
+    code: 'LP-ATTD-404-005',
+    status: 404,
+    message: 'No encontramos una reserva tuya para esta hora.',
+    action: 'Pedile al mostrador que te registre como walk-in.',
+    meta: { memberId },
   });
 }
 

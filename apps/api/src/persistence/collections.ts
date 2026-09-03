@@ -21,6 +21,7 @@ export const COLLECTIONS = {
   classSession: 'classSessions',
   venueClosure: 'venueClosures',
   booking: 'bookings',
+  checkInToken: 'checkInTokens',
   exercise: 'exercises',
   planning: 'plannings',
   result: 'results',

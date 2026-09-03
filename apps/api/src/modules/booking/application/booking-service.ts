@@ -722,9 +722,95 @@ export class BookingService {
     return entrada;
   }
 
+  /**
+   * 🔴 El walk-in: alguien que llega sin reserva y entra en el mostrador.
+   *
+   * Es el **único** camino donde el crédito se descuenta en el check-in y no al
+   * reservar (ADR-001, fila 7 de §2.1.9). El orden vuelve a ser el de la
+   * reserva —lugar, crédito, documento— y por el mismo motivo: si el lugar se
+   * tomara al final, dos walk-ins simultáneos sobre el último cupo entrarían los
+   * dos.
+   *
+   * Quién puede entrar lo decide Attendance (ventana, waiver, mora, bloqueo);
+   * acá se ejecuta.
+   */
+  async walkIn(input: {
+    sessionId: string;
+    memberId: string;
+    idempotencyKey: string;
+    by: string;
+  }): Promise<BookingResult> {
+    const previa = await this.bookings.byIdempotencyKey(input.idempotencyKey);
+    if (previa) return this.toResult(previa);
+
+    const session = await this.sessions.find(input.sessionId);
+    if (!session) throw sessionNotFound(input.sessionId);
+    this.assertBookable(session);
+
+    if (await this.bookings.liveOf(input.sessionId, input.memberId)) {
+      // Ya tiene reserva: lo que corresponde es marcarle el ingreso, no crearle
+      // una segunda y cobrarle dos créditos.
+      throw alreadyBooked(input.sessionId);
+    }
+
+    const lugar = await this.sessions.claimSeat(input.sessionId);
+    if (!lugar) throw sessionFull(input.sessionId);
+
+    const ahora = this.now();
+    let consumo: Consumption | undefined;
+
+    try {
+      consumo = await this.credits.consume(input.memberId, {
+        category: session.categoryId,
+        startsAtLocal: localTimeOf(session.startAt, session.timeZone),
+      });
+
+      const booking = await this.bookings.book({
+        sessionId: input.sessionId,
+        memberId: input.memberId,
+        venueId: session.venueId,
+        contractId: consumo.contractId,
+        status: 'checked_in',
+        waitlistPosition: null,
+        bookedAt: ahora,
+        idempotencyKey: input.idempotencyKey,
+      });
+
+      const id = String(booking['publicId']);
+      const entrada = await this.bookings.updateByPublicId(id, {
+        $set: {
+          checkedInAt: toBsonDate(ahora),
+          checkInMethod: 'staff',
+          checkedInBy: input.by,
+        },
+      });
+
+      await this.events.emit('attendance.checked_in', {
+        bookingId: id,
+        memberId: input.memberId,
+        method: 'staff',
+      });
+
+      return { booking: toResponse(entrada ?? booking), consumption: consumo };
+    } catch (error) {
+      if (consumo) await this.credits.refund(consumo.contractId).catch(() => undefined);
+      await this.sessions.releaseSeat(input.sessionId).catch(() => undefined);
+
+      throw error;
+    }
+  }
+
   /** La reserva, o `null`. Lo consume Attendance, que decide su propio error. */
   async findOne(id: string): Promise<BookingDoc | null> {
     return this.bookings.findByPublicId(id);
+  }
+
+  /**
+   * Las reservas del socio que todavía esperan su check-in. Es lo que necesita
+   * el QR: el token identifica a la persona, no a la clase.
+   */
+  async awaitingCheckInOf(memberId: string): Promise<BookingDoc[]> {
+    return this.bookings.awaitingCheckInOfMember(memberId);
   }
 
   /** Todas las reservas vivas de una clase. La consume la lista del coach. */
@@ -910,6 +996,21 @@ function alreadyClosed(bookingId: string, status: string): AppError {
     status: 409,
     message: 'Esa reserva ya estaba cerrada.',
     meta: { bookingId, status },
+  });
+}
+
+/**
+ * La clase está llena. En una reserva esto no es un error —se va a la fila—,
+ * pero el walk-in es alguien que ya está parado en el mostrador: la respuesta
+ * tiene que decirle que no hay lugar, no anotarlo para más tarde.
+ */
+function sessionFull(sessionId: string): AppError {
+  return new AppError({
+    code: 'LP-BOOK-409-002',
+    status: 409,
+    message: 'La clase está completa.',
+    action: 'Ofrecele anotarse en la lista de espera de la próxima.',
+    meta: { sessionId },
   });
 }
 
