@@ -122,6 +122,16 @@ export interface DomainEvents {
     memberId: string;
     method: 'self' | 'staff' | 'kiosk';
   };
+  /**
+   * Se publicó una versión nueva de un documento legal (§2.1.20). Lo escucha
+   * Notifications para avisarle a quien tenga la vieja que hay que re-firmar.
+   */
+  'waiver.published': {
+    documentId: string;
+    type: string;
+    version: number;
+    required: boolean;
+  };
   /** Un cargo entro en mora. Lo escucha Notifications para el aviso (§2.1.12). */
   'charge.overdue': {
     chargeId: string;

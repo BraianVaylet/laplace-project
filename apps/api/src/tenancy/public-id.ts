@@ -28,6 +28,7 @@ export const ID_PREFIXES = {
   notification: 'ntf',
   lead: 'led',
   legalDocument: 'doc',
+  consent: 'cst',
 } as const;
 
 export type IdEntity = keyof typeof ID_PREFIXES;

@@ -12,3 +12,4 @@ export * from './products/index.js';
 export * from './rooms/index.js';
 export * from './schedule/index.js';
 export * from './venues/index.js';
+export * from './waivers/index.js';

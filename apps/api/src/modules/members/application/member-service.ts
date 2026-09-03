@@ -276,6 +276,34 @@ export class MemberService {
     return member ? String(member['publicId']) : null;
   }
 
+  /**
+   * Lo que Waivers necesita para decidir qué le corresponde a este socio: su
+   * cuenta vinculada (quién firma) y su fecha de nacimiento (si el
+   * consentimiento del tutor le aplica). Es el puerto que consume F1-20.
+   */
+  async waiverContextOf(
+    memberId: string,
+  ): Promise<{ userId: string | null; birthDate?: string } | null> {
+    const member = await this.members.findByPublicId(memberId);
+    if (!member) return null;
+
+    return {
+      userId: member.userId ?? null,
+      ...(member.birthDate === undefined ? {} : { birthDate: member.birthDate }),
+    };
+  }
+
+  /** La ficha a la que corresponde una cuenta. Lo consume el panel de cumplimiento de Waivers. */
+  async findByUserId(userId: string): Promise<{ memberId: string; fullName: string } | null> {
+    const member = await this.members.findOne({ userId } as never);
+    if (!member) return null;
+
+    return {
+      memberId: String(member['publicId']),
+      fullName: `${member.firstName} ${member.lastName}`.trim(),
+    };
+  }
+
   /** Lo consume el guard de entitlements. Cuenta los que ocupan cupo. */
   countActive(): Promise<number> {
     return this.members.countActive();

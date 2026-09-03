@@ -207,7 +207,7 @@ export class AttendanceService {
           waitlistPosition: booking.waitlistPosition,
           checkedInAt: booking.checkedInAt?.toString() ?? null,
           checkInMethod: booking.checkInMethod,
-          alerts: await this.alertsFor(booking.memberId, socio),
+          alerts: await this.alertsFor(booking.memberId, policy, socio),
         };
       }),
     );
@@ -399,19 +399,34 @@ export class AttendanceService {
     return { checkedIn, skipped };
   }
 
-  /** Las cuatro validaciones de §2.1.18 que dependen del socio, no de la clase. */
+  /**
+   * Las cuatro validaciones de §2.1.18 que dependen del socio, no de la clase.
+   *
+   * El waiver es **configurable por Venue** (§2.1.20): con `enforceWaivers`
+   * apagado —el default— ni siquiera se consulta el módulo. Prenderlo de
+   * entrada bloquearía a cualquier centro que todavía no publicó sus
+   * documentos ni migró a que sus socios tengan cuenta en la WAFM.
+   */
   private async assertCanEnter(memberId: string, policy: BookingPolicy): Promise<void> {
-    if (await this.waivers.missingFor(memberId)) throw waiverMissing(memberId);
+    if (policy.enforceWaivers && (await this.waivers.missingFor(memberId))) {
+      throw waiverMissing(memberId);
+    }
 
     // El crédito ya se descontó al reservar (ADR-001): lo que queda por mirar
     // acá es la deuda, y solo si el centro la usa como barrera.
     await this.arrears.assertCanTransact(memberId, policy.allowDebt);
   }
 
-  private async alertsFor(memberId: string, socio?: MemberSummary): Promise<RosterAlert[]> {
+  private async alertsFor(
+    memberId: string,
+    policy: BookingPolicy,
+    socio?: MemberSummary,
+  ): Promise<RosterAlert[]> {
     const alerts: RosterAlert[] = [];
     if (socio?.hasDebt) alerts.push('debt');
-    if (await this.waivers.missingFor(memberId)) alerts.push('waiver_missing');
+    if (policy.enforceWaivers && (await this.waivers.missingFor(memberId))) {
+      alerts.push('waiver_missing');
+    }
 
     return alerts;
   }

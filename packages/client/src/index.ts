@@ -67,3 +67,5 @@ export {
   type OfflineQueueStorage,
   type QueuedRequest,
 } from './pwa/offline-queue.js';
+
+export { sanitizeHtml } from './html/sanitize.js';

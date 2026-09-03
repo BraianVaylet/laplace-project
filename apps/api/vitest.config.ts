@@ -49,6 +49,9 @@ export default defineConfig({
         // 🔴 Booking reparte los cupos: una sobreventa es una persona parada
         // en la puerta de una clase llena.
         'src/modules/booking/**': { lines: 95, statements: 90, branches: 85, functions: 90 },
+        // 🔴 Waivers es riesgo legal, no una funcionalidad opcional (§2.1.20):
+        // hay que poder probar en un juicio qué firmó cada socio.
+        'src/modules/waivers/**': { lines: 95, statements: 90, branches: 85, functions: 90 },
 
         // Infraestructura de soporte.
         'src/jobs/**': { lines: 85, statements: 85, branches: 70, functions: 75 },

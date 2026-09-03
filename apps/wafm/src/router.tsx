@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router';
 import { Home } from './Home.js';
 import { MyQr } from './MyQr.js';
+import { PendingWaivers } from './PendingWaivers.js';
 import { Shell } from './Shell.js';
 
 /**
@@ -44,7 +45,17 @@ const qrRoute = createRoute({
   component: MyQr,
 });
 
-export const routeTree = rootRoute.addChildren([homeRoute, qrRoute]);
+/**
+ * No es un ítem de la bottom nav: la spec fija las cinco de §5.1.3. Se llega
+ * acá desde el aviso del home cuando hay algo pendiente por firmar.
+ */
+const documentsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/documentos',
+  component: PendingWaivers,
+});
+
+export const routeTree = rootRoute.addChildren([homeRoute, qrRoute, documentsRoute]);
 
 export const router = createRouter({ routeTree });
 

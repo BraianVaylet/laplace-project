@@ -107,6 +107,14 @@ export const bookingPolicyBaseSchema = z.object({
    * **default `false`**.
    */
   allowDebt: z.boolean().default(false),
+  /**
+   * ¿El check-in exige tener firmados los waivers obligatorios? Configurable
+   * por Venue (§2.1.20). **Default `false`**: activarlo es una decisión del
+   * centro, que en ese momento asume que sus socios van a tener cuenta en la
+   * WAFM y sus documentos publicados — prenderlo de entrada bloquearía a
+   * cualquier centro que todavía no migró a este flujo.
+   */
+  enforceWaivers: z.boolean().default(false),
   /** Cuántos no-shows habilitan el bloqueo temporal. `0` desactiva la política. */
   noShowThreshold: z.number().int().min(0).max(20).default(3),
   /**

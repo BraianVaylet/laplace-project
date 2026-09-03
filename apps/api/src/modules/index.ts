@@ -15,6 +15,7 @@ import { createProductsModule } from './products/index.js';
 import { createScheduleModule, type SessionBookingReleaser } from './schedule/index.js';
 import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
 import { createVenuesModule } from './venues/index.js';
+import { createWaiverModule } from './waivers/index.js';
 
 export interface ModuleDeps {
   events: DomainEventBus;
@@ -204,6 +205,25 @@ export function createModules(deps: ModuleDeps) {
   routes.route('/', contracts.routes);
   routes.route('/', billing.routes);
   routes.route('/', schedule.routes);
+
+  /*
+   * Waivers va antes que Attendance: el check-in necesita preguntarle "¿le
+   * falta algo obligatorio a este socio?" (WaiverGate), y esa pregunta la
+   * contesta este modulo.
+   */
+  const waivers = createWaiverModule({
+    entitlements: deps.entitlements,
+    events: deps.events,
+    now: deps.now ?? (() => Temporal.Now.instant()),
+    members: {
+      contextOf: (memberId) => members.service.waiverContextOf(memberId),
+      memberOf: (userId) => members.service.findByUserId(userId),
+    },
+    resolveMember: (userId) => members.service.findIdByUserId(userId),
+  });
+
+  routes.route('/', waivers.routes);
+
   /*
    * Attendance orquesta y no guarda: la reserva la escribe Booking, la clase la
    * conoce Schedule y la ficha la guarda Members. La asistencia es un estado de
@@ -214,6 +234,7 @@ export function createModules(deps: ModuleDeps) {
     entitlements: deps.entitlements,
     events: deps.events,
     now: deps.now ?? (() => Temporal.Now.instant()),
+    waivers: { missingFor: (memberId) => waivers.service.missingFor(memberId) },
     bookings: {
       find: async (bookingId) => {
         const reserva = await booking.service.findOne(bookingId);
@@ -281,6 +302,7 @@ export function createModules(deps: ModuleDeps) {
     billing,
     schedule,
     booking,
+    waivers,
     attendance,
   };
 }

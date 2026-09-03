@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     18 |
+| Fase 1 — MVP vendible   |       32 |          186 |     19 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1330,7 +1330,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   - Se agregó `.claude/launch.json` para poder levantar `wafm` y `dfsm` con el navegador integrado:
     es lo que permitió probar las dos pantallas nuevas contra un server real, no solo con jsdom.
 
-## [ ] F1-20 · Módulo Waivers
+## [x] F1-20 · Módulo Waivers
 
 - **module:** waivers
 - **description:** Deslindes y consentimientos versionados con firma trazable (§2.1.20). Es riesgo
@@ -1357,8 +1357,42 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **test_plan:** Test de que el hash del contenido se guarda y se puede verificar contra el texto.
   Test de re-aceptación al publicar versión nueva. Test del bloqueo de check-in con el flag en
   ambos valores. Aislamiento (los documentos globales son de solo lectura para el tenant).
-- **error-codes:** `LP-HLTH-403-002` (documento obligatorio sin aceptar)
-- **data-model-impact:** `LegalDocument` y `Consent` de §5.2.2.
+- **error-codes:** `LP-ATTD-403-003` (ya declarado por F1-18: es el que bloquea el check-in),
+  `LP-SYS-404-002` (documento inexistente, reusado — no hay nada específico de Waivers que un 404
+  genérico no diga ya). `LP-HLTH-403-002` queda declarado en `docs/errors.md` desde antes de esta
+  tarea pero sin dueño: nada en Waivers necesitó su propio "documento obligatorio sin aceptar"
+  aparte del que ya tira Attendance al bloquear el check-in.
+- **data-model-impact:** `LegalDocument` y `Consent` de §5.2.2, más `contentHash` en los dos (no
+  está en el sketch de §5.2.2, pero la propia tarea lo pide: "hash del texto de esa versión").
+  `bookingPolicy` de Venue suma `enforceWaivers`.
+- **decisiones de diseño:**
+  - **`enforceWaivers` es la parte de "configurable por Venue" que la propia spec pide y el sketch
+    del criterio no explicitaba dónde vivía.** Default `false`: prenderlo de una es una decisión
+    del centro, que en ese momento asume que sus socios van a tener cuenta en la WAFM y sus
+    documentos publicados. Vive en `bookingPolicy`, al lado de `allowDebt` — el mismo patrón de
+    "barrera configurable que Attendance consulta antes de dejar entrar a alguien".
+  - **Sin cuenta vinculada, siempre falta algo.** `missingFor` no tiene forma de verificar un
+    consentimiento digital de alguien sin `userId`, así que un socio dado de alta directo por
+    staff (sin invitación) queda bloqueado hasta que tenga cuenta — coherente con que la firma es
+    "digital simple" y no hay un camino de "consentimiento en papel" en el alcance de esta tarea.
+  - **`guardian_consent` se publica siempre obligatorio.** El servidor ignora lo que llegue en
+    `required` para ese tipo: no es una decisión que el SMU tenga que tomar cada vez, es la regla
+    del tipo de documento (§2.1.20).
+  - **La re-aceptación no corre un job.** Publicar una versión nueva simplemente crea otra fila;
+    "lo pendiente" se recalcula preguntando por la versión vigente en cada pedido, así que la
+    vigencia de la v2 alcanza sola en cuanto se publica.
+  - **El HTML del documento se sanea antes de mostrarse en la WAFM** (`sanitizeHtml`, nuevo en
+    `@laplace/client`, con DOMPurify). Lo escribe el staff del centro, no Laplace: una cuenta de
+    staff comprometida no tiene que poder convertirse en un XSS almacenado contra cada socio que
+    abre la app.
+  - **El CSV del panel de cumplimiento escapa cada campo** contra la inyección de fórmulas de
+    Excel/Sheets (OWASP): un nombre que empiece con `=`, `+`, `-` o `@` no se ejecuta al abrirlo.
+  - El WAFM estrena la pantalla "Tus documentos" (`/documentos`, fuera de la bottom nav fija de
+    §5.1.3) y un aviso en el home cuando algo queda pendiente de firmar.
+- **queda afuera a propósito:** publicar documentos de `scope: 'global'` (el T&C/Privacidad del
+  SaaS entre Laplace y el suscriptor, ADR-000 regla 6). Esta tarea es la de los documentos que un
+  _socio_ firma para _su gimnasio_ — org-scoped. Los globales son otra audiencia (el SMU al
+  suscribirse) y entran con F1-25. El modelo ya soporta `scope`; el módulo solo escribe `'org'`.
 
 ## [ ] F1-21 · Notifications: motor in-app y email transaccional
 

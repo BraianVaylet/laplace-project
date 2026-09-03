@@ -30,6 +30,7 @@ const migrations = [
   require('../../../migrations/20260902160000-venue-closures.cjs'),
   require('../../../migrations/20260902170000-booking-unique.cjs'),
   require('../../../migrations/20260903120000-check-in-tokens.cjs'),
+  require('../../../migrations/20260904090000-waivers-unique.cjs'),
 ] as Array<{ up(db: Db): Promise<void> }>;
 
 let replSet: MongoMemoryReplSet;
@@ -267,6 +268,8 @@ beforeEach(async () => {
     'rooms',
     'venues',
     'checkInTokens',
+    'legalDocuments',
+    'consents',
   ]) {
     await mongoose.connection.db?.collection(coleccion).deleteMany({});
   }
@@ -418,6 +421,73 @@ describe('la lista de clase del coach (§2.1.18)', () => {
     );
 
     expect(res.status).toBe(404);
+  });
+});
+
+describe('el waiver bloquea el check-in, configurable por Venue (F1-20)', () => {
+  const publicar = (centro: Centro, overrides: Record<string, unknown> = {}) =>
+    post(centro.cookie, '/api/v1/legal-documents', {
+      type: 'liability_waiver',
+      title: 'Deslinde de responsabilidad',
+      contentHtml: '<p>Entreno bajo mi responsabilidad.</p>',
+      required: true,
+      ...overrides,
+    });
+
+  it('con `enforceWaivers` apagado (el default), no bloquea aunque falte todo', async () => {
+    const centro = await centroListo('waiver-apagado');
+    await publicar(centro);
+    const socio = await anotado(centro, 'Micaela');
+    enLaPuerta();
+
+    const res = await marcar(centro, socio.bookingId);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('🔴 prendido, bloquea a quien no tiene cuenta vinculada: no hay nada que revisar', async () => {
+    const centro = await centroListo('waiver-sin-cuenta', {
+      bookingPolicy: { enforceWaivers: true },
+    });
+    await publicar(centro);
+    const socio = await anotado(centro, 'Micaela');
+    enLaPuerta();
+
+    const res = await marcar(centro, socio.bookingId);
+
+    expect(res.status).toBe(403);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-ATTD-403-003');
+  });
+
+  it('prendido, deja pasar a quien ya firmó', async () => {
+    const centro = await centroListo('waiver-firmado', {
+      bookingPolicy: { enforceWaivers: true },
+    });
+    const doc = (await publicar(centro)) as { publicId: string };
+    const socio = await atletaDe(centro, 'Micaela');
+    await darPack(centro, socio.memberId);
+    const reserva = await reservar(centro, socio.memberId);
+    await app.request(
+      `/api/v1/legal-documents/${doc.publicId}/accept`,
+      req(socio.cookie, 'POST', {}),
+    );
+    enLaPuerta();
+
+    const res = await marcar(centro, reserva.booking.publicId);
+
+    expect(res.status).toBe(200);
+  });
+
+  it('la lista del coach marca `waiver_missing` solo cuando el centro lo exige', async () => {
+    const centro = await centroListo('waiver-alerta', {
+      bookingPolicy: { enforceWaivers: true },
+    });
+    await publicar(centro);
+    await anotado(centro, 'Micaela');
+
+    const { body } = await lista(centro);
+
+    expect(body.entries[0]?.alerts).toContain('waiver_missing');
   });
 });
 

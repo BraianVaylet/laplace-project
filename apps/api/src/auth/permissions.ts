@@ -28,7 +28,7 @@ export const LAPLACE_STATEMENT = {
   classSession: ['create', 'read', 'update', 'cancel'],
   booking: ['create', 'read', 'cancel', 'createForOther'],
   attendance: ['read', 'checkIn'],
-  waiver: ['read', 'publish'],
+  waiver: ['read', 'publish', 'accept'],
   billing: ['read', 'charge', 'collect', 'refund'],
   /** Ingresos, morosidad, churn. El staff no accede (§2.1.12). */
   businessMetrics: ['read'],
@@ -126,6 +126,8 @@ const member = ac.newRole({
   product: ['read'],
   classSession: ['read'],
   booking: ['create', 'read', 'cancel'],
+  /** Ve sus documentos pendientes y los firma. Nunca publica (§2.1.20). */
+  waiver: ['read', 'accept'],
   planning: ['read'],
   exercise: ['read'],
   result: ['create', 'read'],

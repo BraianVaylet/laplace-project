@@ -88,8 +88,11 @@ const MATRIX: Record<string, Record<string, OrgRoleName[]>> = {
     checkIn: ['owner', 'manager_assistant', 'front_desk', 'head_coach', 'coach'],
   },
   waiver: {
-    read: ['owner', 'manager_assistant', 'front_desk', 'head_coach', 'coach'],
+    read: ['owner', 'manager_assistant', 'front_desk', 'head_coach', 'coach', 'member'],
     publish: ['owner', 'manager_assistant'],
+    // El socio es quien firma lo suyo; nadie firma por otro (§2.1.20). El
+    // owner tiene `accept` igual, heredado de `everything`: no tiene techo.
+    accept: ['owner', 'member'],
   },
   // El manager_assistant NO entra: §1.1 dice "todo salvo metricas de negocio
   // y facturacion". La facturacion es del owner y del mostrador.

@@ -23,6 +23,57 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-03 — F1-20: módulo Waivers, deslindes y consentimientos
+
+- **Módulo:** `waivers` (nuevo) · `attendance` · `members` · `wafm`
+- **Tipo:** feature
+- **Commit/PR:** pendiente (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/QXxTpx5h (F1-20) — movida a **Completadas**
+- **Qué cambió:** el centro publica deslindes, consentimientos y demás documentos legales,
+  versionados; el socio los ve y los firma desde la WAFM, con hash del texto, IP, user agent y
+  fecha guardados. Si el Venue lo exige (`enforceWaivers`, apagado por default), el check-in queda
+  bloqueado mientras falte algo obligatorio — y al menor de edad, el consentimiento del tutor
+  siempre le aplica. Hay un panel de cumplimiento por documento, exportable a CSV.
+- **Por qué:** es riesgo legal, no una funcionalidad opcional (§2.1.20). Un centro tiene que poder
+  probar exactamente qué firmó cada socio, no solo que "aceptó algo".
+- **Impacto:** colecciones `legalDocuments` y `consents` (ya declaradas desde Fase 0, sin dueño
+  hasta ahora) · **migración** (`20260904090000`) que corrige el único de `consents` heredado de la
+  migración base — estaba copiado del de `RmRecord` (`userId` primero, sin `unique`), pero un
+  consentimiento es del centro y no del socio: `tenantId` va primero (ADR-000 regla 4) · cuatro
+  rutas nuevas · `Venue.bookingPolicy` suma `enforceWaivers` · dos permisos nuevos
+  (`waiver.accept` para el socio, ya declarado `waiver.publish`/`read` para el staff) ·
+  `@laplace/client` suma `sanitizeHtml` (DOMPurify) · la WAFM suma la pantalla "Tus documentos" y
+  un aviso en el home.
+- **Pendiente:** nada declarado. Es la última deuda que quedaba abierta desde F1-18/F1-19
+  (`WaiverGate`), y con esta tarea queda saldada.
+
+### El índice heredado de la migración base estaba mal para `consents`
+
+`{ userId, tenantId, documentId }`, copiado del índice de `RmRecord` — que sí arranca por
+`userId` porque un RM es del atleta, no del centro (ADR-000 regla 7, el único caso con nombre en
+la spec). Un consentimiento **no es portable entre centros**: aceptar el deslinde de Box Toro no
+dice nada del de otro gimnasio. Le corresponde el orden normal de todo índice compuesto —
+`tenantId` primero— y de paso se le agregó `unique`, que es lo que hace que aceptar el mismo
+documento dos veces (doble click) no duplique el registro.
+
+### `enforceWaivers` es la parte de "configurable por Venue" que el criterio no explicitaba
+
+Vive en `bookingPolicy`, al lado de `allowDebt`: el mismo patrón de barrera que Attendance
+consulta antes de dejar entrar a alguien. Default apagado — prenderlo de una habría bloqueado a
+cualquier centro que todavía no publicó sus documentos ni migró a que sus socios tengan cuenta en
+la WAFM, incluidos los tests de F1-18/F1-19 que ya estaban en verde.
+
+### El HTML del documento no se muestra tal cual
+
+Lo escribe el staff del centro, no Laplace, y una cuenta de staff comprometida no tiene que poder
+convertirse en un XSS almacenado contra cada socio que abre la app. `sanitizeHtml` (DOMPurify,
+nuevo en `@laplace/client`) sanea el contenido antes de renderizarlo en la WAFM, con un allowlist
+de las etiquetas de un documento de texto — nada de `<script>`, `<iframe>` ni manejadores `on*`.
+El CSV del panel de cumplimiento tiene su propio escape, contra la inyección de fórmulas de
+Excel/Sheets.
+
+---
+
 ## 2026-09-03 — F1-19: QR con token rotativo y walk-in
 
 - **Módulo:** `attendance` · `booking` · `wafm` · `dfsm`
