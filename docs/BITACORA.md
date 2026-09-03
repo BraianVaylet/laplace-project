@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `notifications` (nuevo) · `members` · `venues` · `auth` · `client` · `wafm`
 - **Tipo:** feature
-- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `7898f61` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/2Gs04wwb (F1-21) — movida a **Completadas**
 - **Qué cambió:** los avisos del producto ya tienen motor. Un evento de dominio encola el aviso por
   los canales que correspondan (campana y mail), un job los manda con reintentos a los 30 s, 2 min
