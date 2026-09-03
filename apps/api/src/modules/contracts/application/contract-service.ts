@@ -480,6 +480,26 @@ export class ContractService {
     return avisados;
   }
 
+  /**
+   * El pack, como lo necesita un aviso: que producto es, de que sede y cuando
+   * vence. Es el puerto que consume Notifications (F1-22).
+   *
+   * `null` en vez de excepcion: un aviso que no encuentra su contrato no sale,
+   * no rompe el job que lo estaba encolando.
+   */
+  async notificationContextOf(
+    contractId: string,
+  ): Promise<{ productName: string; venueId: string; endsAt: Temporal.Instant | null } | null> {
+    const contract = await this.contracts.findByPublicId(contractId);
+    if (!contract) return null;
+
+    return {
+      productName: contract.productName,
+      venueId: contract.venueId,
+      endsAt: contract.endsAt ? fromBsonDate(contract.endsAt) : null,
+    };
+  }
+
   /** ¿Ya usó su clase de prueba? Es el puerto que consume Products (F1-07). */
   async hasUsedTrial(memberId: string): Promise<boolean> {
     return this.contracts.hasBought(memberId, 'trial');

@@ -1057,3 +1057,54 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
     }
   });
 });
+
+describe('los puertos que consume Notifications (F1-22)', () => {
+  const enContexto = <T>(organizationId: string, fn: () => Promise<T>) =>
+    runWithTenant({ tenantId: organizationId, userId: 'usr_test', requestId: 'req-ntf' }, fn);
+
+  it('el cargo dice de qué sede es y cuándo vence', async () => {
+    const centro = await centroConSocio('puerto-cargo');
+    const cargo = await cobrar(centro, { dueAt: '2026-03-10T12:00:00Z' });
+
+    const contexto = await enContexto(centro.organizationId, () =>
+      modules.billing.service.chargeContextOf(cargo.publicId),
+    );
+
+    expect(contexto?.venueId).toBe(centro.venueId);
+    expect(contexto?.dueAt.toString()).toBe('2026-03-10T12:00:00Z');
+  });
+
+  it('🔴 un cargo que no existe devuelve null, no una excepción', async () => {
+    const centro = await centroConSocio('puerto-cargo-fantasma');
+
+    // El aviso que no encuentra su cargo no sale; no rompe el job que lo
+    // estaba encolando ni se lleva puestos los otros avisos de la corrida.
+    const contexto = await enContexto(centro.organizationId, () =>
+      modules.billing.service.chargeContextOf('chg_no_existe'),
+    );
+
+    expect(contexto).toBeNull();
+  });
+
+  it('el pago dice de qué sede es y de qué fecha', async () => {
+    const centro = await centroConSocio('puerto-pago');
+    const cargo = await cobrar(centro);
+    const pago = await pagarOk(centro, { chargeIds: [cargo.publicId] });
+
+    const contexto = await enContexto(centro.organizationId, () =>
+      modules.billing.service.paymentContextOf(pago.publicId),
+    );
+
+    expect(contexto?.venueId).toBe(centro.venueId);
+  });
+
+  it('un pago que no existe devuelve null', async () => {
+    const centro = await centroConSocio('puerto-pago-fantasma');
+
+    const contexto = await enContexto(centro.organizationId, () =>
+      modules.billing.service.paymentContextOf('pay_no_existe'),
+    );
+
+    expect(contexto).toBeNull();
+  });
+});

@@ -354,7 +354,7 @@ export class BookingService {
    * Salda la deuda de F1-13: hasta ahora la cancelación pedía la liberación y
    * nadie la ejecutaba.
    */
-  async releaseSession(params: { sessionId: string; reason: string }): Promise<number> {
+  async releaseSession(params: { sessionId: string; reason: string }): Promise<string[]> {
     return withTransaction(async () => {
       const vivas = await this.bookings.liveOfSession(params.sessionId);
 
@@ -371,7 +371,7 @@ export class BookingService {
         }
       }
 
-      return vivas.length;
+      return vivas.map((booking) => booking.memberId);
     });
   }
 

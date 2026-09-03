@@ -324,6 +324,19 @@ export function createModules(deps: ModuleDeps) {
       },
     },
     venues: { find: (venueId) => venues.service.summaryOf(venueId) },
+    roster: {
+      of: async (sessionId) =>
+        (await booking.service.ofSession(sessionId)).map((reserva) => ({
+          memberId: reserva.memberId,
+          status: reserva.status,
+        })),
+    },
+    contracts: { find: (contractId) => contracts.service.notificationContextOf(contractId) },
+    charges: { find: (chargeId) => billing.service.chargeContextOf(chargeId) },
+    payments: { find: (paymentId) => billing.service.paymentContextOf(paymentId) },
+    upcoming: {
+      startingBetween: (from, to) => schedule.service.startedBetweenAcrossTenants(from, to),
+    },
   });
 
   routes.route('/', notifications.routes);

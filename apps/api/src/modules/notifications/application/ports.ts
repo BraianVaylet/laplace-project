@@ -1,3 +1,5 @@
+import type { Temporal } from '@js-temporal/polyfill';
+
 /**
  * Puertos de salida de Notifications. Se inyectan: **ningún test manda un
  * mail**, y el proveedor real se cambia sin tocar el motor (§2.1.14).
@@ -35,9 +37,53 @@ export interface RecipientLookup {
   byMemberId(memberId: string): Promise<NotificationRecipient | null>;
 }
 
-/** La zona del centro. Sin sede conocida, el que llama decide el default. */
-export interface TimeZoneLookup {
-  ofVenue(venueId: string): Promise<string | null>;
+/** La sede, como la necesita un aviso: su nombre y su zona horaria. */
+export interface VenueLookup {
+  find(venueId: string): Promise<{ name: string; timeZone: string } | null>;
+}
+
+/** La clase, como la necesita un aviso. La contesta Schedule (ADR-003). */
+export interface SessionLookup {
+  find(
+    sessionId: string,
+  ): Promise<{ name: string; venueId: string; startAt: Temporal.Instant } | null>;
+}
+
+/**
+ * Quiénes están anotados. Va con el estado porque no todos los avisos son para
+ * todos: al de la lista de espera le importa que se cancele la clase, pero no
+ * que cambie el coach de un lugar que todavía no tiene.
+ */
+export interface RosterLookup {
+  of(sessionId: string): Promise<Array<{ memberId: string; status: string }>>;
+}
+
+export interface ContractLookup {
+  find(contractId: string): Promise<{
+    productName: string;
+    venueId: string;
+    /** `null` en una membresía sin vencimiento. */
+    endsAt: Temporal.Instant | null;
+  } | null>;
+}
+
+export interface ChargeLookup {
+  find(chargeId: string): Promise<{ venueId: string; dueAt: Temporal.Instant } | null>;
+}
+
+export interface PaymentLookup {
+  find(paymentId: string): Promise<{ venueId: string; receivedAt: Temporal.Instant } | null>;
+}
+
+/**
+ * Las clases que arrancan en una ventana, de **todos** los centros: es lo que
+ * recorre el job de recordatorios antes de entrar al contexto de cada tenant.
+ */
+export interface UpcomingSessionLookup {
+  startingBetween(
+    from: Temporal.Instant,
+    to: Temporal.Instant,
+  ): Promise<Array<{ tenantId: string; sessionId: string; startAt: Temporal.Instant }>>;
 }
 
 /**

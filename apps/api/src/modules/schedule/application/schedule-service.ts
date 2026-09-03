@@ -49,11 +49,12 @@ export interface VenueLookup {
  * el socio no perdió nada, la clase no se dio.
  */
 export interface SessionBookingReleaser {
-  releaseSession(params: { sessionId: string; reason: string }): Promise<number>;
+  /** Devuelve a que socios se les libero la reserva: son los que hay que avisar. */
+  releaseSession(params: { sessionId: string; reason: string }): Promise<string[]>;
 }
 
 export const NO_BOOKINGS_YET: SessionBookingReleaser = {
-  releaseSession: () => Promise.resolve(0),
+  releaseSession: () => Promise.resolve([]),
 };
 
 export interface ScheduleServiceDeps {
@@ -295,7 +296,7 @@ export class ScheduleService {
       throw finishedSession(id, 'terminada');
     }
 
-    const liberadas = await this.bookings.releaseSession({ sessionId: id, reason });
+    const liberados = await this.bookings.releaseSession({ sessionId: id, reason });
 
     const updated = await this.sessions.updateByPublicId(id, { $set: { status: 'cancelled' } });
     if (!updated) throw sessionNotFound(id);
@@ -306,7 +307,7 @@ export class ScheduleService {
       targetId: id,
       reason,
       before: { status: session.status, bookedCount: session.bookedCount },
-      after: { status: 'cancelled', bookingsReleased: liberadas },
+      after: { status: 'cancelled', bookingsReleased: liberados.length },
     });
 
     await this.events.emit('session.cancelled', {
@@ -314,7 +315,8 @@ export class ScheduleService {
       venueId: session.venueId,
       startAt: fromBsonDate(session.startAt).toString(),
       reason,
-      releasedBookings: liberadas,
+      releasedBookings: liberados.length,
+      releasedMemberIds: liberados,
     });
 
     return updated;

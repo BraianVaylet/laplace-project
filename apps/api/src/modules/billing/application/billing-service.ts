@@ -342,6 +342,30 @@ export class BillingService {
   }
 
   /** Anula un cargo. Tampoco se borra: queda en `void` y deja de contar. */
+  /**
+   * El cargo y el pago, como los necesita un aviso: de que sede son y de que
+   * fecha. Son los puertos que consume Notifications (F1-22), y devuelven
+   * `null` en vez de tirar: un aviso que no encuentra su cargo no sale, no
+   * rompe el job.
+   */
+  async chargeContextOf(
+    chargeId: string,
+  ): Promise<{ venueId: string; dueAt: Temporal.Instant } | null> {
+    const charge = await this.charges.findByPublicId(chargeId);
+
+    return charge ? { venueId: charge.venueId, dueAt: fromBsonDate(charge.dueAt) } : null;
+  }
+
+  async paymentContextOf(
+    paymentId: string,
+  ): Promise<{ venueId: string; receivedAt: Temporal.Instant } | null> {
+    const payment = await this.payments.findByPublicId(paymentId);
+
+    return payment
+      ? { venueId: payment.venueId, receivedAt: fromBsonDate(payment.receivedAt) }
+      : null;
+  }
+
   async voidCharge(chargeId: string, reason: string): Promise<ChargeDoc> {
     const charge = await this.charges.findByPublicId(chargeId);
     if (!charge) throw notFound(chargeId);

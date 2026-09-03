@@ -68,6 +68,13 @@ export interface DomainEvents {
     startAt: string;
     reason: string;
     releasedBookings: number;
+    /**
+     * A quienes se les libero la reserva. Va en el payload y no se consulta
+     * despues porque para cuando alguien reacciona **la clase ya no tiene
+     * inscriptos**: las reservas se cancelaron antes de emitir. Son IDs, no
+     * documentos: quien reacciona busca lo que necesita de cada uno.
+     */
+    releasedMemberIds: string[];
   };
   /** Cambio de coach. El socio eligio esa clase, y a veces eligio a esa persona. */
   'session.coach_changed': {

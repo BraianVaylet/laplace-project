@@ -74,7 +74,7 @@ export const NOTIFICATION_VARIABLES: Record<NotificationEventType, readonly stri
   'session.reminder_24h': ['nombre', 'clase', 'fecha', 'hora', 'sede'],
   'session.reminder_1h': ['nombre', 'clase', 'hora', 'sede'],
   'session.cancelled': ['nombre', 'clase', 'fecha', 'hora', 'motivo'],
-  'session.coach_changed': ['nombre', 'clase', 'fecha', 'hora', 'coach'],
+  'session.coach_changed': ['nombre', 'clase', 'fecha', 'hora'],
   'contract.expiring': ['nombre', 'pack', 'dias', 'vence'],
   'contract.expired': ['nombre', 'pack'],
   'charge.overdue': ['nombre', 'monto', 'vencimiento'],

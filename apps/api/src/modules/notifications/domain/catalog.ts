@@ -47,9 +47,14 @@ const DEFAULTS: Record<NotificationEventType, TemplateContent> = {
     subject: 'Se canceló {{clase}}',
     body: 'Hola {{nombre}}, se canceló {{clase}} del {{fecha}} a las {{hora}}. Motivo: {{motivo}}. Te devolvimos el crédito.',
   },
+  /*
+   * No dice quien: resolver el nombre del coach necesitaria un directorio de
+   * staff que hoy no existe (los usuarios del staff los guarda Better Auth, no
+   * Members). El aviso avisa que cambio; quien es se ve en la app.
+   */
   'session.coach_changed': {
     subject: 'Cambió el coach de {{clase}}',
-    body: 'Hola {{nombre}}, {{clase}} del {{fecha}} a las {{hora}} la va a dar {{coach}}.',
+    body: 'Hola {{nombre}}, cambió el coach de {{clase}} del {{fecha}} a las {{hora}}.',
   },
   'contract.expiring': {
     subject: 'Tu {{pack}} vence en {{dias}} días',
@@ -90,7 +95,6 @@ const SAMPLES: Record<string, string> = {
   sede: 'Box Toro Centro',
   plazo: 'las 18:30',
   motivo: 'corte de luz',
-  coach: 'Julián',
   pack: 'Pack 8 clases',
   dias: '3',
   vence: '12 de marzo',

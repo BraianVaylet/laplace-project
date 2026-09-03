@@ -1070,3 +1070,53 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
     }
   });
 });
+
+describe('el puerto que consume Notifications (F1-22)', () => {
+  const enContexto = <T>(organizationId: string, fn: () => Promise<T>) =>
+    runWithTenant({ tenantId: organizationId, userId: 'usr_test', requestId: 'req-ntf' }, fn);
+
+  it('el contrato dice qué pack es, de qué sede y cuándo vence', async () => {
+    const centro = await centroConSocio('puerto-contrato');
+    const pack = await publicarPack(centro.cookie, centro.venueId, { credits: 8 });
+    const contrato = await vender(centro.cookie, centro, pack.publicId);
+    await activar(centro.cookie, contrato.publicId);
+
+    const contexto = await enContexto(centro.organizationId, () =>
+      modules.contracts.service.notificationContextOf(contrato.publicId),
+    );
+
+    expect(contexto?.productName).toBe('Pack 8 clases');
+    expect(contexto?.venueId).toBe(centro.venueId);
+    expect(contexto?.endsAt).not.toBeNull();
+  });
+
+  it('una clase suelta sin vencimiento contesta `endsAt: null`', async () => {
+    const centro = await centroConSocio('puerto-sin-vencimiento');
+    const suelta = await publicarPack(centro.cookie, centro.venueId, {
+      name: 'Clase suelta',
+      type: 'drop_in',
+      credits: 1,
+      durationDays: undefined,
+    });
+    const contrato = await vender(centro.cookie, centro, suelta.publicId);
+
+    const contexto = await enContexto(centro.organizationId, () =>
+      modules.contracts.service.notificationContextOf(contrato.publicId),
+    );
+
+    // El aviso de vencimiento no aplica: no hay fecha que avisar.
+    expect(contexto?.endsAt).toBeNull();
+  });
+
+  it('🔴 un contrato que no existe devuelve null, no una excepción', async () => {
+    const centro = await centroConSocio('puerto-contrato-fantasma');
+
+    // El aviso que no encuentra su contrato no sale; no rompe el job que lo
+    // estaba encolando ni se lleva puestos los otros avisos de la corrida.
+    const contexto = await enContexto(centro.organizationId, () =>
+      modules.contracts.service.notificationContextOf('ctr_no_existe'),
+    );
+
+    expect(contexto).toBeNull();
+  });
+});

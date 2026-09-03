@@ -47,7 +47,9 @@ const entitlements = createEntitlementsLoader(() => Promise.resolve({ planId: 'p
  */
 const liberadas: Array<{ sessionId: string; reason: string }> = [];
 const avisos: Array<{ evento: string; sessionId: string }> = [];
-const RESERVAS_POR_CLASE = 3;
+/** A quienes se les libero la reserva: el evento los lleva para poder avisarles. */
+const LIBERADOS = ['mem_uno', 'mem_dos', 'mem_tres'];
+const RESERVAS_POR_CLASE = LIBERADOS.length;
 let fallarLiberacion = false;
 
 /** Lunes 2 de marzo de 2026, 09:00 en Buenos Aires. */
@@ -208,7 +210,7 @@ beforeAll(async () => {
         if (fallarLiberacion) return Promise.reject(new Error('la devolución falló'));
         liberadas.push(params);
 
-        return Promise.resolve(RESERVAS_POR_CLASE);
+        return Promise.resolve(LIBERADOS);
       },
     },
   });

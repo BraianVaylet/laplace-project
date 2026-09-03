@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     20 |
+| Fase 1 — MVP vendible   |       32 |          186 |     21 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1430,7 +1430,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   F1-22, que ya no toca el motor: solo se suscribe. La pantalla de plantillas del DFSM (la API está
   entera: listar, guardar con validación y vista previa) entra con el resto del DFSM en F1-24.
 
-## [ ] F1-22 · Las notificaciones transaccionales del MVP
+## [x] F1-22 · Las notificaciones transaccionales del MVP
 
 - **module:** notifications
 - **description:** Las automáticas de §2.1.14 que cubre Fase 1. Sin estas, el motor no le sirve a
@@ -1453,7 +1453,13 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **test_plan:** Un test por notificación: que se dispare con el evento correcto, una sola vez, con
   las variables resueltas. Test de idempotencia de `classReminders`.
 - **error-codes:** ninguno nuevo
-- **data-model-impact:** ninguno nuevo.
+- **data-model-impact:** ninguno nuevo. El evento `session.cancelled` suma `releasedMemberIds`:
+  cuando Notifications reacciona, la clase ya no tiene inscriptos, así que a quién avisarle solo
+  puede decirlo el que canceló.
+- **deuda declarada:** el aviso de pack por vencer trae el CTA en el texto, no como botón: la
+  pantalla de "mis packs" a la que tendría que llevar es F1-29. El de cambio de coach no dice a
+  quién: resolver un nombre de staff necesita un directorio que hoy no existe (los usuarios del
+  staff los guarda Better Auth, no Members).
 
 ## [ ] F1-23 · MetricsDaily y KPIs básicos
 

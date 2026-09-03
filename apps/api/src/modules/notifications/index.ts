@@ -4,8 +4,19 @@ import type { DomainEventBus } from '../../events/bus.js';
 import type { JobDefinition } from '../../jobs/runner.js';
 import { runWithTenant } from '../../tenancy/context.js';
 import { NotificationService } from './application/notification-service.js';
-import type { NotificationMailer, RecipientLookup } from './application/ports.js';
-import { fechaLarga, horaDe } from './domain/format.js';
+import { ReminderSender } from './application/reminders.js';
+import { subscribeNotifications } from './application/subscriptions.js';
+import type {
+  ChargeLookup,
+  ContractLookup,
+  NotificationMailer,
+  PaymentLookup,
+  RecipientLookup,
+  RosterLookup,
+  SessionLookup,
+  UpcomingSessionLookup,
+  VenueLookup,
+} from './application/ports.js';
 import { notificationJobs } from './infrastructure/jobs.js';
 import { NotificationRepository } from './infrastructure/notification.repository.js';
 import { NotificationPreferenceRepository } from './infrastructure/preference.repository.js';
@@ -15,6 +26,9 @@ import { createNotificationRoutes, VICTIM_NOTIFICATION_SUBJECT } from './infrast
 /**
  * Interfaz publica del modulo Notifications. Es lo unico que puede tocar otro
  * modulo: los repositorios y los modelos se quedan adentro (ADR-003).
+ *
+ * Ningun modulo la usa, y eso es el punto: Notifications se engancha a los
+ * eventos que los demas ya emiten, y nadie tiene que acordarse de avisarle.
  */
 export interface NotificationModule {
   routes: ReturnType<typeof createNotificationRoutes>;
@@ -22,32 +36,20 @@ export interface NotificationModule {
   jobs: JobDefinition[];
 }
 
-/** La clase, como la necesita un aviso. La contesta Schedule (ADR-003). */
-export interface NotificationSessionLookup {
-  find(sessionId: string): Promise<{
-    name: string;
-    venueId: string;
-    startAt: Temporal.Instant;
-  } | null>;
-}
-
-/** La sede, como la necesita un aviso: su nombre y su zona horaria. */
-export interface NotificationVenueLookup {
-  find(venueId: string): Promise<{ name: string; timeZone: string } | null>;
-}
-
 export interface NotificationModuleDeps {
   entitlements: EntitlementsLoader;
   events: DomainEventBus;
   mailer: NotificationMailer;
   recipients: RecipientLookup;
-  sessions: NotificationSessionLookup;
-  venues: NotificationVenueLookup;
+  sessions: SessionLookup;
+  venues: VenueLookup;
+  roster: RosterLookup;
+  contracts: ContractLookup;
+  charges: ChargeLookup;
+  payments: PaymentLookup;
+  upcoming: UpcomingSessionLookup;
   now: () => Temporal.Instant;
 }
-
-/** Sin sede conocida, el aviso se arma en hora argentina y no en UTC. */
-const DEFAULT_TIME_ZONE = 'America/Argentina/Buenos_Aires';
 
 export function createNotificationModule(deps: NotificationModuleDeps): NotificationModule {
   const service = new NotificationService({
@@ -58,40 +60,27 @@ export function createNotificationModule(deps: NotificationModuleDeps): Notifica
     now: deps.now,
   });
 
-  /**
-   * 🔴 La confirmación de reserva (§2.1.14).
-   *
-   * Va por el bus y no por una llamada de Booking: la reserva ya está hecha
-   * cuando esto corre, y si el aviso falla, la reserva sigue existiendo. Booking
-   * no sabe que Notifications existe (ADR-003).
-   */
-  deps.events.on('booking.created', async ({ bookingId, sessionId, memberId, venueId }) => {
-    const destinatario = await deps.recipients.byMemberId(memberId);
-    // Un walk-in sin cuenta no tiene a dónde recibir nada. No es un error.
-    if (!destinatario) return;
-
-    const clase = await deps.sessions.find(sessionId);
-    if (!clase) return;
-
-    const sede = await deps.venues.find(venueId);
-    const timeZone = sede?.timeZone ?? DEFAULT_TIME_ZONE;
-    const local = clase.startAt.toZonedDateTimeISO(timeZone);
-
-    await service.queue({
-      eventType: 'booking.created',
-      userId: destinatario.userId,
-      email: destinatario.email,
-      subjectId: bookingId,
-      timeZone,
-      values: {
-        nombre: destinatario.name,
-        clase: clase.name,
-        fecha: fechaLarga(local),
-        hora: horaDe(local),
-        sede: sede?.name ?? 'el centro',
-      },
-    });
+  subscribeNotifications(service, deps.events, {
+    recipients: deps.recipients,
+    sessions: deps.sessions,
+    venues: deps.venues,
+    roster: deps.roster,
+    contracts: deps.contracts,
+    charges: deps.charges,
+    payments: deps.payments,
   });
+
+  const reminders = new ReminderSender(
+    service,
+    {
+      upcoming: deps.upcoming,
+      recipients: deps.recipients,
+      sessions: deps.sessions,
+      venues: deps.venues,
+      roster: deps.roster,
+    },
+    deps.now,
+  );
 
   /** Siembra un aviso del tenant victima, para la suite de aislamiento (F0-05). */
   let sembrados = 0;
@@ -122,15 +111,22 @@ export function createNotificationModule(deps: NotificationModuleDeps): Notifica
   return {
     routes: createNotificationRoutes(service, deps.entitlements, seedVictim),
     service,
-    jobs: notificationJobs(service),
+    jobs: notificationJobs(service, reminders),
   };
 }
 
 export type { NotificationService } from './application/notification-service.js';
 export type {
+  ChargeLookup,
+  ContractLookup,
   NotificationMailer,
   NotificationRecipient,
   OutgoingEmail,
+  PaymentLookup,
   RecipientLookup,
+  RosterLookup,
+  SessionLookup,
+  UpcomingSessionLookup,
+  VenueLookup,
 } from './application/ports.js';
 export { createLoggingMailer } from './application/ports.js';

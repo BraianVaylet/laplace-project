@@ -23,6 +23,29 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-03 — F1-22: los avisos transaccionales del MVP
+
+- **Módulo:** `notifications` · `booking` · `schedule` · `contracts` · `billing`
+- **Tipo:** feature
+- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/4aS5u66G (F1-22) — movida a **Completadas**
+- **Qué cambió:** los ocho avisos automáticos de §2.1.14 ya salen solos. Cancelar una reserva,
+  entrar desde la lista de espera, que se caiga la clase o cambie el coach, que el pack esté por
+  vencer o se venza, que una cuota entre en mora o que se registre un pago: cada uno avisa por la
+  campana y por mail. Los recordatorios de clase (24 h y 1 h antes) los manda el job
+  `classReminders`, una sola vez por hito aunque el job corra veinte veces.
+- **Por qué:** sin estas, el motor de F1-21 no le sirve a nadie. Son las que hacen que el socio no
+  tenga que abrir la app para enterarse de lo que le pasa a su plata y a sus clases.
+- **Impacto:** ningún código de error ni colección nueva · el evento `session.cancelled` suma
+  `releasedMemberIds` (y `releaseSession` de Booking devuelve esa lista en vez de un número):
+  cuando Notifications reacciona, las reservas ya se cancelaron y la clase no tiene inscriptos, así
+  que a quién avisarle solo lo sabe el que canceló · job `classReminders` nuevo (cada 5 min) ·
+  tres puertos de lectura nuevos, en Contracts (`notificationContextOf`) y Billing
+  (`chargeContextOf`, `paymentContextOf`), todos devolviendo `null` en vez de tirar.
+- **Pendiente:** el aviso de pack por vencer trae el CTA en el texto y no como botón — la pantalla
+  de "mis packs" a la que llevaría es F1-29. El de cambio de coach no dice a quién: un directorio
+  de staff no existe todavía. Web Push y WhatsApp son Fase 2.
+
 ## 2026-09-03 — F1-21: motor de notificaciones in-app y email
 
 - **Módulo:** `notifications` (nuevo) · `members` · `venues` · `auth` · `client` · `wafm`
