@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `attendance` (nuevo) · `dfsm`
 - **Tipo:** feature
-- **Commit/PR:** pendiente (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `46b3937` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/d7wJ0zxW (F1-18) — movida a **Completadas**
 - **Qué cambió:** el coach abre la lista de su clase en el teléfono y ve inscriptos, presentes,
   lista de espera y las alertas de cada uno. Marca a uno de un toque o a todos de una, con la
