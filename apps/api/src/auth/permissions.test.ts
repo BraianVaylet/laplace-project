@@ -94,6 +94,13 @@ const MATRIX: Record<string, Record<string, OrgRoleName[]>> = {
     // owner tiene `accept` igual, heredado de `everything`: no tiene techo.
     accept: ['owner', 'member'],
   },
+  notification: {
+    // La campana y las preferencias son de cada uno: todos las tienen.
+    read: ['owner', 'manager_assistant', 'front_desk', 'head_coach', 'coach', 'member'],
+    manageTemplates: ['owner', 'manager_assistant'],
+    // Ver los avisos de todos: incluye montos de cuotas ajenas.
+    viewDeliveryLog: ['owner', 'manager_assistant'],
+  },
   // El manager_assistant NO entra: §1.1 dice "todo salvo metricas de negocio
   // y facturacion". La facturacion es del owner y del mostrador.
   billing: {

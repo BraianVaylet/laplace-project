@@ -21,6 +21,16 @@ export function Home({ client = api }: HomeProps = {}) {
   });
   const sinFirmar = pendientes.data?.filter((doc) => !doc.accepted).length ?? 0;
 
+  // Igual de silencioso: el home no se cae porque el contador de avisos no
+  // pudo cargar.
+  const avisos = useQuery({
+    queryKey: ['notifications', 'unread-count'],
+    queryFn: () => client.get<{ unread: number }>('/notifications/unread-count'),
+    retry: false,
+    throwOnError: false,
+  });
+  const sinLeer = avisos.data?.unread ?? 0;
+
   return (
     <div className="flex flex-col gap-4">
       <h1 className="text-fg text-xl font-semibold">Hoy</h1>
@@ -33,6 +43,19 @@ export function Home({ client = api }: HomeProps = {}) {
               firmaste.
             </p>
             <Link to="/documentos">
+              <Button variant="secondary">Ver</Button>
+            </Link>
+          </div>
+        </Card>
+      )}
+
+      {sinLeer > 0 && (
+        <Card title="Tenés avisos sin leer">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-fg-muted text-sm">
+              {sinLeer} aviso{sinLeer === 1 ? '' : 's'} que todavía no abriste.
+            </p>
+            <Link to="/avisos">
               <Button variant="secondary">Ver</Button>
             </Link>
           </div>

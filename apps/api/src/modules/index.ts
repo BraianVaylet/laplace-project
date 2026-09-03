@@ -16,6 +16,11 @@ import { createScheduleModule, type SessionBookingReleaser } from './schedule/in
 import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
 import { createVenuesModule } from './venues/index.js';
 import { createWaiverModule } from './waivers/index.js';
+import {
+  createLoggingMailer,
+  createNotificationModule,
+  type NotificationMailer,
+} from './notifications/index.js';
 
 export interface ModuleDeps {
   events: DomainEventBus;
@@ -45,6 +50,11 @@ export interface ModuleDeps {
    * contestar Booking (F1-14); hasta entonces cancelar no libera nada.
    */
   sessionBookings?: SessionBookingReleaser | undefined;
+  /**
+   * El proveedor de mail de Notifications. Se inyecta para que ningun test
+   * mande un mail; sin nada, deja el aviso en el log (modo dev).
+   */
+  mailer?: NotificationMailer | undefined;
 }
 
 /**
@@ -288,8 +298,44 @@ export function createModules(deps: ModuleDeps) {
   routes.route('/', booking.routes);
   routes.route('/', attendance.routes);
 
+  /*
+   * Notifications va ultimo y no lo conoce nadie: se engancha a los eventos que
+   * los demas ya emiten (ADR-003). Que el aviso falle no puede romper la
+   * reserva que lo origino, y por eso no hay ninguna llamada directa hacia aca.
+   */
+  const notifications = createNotificationModule({
+    entitlements: deps.entitlements,
+    events: deps.events,
+    now: deps.now ?? (() => Temporal.Now.instant()),
+    mailer: deps.mailer ?? createLoggingMailer((msg, meta) => deps.logger.info(meta, msg)),
+    recipients: {
+      byMemberId: (memberId) => members.service.notificationRecipientOf(memberId),
+    },
+    sessions: {
+      find: async (sessionId) => {
+        const clase = await schedule.service.findSession(sessionId);
+        if (!clase) return null;
+
+        return {
+          name: clase.name,
+          venueId: clase.venueId,
+          startAt: fromBsonDate(clase.startAt),
+        };
+      },
+    },
+    venues: { find: (venueId) => venues.service.summaryOf(venueId) },
+  });
+
+  routes.route('/', notifications.routes);
+
   /** Todo lo que el runner tiene que programar (§10). */
-  const jobs = [...contracts.jobs, ...billing.jobs, ...schedule.jobs, ...booking.jobs];
+  const jobs = [
+    ...contracts.jobs,
+    ...billing.jobs,
+    ...schedule.jobs,
+    ...booking.jobs,
+    ...notifications.jobs,
+  ];
 
   return {
     routes,
@@ -304,6 +350,7 @@ export function createModules(deps: ModuleDeps) {
     booking,
     waivers,
     attendance,
+    notifications,
   };
 }
 

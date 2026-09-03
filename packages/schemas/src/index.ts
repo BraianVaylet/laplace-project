@@ -8,6 +8,7 @@ export * from './contracts/index.js';
 export * from './invite-codes/index.js';
 export * from './members/index.js';
 export * from './members/import.js';
+export * from './notifications/index.js';
 export * from './products/index.js';
 export * from './rooms/index.js';
 export * from './schedule/index.js';

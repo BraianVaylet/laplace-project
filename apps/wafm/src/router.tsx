@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-router';
 import { Home } from './Home.js';
 import { MyQr } from './MyQr.js';
+import { Notifications } from './Notifications.js';
 import { PendingWaivers } from './PendingWaivers.js';
 import { Shell } from './Shell.js';
 
@@ -55,7 +56,23 @@ const documentsRoute = createRoute({
   component: PendingWaivers,
 });
 
-export const routeTree = rootRoute.addChildren([homeRoute, qrRoute, documentsRoute]);
+/**
+ * Tampoco es un item de la bottom nav (§5.1.3 fija las cinco). Se llega desde
+ * la campana del home: la spec pide una seccion de avisos en cada aplicativo
+ * (§2.1.14), no un sexto tab.
+ */
+const notificationsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/avisos',
+  component: Notifications,
+});
+
+export const routeTree = rootRoute.addChildren([
+  homeRoute,
+  qrRoute,
+  documentsRoute,
+  notificationsRoute,
+]);
 
 export const router = createRouter({ routeTree });
 

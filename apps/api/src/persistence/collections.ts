@@ -29,6 +29,8 @@ export const COLLECTIONS = {
   legalDocument: 'legalDocuments',
   consent: 'consents',
   notification: 'notifications',
+  notificationTemplate: 'notificationTemplates',
+  notificationPreference: 'notificationPreferences',
   lead: 'leads',
   auditLog: 'auditLogs',
   metricsDaily: 'metricsDaily',

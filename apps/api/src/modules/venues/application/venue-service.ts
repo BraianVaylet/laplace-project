@@ -116,6 +116,17 @@ export class VenueService {
   }
 
   /**
+   * El nombre y la zona de una sede, sin romper si no existe. Es el puerto que
+   * consume Notifications: un aviso al que le falta el nombre de la sede sale
+   * igual, y hacerlo fallar seria peor que decir "el centro".
+   */
+  async summaryOf(publicId: string): Promise<{ name: string; timeZone: string } | null> {
+    const venue = await this.venues.findByPublicId(publicId);
+
+    return venue ? { name: venue.name, timeZone: venue.timeZone } : null;
+  }
+
+  /**
    * La politica de reserva del centro, completa: las cinco ventanas de §2.1.5.c,
    * el flag de deuda de ADR-004 y las excepciones por categoria. Es el puerto
    * que consume Booking, que resuelve las ventanas por su cuenta.

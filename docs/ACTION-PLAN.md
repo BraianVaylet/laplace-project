@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     19 |
+| Fase 1 — MVP vendible   |       32 |          186 |     20 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1394,7 +1394,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   _socio_ firma para _su gimnasio_ — org-scoped. Los globales son otra audiencia (el SMU al
   suscribirse) y entran con F1-25. El modelo ya soporta `scope`; el módulo solo escribe `'org'`.
 
-## [ ] F1-21 · Notifications: motor in-app y email transaccional
+## [x] F1-21 · Notifications: motor in-app y email transaccional
 
 - **module:** notifications
 - **description:** El motor de §2.1.14 para los canales de Fase 1: in-app y email. Con cola,
@@ -1425,6 +1425,10 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **error-codes:** `LP-NOTF-500-001` (envío fallido tras reintentos), `LP-NOTF-422-002`
 - **data-model-impact:** `Notification` de §5.2.2, `NotificationTemplate`,
   `NotificationPreference { userId, channel, eventType, enabled }`.
+- **deuda declarada:** el motor queda enganchado a un solo evento (`booking.created`, el del
+  ejemplo de la tarjeta). Los otros siete avisos transaccionales y el job `classReminders` son
+  F1-22, que ya no toca el motor: solo se suscribe. La pantalla de plantillas del DFSM (la API está
+  entera: listar, guardar con validación y vista previa) entra con el resto del DFSM en F1-24.
 
 ## [ ] F1-22 · Las notificaciones transaccionales del MVP
 

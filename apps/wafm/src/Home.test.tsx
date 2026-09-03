@@ -37,7 +37,9 @@ function montar() {
 }
 
 beforeEach(() => {
-  fetchMock = vi.fn(() => Promise.resolve(respuesta([])));
+  fetchMock = vi.fn((url: string) =>
+    Promise.resolve(respuesta(String(url).includes('unread-count') ? { unread: 0 } : [])),
+  );
 });
 
 describe('el aviso de documentos pendientes', () => {
@@ -63,5 +65,35 @@ describe('el aviso de documentos pendientes', () => {
     // Solo cuenta el que falta firmar: el ya firmado no suma al aviso.
     expect(screen.getByText(/1 documento que todavía no firmaste/)).toBeDefined();
     expect(screen.getByRole('link', { name: 'Ver' })).toBeDefined();
+  });
+});
+
+describe('la campana de avisos (§2.1.14)', () => {
+  it('sin avisos sin leer, no aparece', async () => {
+    montar();
+
+    expect(await screen.findByText('Tus próximas clases')).toBeDefined();
+    expect(screen.queryByText('Tenés avisos sin leer')).toBeNull();
+  });
+
+  it('con avisos sin leer, los ofrece con su cantidad', async () => {
+    fetchMock.mockImplementation((url: string) =>
+      Promise.resolve(respuesta(String(url).includes('unread-count') ? { unread: 3 } : [])),
+    );
+    montar();
+
+    expect(await screen.findByText('Tenés avisos sin leer')).toBeDefined();
+    expect(screen.getByText('3 avisos que todavía no abriste.')).toBeDefined();
+  });
+
+  it('si el contador falla, el home no se cae', async () => {
+    fetchMock.mockImplementation((url: string) =>
+      String(url).includes('unread-count')
+        ? Promise.reject(new Error('sin red'))
+        : Promise.resolve(respuesta([])),
+    );
+    montar();
+
+    expect(await screen.findByText('Tus próximas clases')).toBeDefined();
   });
 });

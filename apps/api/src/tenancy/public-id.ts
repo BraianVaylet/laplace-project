@@ -26,6 +26,8 @@ export const ID_PREFIXES = {
   planning: 'pln',
   result: 'rsl',
   notification: 'ntf',
+  notificationTemplate: 'ntt',
+  notificationPreference: 'npf',
   lead: 'led',
   legalDocument: 'doc',
   consent: 'cst',

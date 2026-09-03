@@ -304,6 +304,26 @@ export class MemberService {
     };
   }
 
+  /**
+   * A quien avisarle, como lo necesita Notifications (F1-21): la cuenta que
+   * recibe el aviso, el nombre para el "Hola {{nombre}}" y el mail al que sale.
+   *
+   * `null` cuando la ficha no tiene cuenta vinculada: un walk-in cargado en el
+   * mostrador no tiene donde recibir nada, y eso no es un error.
+   */
+  async notificationRecipientOf(
+    memberId: string,
+  ): Promise<{ userId: string; name: string; email: string | null } | null> {
+    const member = await this.members.findByPublicId(memberId);
+    if (!member?.userId) return null;
+
+    return {
+      userId: member.userId,
+      name: member.firstName.trim(),
+      email: member.email ?? null,
+    };
+  }
+
   /** Lo consume el guard de entitlements. Cuenta los que ocupan cupo. */
   countActive(): Promise<number> {
     return this.members.countActive();

@@ -23,6 +23,31 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-03 — F1-21: motor de notificaciones in-app y email
+
+- **Módulo:** `notifications` (nuevo) · `members` · `venues` · `auth` · `client` · `wafm`
+- **Tipo:** feature
+- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/2Gs04wwb (F1-21) — movida a **Completadas**
+- **Qué cambió:** los avisos del producto ya tienen motor. Un evento de dominio encola el aviso por
+  los canales que correspondan (campana y mail), un job los manda con reintentos a los 30 s, 2 min
+  y 10 min, y lo que no sale queda en la cola de fallidos con su error, visible para soporte. El
+  socio elige qué recibir y por dónde desde la WAFM; el SMU edita las plantillas con variables y
+  ve la vista previa antes de que salgan. La primera enganchada es la confirmación de reserva.
+- **Por qué:** §2.1.14. "No me llegó el aviso" tiene que ser una pregunta contestable, y un
+  proveedor de mail caído no puede hacer fallar una reserva que ya está hecha.
+- **Impacto:** colecciones `notificationTemplates` y `notificationPreferences` nuevas; `notifications`
+  estrena dueño · **migración** (`20260905090000`) con el único de deduplicación
+  `{tenantId, dedupeKey}`, el índice del reclamo `{tenantId, status, nextAttemptAt}` y los únicos
+  de plantillas y preferencias · 9 endpoints nuevos bajo `/api/v1/notification*` · recurso
+  `notification` en la matriz de permisos (`read`, `manageTemplates`, `viewDeliveryLog`) · job
+  `dispatchNotifications` · `LP-NOTF-500-001` y `LP-NOTF-422-002` ya estaban declarados, sin
+  códigos nuevos · el `ApiClient` de `@laplace/client` gana `put`, que la API ahora usa.
+- **Pendiente:** el motor queda enganchado a un solo evento (`booking.created`). Los otros siete
+  avisos transaccionales y el job `classReminders` son F1-22, que ya no toca el motor: solo se
+  suscribe. La pantalla de plantillas del DFSM entra en F1-24 — la API está entera. Web Push y
+  WhatsApp son Fase 2: el enum de canales crece, el resto del motor no cambia.
+
 ## 2026-09-03 — F1-20: módulo Waivers, deslindes y consentimientos
 
 - **Módulo:** `waivers` (nuevo) · `attendance` · `members` · `wafm`
