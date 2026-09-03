@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `attendance` · `booking` · `wafm` · `dfsm`
 - **Tipo:** feature
-- **Commit/PR:** pendiente (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `9ab0a20` (rama `feat/phase-1-mvp`)
 - **Trello:** F1-19 — movida a **Completadas**
 - **Qué cambió:** el socio tiene "Mi QR" a un toque desde el home de la WAFM: un código que se
   renueva solo cada 30 segundos y se muestra en la tablet de la puerta para entrar. La tablet no
