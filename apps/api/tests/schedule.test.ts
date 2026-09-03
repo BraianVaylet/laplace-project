@@ -1014,9 +1014,13 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
   it('las trece rutas traen su fixture de ataque', () => {
     const rutas = allRegisteredRoutes().filter(
       (route) =>
-        route.path.startsWith('/api/v1/class-templates') ||
-        route.path.startsWith('/api/v1/sessions') ||
-        route.path.startsWith('/api/v1/closures'),
+        // La lista de clase y el check-in masivo cuelgan de `/sessions/:id` pero
+        // son de Attendance (F1-18), que tiene su propia suite.
+        !route.path.includes('/roster') &&
+        !route.path.includes('/check-in') &&
+        (route.path.startsWith('/api/v1/class-templates') ||
+          route.path.startsWith('/api/v1/sessions') ||
+          route.path.startsWith('/api/v1/closures')),
     );
 
     expect(rutas).toHaveLength(13);
@@ -1032,9 +1036,11 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
 
     for (const route of allRegisteredRoutes()) {
       const esDeSchedule =
-        route.path.startsWith('/api/v1/class-templates') ||
-        route.path.startsWith('/api/v1/sessions') ||
-        route.path.startsWith('/api/v1/closures');
+        !route.path.includes('/roster') &&
+        !route.path.includes('/check-in') &&
+        (route.path.startsWith('/api/v1/class-templates') ||
+          route.path.startsWith('/api/v1/sessions') ||
+          route.path.startsWith('/api/v1/closures'));
       if (!esDeSchedule || !route.isolationFixture) continue;
 
       const attack = await route.isolationFixture({ victimTenantId: victima.organizationId });

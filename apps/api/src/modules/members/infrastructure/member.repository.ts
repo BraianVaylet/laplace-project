@@ -11,6 +11,15 @@ export class MemberRepository extends TenantRepository<MemberDoc> {
     super(MemberModel, 'member');
   }
 
+  /** Varios socios por su `publicId`, en una sola consulta. */
+  async byPublicIds(publicIds: readonly string[]): Promise<MemberDoc[]> {
+    if (publicIds.length === 0) return [];
+
+    return this.list({ publicId: { $in: publicIds } } as never, { limit: publicIds.length }).then(
+      (page) => page.items,
+    );
+  }
+
   /**
    * Cuenta los que consumen cupo del plan: todos menos los archivados (§2.2.1).
    * Archivar a los que se fueron no debe costar plata.

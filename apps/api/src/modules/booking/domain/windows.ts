@@ -1,5 +1,5 @@
 import { Temporal } from '@js-temporal/polyfill';
-import type { BookingPolicy, CategoryBookingPolicy } from '@laplace/schemas';
+import type { BookingPolicy } from '@laplace/schemas';
 import { AppError } from '../../../http/errors.js';
 
 /**
@@ -11,24 +11,6 @@ import { AppError } from '../../../http/errors.js';
  * instantes el producto se equivoca de día dos veces al año.
  */
 export type EffectivePolicy = BookingPolicy;
-
-/**
- * La política que rige para una categoría: la del centro con las excepciones de
- * esa categoría encima (§2.1.5.c). Sin excepciones, es la del centro tal cual.
- */
-export function policyFor(venue: BookingPolicy, categoryId: string | undefined): EffectivePolicy {
-  const excepcion: CategoryBookingPolicy | undefined =
-    categoryId === undefined ? undefined : venue.categoryPolicies[categoryId];
-  if (!excepcion) return venue;
-
-  // `undefined` no pisa: una categoría que solo cambia el corte de cancelación
-  // no puede borrarle el resto de la configuración al centro.
-  const definidas = Object.fromEntries(
-    Object.entries(excepcion).filter(([, valor]) => valor !== undefined),
-  );
-
-  return { ...venue, ...definidas };
-}
 
 export interface BookingWindow {
   opensAt: Temporal.Instant;

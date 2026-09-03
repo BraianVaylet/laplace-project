@@ -27,6 +27,10 @@ export interface BookingDoc extends Record<string, unknown> {
   promotedAt?: Date | null;
   /** Cuando confirmo. Con `promotedAt`, es la tasa de conversion de la fila. */
   confirmedAt?: Date | null;
+  /** El ingreso a la clase (§2.1.18). Lo escribe Booking a pedido de Attendance. */
+  checkedInAt?: Date | null;
+  checkInMethod?: string | null;
+  checkedInBy?: string | null;
   /** §5.0: obligatorio en reservas. El unico parcial evita la doble reserva por reintento. */
   idempotencyKey?: string;
 }
@@ -43,6 +47,9 @@ const bookingSchema = new Schema<BookingDoc>(
     holdExpiresAt: { type: Date, required: false, default: null },
     promotedAt: { type: Date, required: false, default: null },
     confirmedAt: { type: Date, required: false, default: null },
+    checkedInAt: { type: Date, required: false, default: null },
+    checkInMethod: { type: String, required: false, default: null },
+    checkedInBy: { type: String, required: false, default: null },
     idempotencyKey: { type: String, required: false },
   },
   { collection: COLLECTIONS.booking },

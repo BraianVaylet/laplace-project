@@ -25,7 +25,6 @@ import {
   bookingWindowOf,
   cancelCutoffAt,
   isLateCancel,
-  policyFor,
   policyText,
 } from '../domain/windows.js';
 import type { BookingDoc } from '../infrastructure/booking.model.js';
@@ -102,10 +101,11 @@ export interface MemberPenalties {
 
 export interface VenuePolicy {
   /**
-   * La política completa del centro. Booking pide una sola cosa y resuelve las
-   * ventanas él: preguntar campo por campo sería un viaje a la base por regla.
+   * La política del centro ya resuelta para esa categoría (§2.1.5.c). Booking
+   * pide una sola cosa: preguntar campo por campo sería un viaje a la base por
+   * regla, y todas se evalúan en la misma reserva.
    */
-  policyOf(venueId: string): Promise<BookingPolicy>;
+  policyOf(venueId: string, categoryId?: string): Promise<BookingPolicy>;
 }
 
 export interface BookingServiceDeps {
@@ -597,7 +597,7 @@ export class BookingService {
     clase: { sessionId: string; venueId: string; categoryId: string; startAt: Temporal.Instant },
     ahora: Temporal.Instant,
   ): Promise<number> {
-    const policy = policyFor(await this.venues.policyOf(clase.venueId), clase.categoryId);
+    const policy = await this.venues.policyOf(clase.venueId, clase.categoryId);
     // El que llegó tarde no es un ausente: la ventana de check-in tiene que
     // haber cerrado.
     if (!isNoShowDue(policy, clase.startAt, ahora)) return 0;
@@ -695,6 +695,44 @@ export class BookingService {
   }
 
   /**
+   * Registra el ingreso (§2.1.18). Lo pide Attendance, que es quien valida si
+   * puede entrar; acá solo se escribe, porque el documento es de este módulo.
+   *
+   * La transición a `checked_in` es explícita y no un `update` libre del campo
+   * (regla 5): pasar de `cancelled` a `checked_in` dejaría entrar a alguien que
+   * ya no tiene lugar.
+   */
+  async markCheckedIn(
+    id: string,
+    data: { method: string; by: string; at: Temporal.Instant },
+  ): Promise<BookingDoc> {
+    const booking = await this.get(id);
+    if (booking.status !== 'booked') throw alreadyClosed(id, booking.status);
+
+    const entrada = await this.bookings.updateByPublicId(id, {
+      $set: {
+        status: 'checked_in',
+        checkedInAt: toBsonDate(data.at),
+        checkInMethod: data.method,
+        checkedInBy: data.by,
+      },
+    });
+    if (!entrada) throw bookingNotFound(id);
+
+    return entrada;
+  }
+
+  /** La reserva, o `null`. Lo consume Attendance, que decide su propio error. */
+  async findOne(id: string): Promise<BookingDoc | null> {
+    return this.bookings.findByPublicId(id);
+  }
+
+  /** Todas las reservas vivas de una clase. La consume la lista del coach. */
+  async ofSession(sessionId: string): Promise<BookingDoc[]> {
+    return this.bookings.liveOfSession(sessionId);
+  }
+
+  /**
    * La política que la app le muestra al socio **antes** de confirmar
    * (§2.1.5.d): hasta cuándo puede cancelar y qué pasa si cancela tarde.
    */
@@ -721,7 +759,7 @@ export class BookingService {
 
   /** La política del centro con la excepción de la categoría de la clase. */
   private async policyOf(session: ClaimedSession): Promise<BookingPolicy> {
-    return policyFor(await this.venues.policyOf(session.venueId), session.categoryId);
+    return this.venues.policyOf(session.venueId, session.categoryId);
   }
 
   /**

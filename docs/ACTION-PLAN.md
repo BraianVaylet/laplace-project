@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     16 |
+| Fase 1 — MVP vendible   |       32 |          186 |     17 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1222,7 +1222,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   - El mensaje del bloqueo dice **hasta cuándo**. Un "no podés reservar" sin fecha deja al socio sin
     saber si es por hoy o para siempre.
 
-## [ ] F1-18 · Attendance: check-in manual y lista de clase del coach
+## [x] F1-18 · Attendance: check-in manual y lista de clase del coach
 
 - **module:** attendance
 - **description:** La pantalla que el coach usa de pie, con una mano, en el piso del box (§5.1.2).
@@ -1249,6 +1249,30 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **error-codes:** `LP-ATTD-409-001` (ya tiene check-in), `LP-ATTD-422-002` (fuera de ventana),
   `LP-ATTD-403-003` (waiver faltante)
 - **data-model-impact:** `Booking.checkedInAt`, `Booking.checkInMethod`, `Booking.checkedInBy`.
+- **decisiones de diseño:**
+  - **Attendance no tiene colección propia.** La asistencia es un estado de la reserva; guardarla
+    aparte serían dos verdades sobre si alguien entró. El módulo aporta la decisión —quién puede
+    entrar, cuándo, con qué alertas— y la vista; el documento lo sigue escribiendo Booking.
+  - La lista llega **resuelta en una sola llamada**, con nombres y alertas incluidos. El coach la
+    abre de pie con el gimnasio lleno: encadenar tres pedidos es hacerlo esperar tres veces.
+  - **"Todos presentes" no se cae por uno.** Los que no pasan una validación vuelven con su motivo
+    en `skipped`. Cortar la operación entera porque uno debe plata sería cambiar ocho segundos de
+    trabajo por una discusión en el piso del box.
+  - La ventana de check-in **cierra**, y no solo abre: sin cierre, quien faltó podría marcarse
+    presente al día siguiente y el no-show dejaría de significar algo.
+  - Las alertas viajan como **códigos**, no como texto: el mismo dato lo muestran la lista del coach
+    y la ficha del socio, y traducirlo en el backend obligaría a cambiar la API para cambiar una
+    palabra.
+  - La mezcla de la política por categoría se mudó a `@laplace/schemas`
+    (`effectiveBookingPolicy`): la consultan la reserva, el check-in y la pantalla que le muestra al
+    socio hasta cuándo puede cancelar. Tres copias son tres formas de mostrar un horario distinto
+    del que se va a aplicar.
+  - El DFSM estrena **router**: la lista lleva el `sessionId` en la URL porque el coach la abre
+    desde el horario, la comparte y vuelve a ella después de cerrar la app.
+- **deuda declarada:** el waiver se consulta por el puerto `WaiverGate`, que hasta F1-20 contesta
+  que está todo firmado. Es preferible a un `if` comentado esperando el módulo. La validación de
+  crédito al entrar la trae F1-19 con el walk-in: en una reserva el crédito ya se descontó
+  (ADR-001).
 
 ## [ ] F1-19 · Attendance: QR con token rotativo y walk-in
 

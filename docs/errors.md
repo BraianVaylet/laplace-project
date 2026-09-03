@@ -155,6 +155,7 @@ se abre.
 | `LP-ATTD-403-003` | 403  | Falta firmar un waiver obligatorio | Firmá el deslinde de responsabilidad para poder ingresar. |
 | `LP-ATTD-422-004` | 422  | Token de QR inválido o vencido     | El código venció. Abrí de nuevo tu QR.                    |
 | `LP-ATTD-404-005` | 404  | Reserva inexistente                | No encontramos tu reserva.                                |
+| `LP-ATTD-409-006` | 409  | La reserva no puede entrar         | Esa reserva ya no está activa.                            |
 
 ### MEMB — Miembros
 

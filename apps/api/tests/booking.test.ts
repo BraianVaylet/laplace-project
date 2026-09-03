@@ -1517,8 +1517,11 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
   it('las seis rutas traen su fixture de ataque', () => {
     const rutas = allRegisteredRoutes().filter(
       (route) =>
-        route.path.startsWith('/api/v1/bookings') ||
-        route.path.startsWith('/api/v1/booking-policies'),
+        // El check-in cuelga de `/bookings/:id` pero es de Attendance (F1-18),
+        // que tiene su propia suite.
+        !route.path.endsWith('/check-in') &&
+        (route.path.startsWith('/api/v1/bookings') ||
+          route.path.startsWith('/api/v1/booking-policies')),
     );
 
     expect(rutas).toHaveLength(6);
@@ -1534,8 +1537,9 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
 
     for (const route of allRegisteredRoutes()) {
       const propia =
-        route.path.startsWith('/api/v1/bookings') ||
-        route.path.startsWith('/api/v1/booking-policies');
+        !route.path.endsWith('/check-in') &&
+        (route.path.startsWith('/api/v1/bookings') ||
+          route.path.startsWith('/api/v1/booking-policies'));
       if (!propia || !route.isolationFixture) continue;
 
       const attack = await route.isolationFixture({ victimTenantId: victima.organizationId });

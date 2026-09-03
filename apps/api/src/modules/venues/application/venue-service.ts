@@ -1,5 +1,10 @@
 import type { CreateVenueInput, UpdateVenueInput } from '@laplace/schemas';
-import { DEFAULT_BOOKING_POLICY, bookingPolicySchema, type BookingPolicy } from '@laplace/schemas';
+import {
+  DEFAULT_BOOKING_POLICY,
+  bookingPolicySchema,
+  effectiveBookingPolicy,
+  type BookingPolicy,
+} from '@laplace/schemas';
 import type { DomainEventBus } from '../../../events/bus.js';
 import { AppError } from '../../../http/errors.js';
 import type { Page } from '../../../tenancy/repository.js';
@@ -118,12 +123,17 @@ export class VenueService {
    * Se devuelve completa y no campo por campo porque preguntar de a uno seria
    * un viaje a la base por regla, y todas se evaluan en la misma reserva.
    */
-  async policyOf(publicId: string): Promise<BookingPolicy> {
+  async policyOf(publicId: string, categoryId?: string): Promise<BookingPolicy> {
     const guardada = (await this.getByPublicId(publicId)).bookingPolicy;
 
     // Las sedes creadas antes de que una regla existiera no la tienen guardada:
     // el default la completa sin necesidad de migrar datos.
-    return { ...DEFAULT_BOOKING_POLICY, ...((guardada ?? {}) as Partial<BookingPolicy>) };
+    const delCentro = {
+      ...DEFAULT_BOOKING_POLICY,
+      ...((guardada ?? {}) as Partial<BookingPolicy>),
+    };
+
+    return effectiveBookingPolicy(delCentro, categoryId);
   }
 
   /** Tope anual de dias de congelamiento del centro (§2.1.9). */

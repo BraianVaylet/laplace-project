@@ -28,6 +28,12 @@ export interface ScheduleModule {
   routes: ReturnType<typeof createScheduleRoutes>;
   service: ScheduleService;
   jobs: JobDefinition[];
+  /**
+   * Siembra una plantilla y una clase del tenant victima. Existe para la suite
+   * de aislamiento de F0-05, que necesita datos ajenos de verdad contra los
+   * cuales atacar; ningun flujo de negocio la usa.
+   */
+  seedVictim: (victimTenantId: string) => Promise<{ templateId: string; sessionId: string }>;
 }
 
 export interface ScheduleModuleDeps {
@@ -108,6 +114,7 @@ export function createScheduleModule(deps: ScheduleModuleDeps): ScheduleModule {
     routes: createScheduleRoutes(service, deps.entitlements, seedVictim),
     service,
     jobs: scheduleJobs(service),
+    seedVictim,
   };
 }
 

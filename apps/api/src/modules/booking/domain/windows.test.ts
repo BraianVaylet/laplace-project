@@ -1,13 +1,16 @@
 import { describe, expect, it } from 'vitest';
 import { Temporal } from '@js-temporal/polyfill';
-import { DEFAULT_BOOKING_POLICY, type BookingPolicy } from '@laplace/schemas';
+import {
+  DEFAULT_BOOKING_POLICY,
+  effectiveBookingPolicy as policyFor,
+  type BookingPolicy,
+} from '@laplace/schemas';
 import { AppError } from '../../../http/errors.js';
 import {
   assertWithinBookingWindow,
   bookingWindowOf,
   cancelCutoffAt,
   isLateCancel,
-  policyFor,
   policyText,
 } from './windows.js';
 

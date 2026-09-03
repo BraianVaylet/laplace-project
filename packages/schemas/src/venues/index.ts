@@ -181,6 +181,31 @@ export type BookingPolicy = z.infer<typeof bookingPolicySchema>;
 /** Los defaults de §2.1.5.c, ya resueltos. */
 export const DEFAULT_BOOKING_POLICY: BookingPolicy = bookingPolicySchema.parse({});
 
+/**
+ * La política que rige para una categoría: la del centro con su excepción
+ * encima (§2.1.5.c).
+ *
+ * Vive acá y no en un módulo del backend porque la consultan tres lugares —la
+ * reserva, el check-in y la pantalla que le muestra al socio hasta cuándo puede
+ * cancelar—, y tres copias de la regla de mezcla son tres formas de que a
+ * alguien le aparezca un horario distinto del que le van a aplicar.
+ */
+export function effectiveBookingPolicy(
+  venue: BookingPolicy,
+  categoryId?: string | undefined,
+): BookingPolicy {
+  const excepcion = categoryId === undefined ? undefined : venue.categoryPolicies[categoryId];
+  if (!excepcion) return venue;
+
+  // `undefined` no pisa: una categoría que solo cambia el corte de cancelación
+  // no puede borrarle el resto de la configuración al centro.
+  const definidas = Object.fromEntries(
+    Object.entries(excepcion).filter(([, valor]) => valor !== undefined),
+  );
+
+  return { ...venue, ...definidas };
+}
+
 export const venueBrandingSchema = z.object({
   logoUrl: z.string().url().optional(),
   primaryColor: z

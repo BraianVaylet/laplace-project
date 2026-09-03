@@ -243,6 +243,33 @@ export class MemberService {
     return hasta ? fromBsonDate(hasta) : null;
   }
 
+  /**
+   * Los datos que la lista de clase necesita de cada socio (§2.1.18). Es el
+   * puerto que consume Attendance: nombre, saldo y si debe.
+   */
+  async summariesOf(
+    memberIds: readonly string[],
+  ): Promise<
+    Array<{ publicId: string; fullName: string; balanceCents: number; hasDebt: boolean }>
+  > {
+    const socios = await this.members.byPublicIds(memberIds);
+
+    return socios.map((member) => ({
+      publicId: String(member['publicId']),
+      fullName: `${member.firstName} ${member.lastName}`.trim(),
+      balanceCents: member.balanceCents,
+      hasDebt: member.flags?.debtor === true || member.balanceCents < 0,
+    }));
+  }
+
+  /**
+   * Deja la ultima asistencia en la ficha. Es el mejor predictor individual de
+   * baja (§7), y sin esto habria que recorrer las reservas para saberlo.
+   */
+  async recordAttendance(memberId: string, at: Temporal.Instant): Promise<void> {
+    await this.members.updateByPublicId(memberId, { $set: { lastAttendanceAt: toBsonDate(at) } });
+  }
+
   async findIdByUserId(userId: string): Promise<string | null> {
     const member = await this.members.findOne({ userId } as never);
 

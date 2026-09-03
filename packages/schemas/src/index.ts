@@ -1,6 +1,7 @@
 export * from './common/error.js';
 export * from './common/pagination.js';
 export * from './common/tenant.js';
+export * from './attendance/index.js';
 export * from './billing/index.js';
 export * from './booking/index.js';
 export * from './contracts/index.js';

@@ -8,6 +8,7 @@ import type { EntitlementsLoader } from '../entitlements/middleware.js';
 import type { DomainEventBus } from '../events/bus.js';
 import { createMembersModule, type OrganizationMembershipPort } from './members/index.js';
 import { createBillingModule } from './billing/index.js';
+import { createAttendanceModule, type AttendanceBooking } from './attendance/index.js';
 import { createBookingModule } from './booking/index.js';
 import { createContractsModule, type FutureBookingReleaser } from './contracts/index.js';
 import { createProductsModule } from './products/index.js';
@@ -182,7 +183,7 @@ export function createModules(deps: ModuleDeps) {
       assertCanTransact: (memberId, allowDebt) =>
         billing.service.assertCanTransact(memberId, allowDebt),
     },
-    venues: { policyOf: (venueId) => venues.service.policyOf(venueId) },
+    venues: { policyOf: (venueId, categoryId) => venues.service.policyOf(venueId, categoryId) },
     members: (userId) => members.service.findIdByUserId(userId),
     history: {
       startedBetweenAcrossTenants: (from, to) =>
@@ -203,7 +204,64 @@ export function createModules(deps: ModuleDeps) {
   routes.route('/', contracts.routes);
   routes.route('/', billing.routes);
   routes.route('/', schedule.routes);
+  /*
+   * Attendance orquesta y no guarda: la reserva la escribe Booking, la clase la
+   * conoce Schedule y la ficha la guarda Members. La asistencia es un estado de
+   * la reserva, y duplicarla en otra coleccion serian dos verdades sobre si
+   * alguien entro (ADR-003).
+   */
+  const attendance = createAttendanceModule({
+    entitlements: deps.entitlements,
+    events: deps.events,
+    now: deps.now ?? (() => Temporal.Now.instant()),
+    bookings: {
+      find: async (bookingId) => {
+        const reserva = await booking.service.findOne(bookingId);
+
+        return reserva ? toAttendanceBooking(reserva) : null;
+      },
+      ofSession: async (sessionId) =>
+        (await booking.service.ofSession(sessionId)).map(toAttendanceBooking),
+      markCheckedIn: async (bookingId, data) =>
+        toAttendanceBooking(await booking.service.markCheckedIn(bookingId, data)),
+    },
+    sessions: {
+      find: async (sessionId) => {
+        const clase = await schedule.service.findSession(sessionId);
+        if (!clase) return null;
+
+        return {
+          publicId: String(clase['publicId']),
+          name: clase.name,
+          venueId: clase.venueId,
+          categoryId: clase.categoryId,
+          startAt: fromBsonDate(clase.startAt),
+          endAt: fromBsonDate(clase.endAt),
+          capacity: clase.capacity,
+          status: clase.status,
+          timeZone: await venues.service.timeZoneOf(clase.venueId),
+        };
+      },
+    },
+    members: {
+      summariesOf: (memberIds) => members.service.summariesOf(memberIds),
+      recordAttendance: (memberId, at) => members.service.recordAttendance(memberId, at),
+    },
+    arrears: {
+      assertCanTransact: (memberId, allowDebt) =>
+        billing.service.assertCanTransact(memberId, allowDebt),
+    },
+    venues: {
+      policyFor: (venueId, categoryId) => venues.service.policyOf(venueId, categoryId),
+    },
+    seedVictim: async (victimTenantId) => ({
+      sessionId: (await schedule.seedVictim(victimTenantId)).sessionId,
+      bookingId: await booking.seedVictim(victimTenantId),
+    }),
+  });
+
   routes.route('/', booking.routes);
+  routes.route('/', attendance.routes);
 
   /** Todo lo que el runner tiene que programar (§10). */
   const jobs = [...contracts.jobs, ...billing.jobs, ...schedule.jobs, ...booking.jobs];
@@ -219,6 +277,7 @@ export function createModules(deps: ModuleDeps) {
     billing,
     schedule,
     booking,
+    attendance,
   };
 }
 
@@ -263,5 +322,31 @@ async function toClaimed(
     bookedCount: session.bookedCount,
     status: session.status,
     timeZone: await venues.timeZoneOf(session.venueId),
+  };
+}
+
+/**
+ * La reserva, como la ve Attendance. Convierte las fechas de BSON a Temporal
+ * en el borde: adentro del modulo no hay `Date` (§3.1).
+ */
+function toAttendanceBooking(booking: {
+  publicId?: unknown;
+  sessionId: string;
+  memberId: string;
+  venueId: string;
+  status: string;
+  waitlistPosition?: number | null;
+  checkedInAt?: Date | null;
+  checkInMethod?: string | null;
+}): AttendanceBooking {
+  return {
+    publicId: String(booking.publicId),
+    sessionId: booking.sessionId,
+    memberId: booking.memberId,
+    venueId: booking.venueId,
+    status: booking.status,
+    waitlistPosition: booking.waitlistPosition ?? null,
+    checkedInAt: booking.checkedInAt ? fromBsonDate(booking.checkedInAt) : null,
+    checkInMethod: (booking.checkInMethod ?? null) as AttendanceBooking['checkInMethod'],
   };
 }

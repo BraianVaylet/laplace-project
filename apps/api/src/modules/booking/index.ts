@@ -27,6 +27,8 @@ export interface BookingModule {
   routes: ReturnType<typeof createBookingRoutes>;
   service: BookingService;
   jobs: JobDefinition[];
+  /** Siembra una reserva del tenant victima, para la suite de F0-05. */
+  seedVictim: (victimTenantId: string) => Promise<string>;
 }
 
 export interface BookingModuleDeps {
@@ -88,6 +90,7 @@ export function createBookingModule(deps: BookingModuleDeps): BookingModule {
     routes: createBookingRoutes(service, deps.entitlements, deps.members, seedVictim),
     service,
     jobs: bookingJobs(service),
+    seedVictim,
   };
 }
 

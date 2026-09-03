@@ -23,6 +23,37 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-03 — F1-18: check-in manual y lista de clase del coach
+
+- **Módulo:** `attendance` (nuevo) · `dfsm`
+- **Tipo:** feature
+- **Commit/PR:** pendiente (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/d7wJ0zxW (F1-18) — movida a **Completadas**
+- **Qué cambió:** el coach abre la lista de su clase en el teléfono y ve inscriptos, presentes,
+  lista de espera y las alertas de cada uno. Marca a uno de un toque o a todos de una, con la
+  ventana de check-in y las validaciones del centro respetadas.
+- **Por qué:** es la pantalla que se usa de pie, con una mano, en el piso del box (§5.1.2). Si no
+  funciona perfecto en un teléfono, no se usa — y sin asistencia no hay métricas.
+- **Impacto:** módulo `attendance` nuevo · tres rutas (`GET /sessions/:id/roster`,
+  `POST /bookings/:id/check-in`, `POST /sessions/:id/check-in-all`) · `Booking` suma `checkedInAt`,
+  `checkInMethod` y `checkedInBy` · código nuevo `LP-ATTD-409-006` · el DFSM estrena router y su
+  primera pantalla real · sin migración.
+- **Pendiente:** el QR con token rotativo y el walk-in son F1-19. El waiver se pide por un puerto
+  que hasta F1-20 contesta que está firmado.
+
+### Attendance no guarda nada
+
+La asistencia es un estado de la reserva. Una colección propia serían dos verdades sobre si alguien
+entró, y la que se desincronice va a ser la que mire el coach. El módulo aporta la decisión —quién
+puede entrar, cuándo y con qué alertas— y la vista; el documento lo sigue escribiendo Booking, que
+es su dueño.
+
+### "Todos presentes" no se cae por uno
+
+Los que no pasan una validación vuelven en `skipped` con su código. Cortar la operación entera
+porque uno de los catorce debe plata sería cambiar ocho segundos de trabajo por una discusión en el
+piso del box.
+
 ## 2026-09-03 — F1-17: no-show y penalización configurable
 
 - **Módulo:** `booking`
