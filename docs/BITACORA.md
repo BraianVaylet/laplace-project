@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `booking`
 - **Tipo:** feature
-- **Commit/PR:** pendiente (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `5e217a7` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/viAET6ZL (F1-17) — movida a **Completadas**
 - **Qué cambió:** el job de cada hora marca ausente a quien reservó y no hizo check-in, sin
   devolverle el crédito, y aplica la penalización del centro: superado el umbral de faltas, el
