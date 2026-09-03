@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `waivers` (nuevo) · `attendance` · `members` · `wafm`
 - **Tipo:** feature
-- **Commit/PR:** pendiente (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `2cdd481` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/QXxTpx5h (F1-20) — movida a **Completadas**
 - **Qué cambió:** el centro publica deslindes, consentimientos y demás documentos legales,
   versionados; el socio los ve y los firma desde la WAFM, con hash del texto, IP, user agent y
