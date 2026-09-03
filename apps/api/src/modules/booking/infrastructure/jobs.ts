@@ -27,5 +27,18 @@ export function bookingJobs(service: BookingService): JobDefinition[] {
         await service.expireWaitlistHolds();
       },
     },
+    {
+      /*
+       * §10: cada hora. La ventana de check-in cierra media hora despues del
+       * inicio, asi que marcar dentro de la hora siguiente alcanza — y correrlo
+       * mas seguido solo agregaria pasadas que no encuentran nada.
+       */
+      name: 'markNoShows',
+      cron: '5 * * * *',
+      lockTtlSeconds: 600,
+      handler: async () => {
+        await service.markNoShows();
+      },
+    },
   ];
 }

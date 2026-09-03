@@ -91,6 +91,29 @@ export class BookingRepository extends TenantRepository<BookingDoc> {
       .exec();
   }
 
+  /** Las reservas de una clase que siguen esperando el check-in. */
+  async awaitingCheckIn(sessionId: string): Promise<BookingDoc[]> {
+    return BookingModel.find(this.scope({ sessionId, status: 'booked' } as FilterQuery<BookingDoc>))
+      .setOptions(sessionOption())
+      .lean<BookingDoc[]>()
+      .exec();
+  }
+
+  /**
+   * Las faltas del socio dentro de la ventana movil (§2.1.5.d).
+   *
+   * Se cuentan las reservas en `no_show` y no un contador guardado: un contador
+   * hay que resetearlo, y el reseteo que no corre convierte una falta vieja en
+   * un bloqueo de hoy.
+   */
+  async noShowsSince(memberId: string, since: Temporal.Instant): Promise<number> {
+    return this.count({
+      memberId,
+      status: 'no_show',
+      updatedAt: { $gte: toBsonDate(since) },
+    } as FilterQuery<BookingDoc>);
+  }
+
   /** Cuantos hay en la fila de una clase. Sirve para dar la posicion siguiente. */
   async waitlistLength(sessionId: string): Promise<number> {
     return this.count({

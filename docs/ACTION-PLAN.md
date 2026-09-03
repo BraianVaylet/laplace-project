@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     15 |
+| Fase 1 — MVP vendible   |       32 |          186 |     16 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1177,7 +1177,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   - `promotedAt` y `confirmedAt` quedan guardados: son los dos números que necesita F1-23 para la
     tasa de conversión de la fila, que es lo que dice si falta oferta en ese horario (§2.1.5.b).
 
-## [ ] F1-17 · No-show y política de penalización
+## [x] F1-17 · No-show y política de penalización
 
 - **module:** booking
 - **description:** El job que marca no-show pasada la ventana de check-in y aplica la penalización
@@ -1201,7 +1201,26 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **test_plan:** Test del job idempotente con reloj inyectado. Test del umbral: N-1 no penaliza, N
   sí. Test con la política desactivada.
 - **error-codes:** `LP-BOOK-403-010`
-- **data-model-impact:** `Member.noShowCount`, `Member.bookingBlockedUntil`.
+- **data-model-impact:** `Member.noShowCount`, `Member.bookingBlockedUntil`. `bookingPolicy` suma
+  `noShowWindowDays`.
+- **decisiones de diseño:**
+  - **El umbral se cuenta sobre las reservas en `no_show`, no sobre el contador del socio.** Un
+    contador hay que resetearlo, y el reseteo que no corre convierte una falta vieja en un bloqueo
+    de hoy. `Member.noShowCount` queda igual, pero como dato de la ficha, no como fuente de verdad.
+  - La ventana es **móvil y configurable** (`noShowWindowDays`, default 30). Contar desde siempre
+    haría que tres ausencias en tres años pesaran igual que tres en un mes. El campo es nuevo: la
+    spec pedía el umbral pero no decía sobre qué período.
+  - El job recorre **las clases, no las reservas**: las que empezaron en las últimas horas son un
+    puñado, y las reservas abiertas de todo el sistema no. Mira 24 horas para atrás, así las clases
+    de la madrugada se marcan igual si el runner estuvo caído.
+  - Es idempotente **por construcción**: marcar saca a la reserva de `booked`, así que la segunda
+    corrida sobre la misma hora no encuentra nada que marcar ni a quién penalizar.
+  - **La falta se registra siempre**, aunque el centro tenga la política desactivada: la métrica es
+    la que después dice si hace falta activarla (§2.1.5.d).
+  - Quien está en la lista de espera **nunca es un ausente**: nunca tuvo lugar, y marcarlo sería
+    penalizarlo por haber esperado.
+  - El mensaje del bloqueo dice **hasta cuándo**. Un "no podés reservar" sin fecha deja al socio sin
+    saber si es por hoy o para siempre.
 
 ## [ ] F1-18 · Attendance: check-in manual y lista de clase del coach
 

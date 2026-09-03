@@ -184,6 +184,15 @@ export function createModules(deps: ModuleDeps) {
     },
     venues: { policyOf: (venueId) => venues.service.policyOf(venueId) },
     members: (userId) => members.service.findIdByUserId(userId),
+    history: {
+      startedBetweenAcrossTenants: (from, to) =>
+        schedule.service.startedBetweenAcrossTenants(from, to),
+    },
+    penalties: {
+      registerNoShow: (memberId, blockedUntil) =>
+        members.service.registerNoShow(memberId, blockedUntil),
+      bookingBlockedUntil: (memberId) => members.service.bookingBlockedUntil(memberId),
+    },
     now: deps.now ?? (() => Temporal.Now.instant()),
   });
 

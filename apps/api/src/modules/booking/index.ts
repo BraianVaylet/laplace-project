@@ -7,6 +7,8 @@ import { runWithTenant } from '../../tenancy/context.js';
 import {
   BookingService,
   subscribeBookingToMembers,
+  type MemberPenalties,
+  type SessionHistory,
   type ArrearsGate,
   type CreditLedger,
   type SessionSeats,
@@ -34,6 +36,8 @@ export interface BookingModuleDeps {
   credits: CreditLedger;
   arrears: ArrearsGate;
   venues: VenuePolicy;
+  history: SessionHistory;
+  penalties: MemberPenalties;
   members: MemberResolver;
   now: () => Temporal.Instant;
 }
@@ -47,6 +51,8 @@ export function createBookingModule(deps: BookingModuleDeps): BookingModule {
     arrears: deps.arrears,
     venues: deps.venues,
     events: deps.events,
+    history: deps.history,
+    penalties: deps.penalties,
     now: deps.now,
   });
 
@@ -87,6 +93,8 @@ export function createBookingModule(deps: BookingModuleDeps): BookingModule {
 
 export type {
   BookingService,
+  MemberPenalties,
+  SessionHistory,
   ArrearsGate,
   CreditLedger,
   SessionSeats,

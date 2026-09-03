@@ -12,6 +12,7 @@ import { fromBsonDate, toBsonDate } from '../../../persistence/bson-date.js';
 import { withTransaction } from '../../../persistence/transaction.js';
 import { runWithTenant } from '../../../tenancy/context.js';
 import { creditEffectOf } from '../domain/credit-matrix.js';
+import { blockUntil, isNoShowDue, noShowWindowStart } from '../domain/no-show.js';
 import {
   assertWaitlistHasRoom,
   canPromote,
@@ -73,6 +74,32 @@ export interface ArrearsGate {
   assertCanTransact(memberId: string, allowDebt: boolean): Promise<void>;
 }
 
+/** Lo que Booking necesita de la agenda para el job de ausentes (§2.1.5.d). */
+export interface SessionHistory {
+  /** Las clases que empezaron en el rango, de todos los tenants, con su centro. */
+  startedBetweenAcrossTenants(
+    from: Temporal.Instant,
+    to: Temporal.Instant,
+  ): Promise<
+    Array<{
+      tenantId: string;
+      sessionId: string;
+      venueId: string;
+      categoryId: string;
+      startAt: Temporal.Instant;
+    }>
+  >;
+}
+
+/**
+ * La ficha del socio. Booking cuenta las faltas —son sus reservas— y Members
+ * las guarda: ningún módulo toca el modelo del otro (ADR-003).
+ */
+export interface MemberPenalties {
+  registerNoShow(memberId: string, blockedUntil: Temporal.Instant | null): Promise<void>;
+  bookingBlockedUntil(memberId: string): Promise<Temporal.Instant | null>;
+}
+
 export interface VenuePolicy {
   /**
    * La política completa del centro. Booking pide una sola cosa y resuelve las
@@ -88,6 +115,8 @@ export interface BookingServiceDeps {
   arrears: ArrearsGate;
   venues: VenuePolicy;
   events: DomainEventBus;
+  history: SessionHistory;
+  penalties: MemberPenalties;
   /** El reloj lo inyecta la raíz de composición: acá nunca se lee la hora sola. */
   now: () => Temporal.Instant;
 }
@@ -99,6 +128,8 @@ export class BookingService {
   private readonly arrears: ArrearsGate;
   private readonly venues: VenuePolicy;
   private readonly events: DomainEventBus;
+  private readonly history: SessionHistory;
+  private readonly penalties: MemberPenalties;
   private readonly now: () => Temporal.Instant;
 
   constructor(deps: BookingServiceDeps) {
@@ -108,6 +139,8 @@ export class BookingService {
     this.arrears = deps.arrears;
     this.venues = deps.venues;
     this.events = deps.events;
+    this.history = deps.history;
+    this.penalties = deps.penalties;
     this.now = deps.now;
   }
 
@@ -148,8 +181,9 @@ export class BookingService {
     const previa2 = await this.bookings.liveOf(input.sessionId, memberId);
     if (previa2) throw alreadyBooked(input.sessionId, previa2.status);
 
-    // El corte de la mora, antes de tocar nada: rechazar después de haber tomado
-    // el lugar obligaría a devolverlo, y por un rato la clase figuraría llena.
+    // Los dos cortes, antes de tocar nada: rechazar después de haber tomado el
+    // lugar obligaría a devolverlo, y por un rato la clase figuraría llena.
+    await this.assertNotBlocked(memberId);
     await this.arrears.assertCanTransact(memberId, policy.allowDebt);
 
     const lugar = await this.sessions.claimSeat(input.sessionId);
@@ -452,6 +486,7 @@ export class BookingService {
       if (!session) throw sessionNotFound(booking.sessionId);
 
       const policy = await this.policyOf(session);
+      await this.assertNotBlocked(booking.memberId);
       await this.arrears.assertCanTransact(booking.memberId, policy.allowDebt);
 
       const consumo = await this.credits.consume(booking.memberId, {
@@ -521,6 +556,105 @@ export class BookingService {
     }
 
     return liberados;
+  }
+
+  /**
+   * 🔴 Marca ausente a quien reservó y no hizo check-in (§2.1.5.d), y aplica la
+   * penalización del centro.
+   *
+   * El crédito **no se devuelve**: lo dice la fila `no_show` de la tabla de
+   * §2.1.9, y el lugar que ocupó no se lo pudo llevar nadie más.
+   *
+   * Recorre las clases y no las reservas: las que empezaron en las últimas
+   * horas son un puñado, y las reservas abiertas de todo el sistema no. Es
+   * idempotente porque marcar saca a la reserva de `booked`, así que la segunda
+   * corrida sobre la misma hora no encuentra nada.
+   */
+  async markNoShows(): Promise<number> {
+    const ahora = this.now();
+    /*
+     * Mira un día para atrás y no solo la última hora: si el runner estuvo
+     * caído, las clases de la madrugada se marcan igual cuando vuelve.
+     */
+    const desde = ahora.subtract({ hours: 24 });
+    let marcadas = 0;
+
+    for (const clase of await this.history.startedBetweenAcrossTenants(desde, ahora)) {
+      marcadas += await runWithTenant(
+        {
+          tenantId: clase.tenantId,
+          userId: 'system:markNoShows',
+          requestId: `job-noshow-${clase.sessionId}`,
+        },
+        () => this.markNoShowsOf(clase, ahora),
+      );
+    }
+
+    return marcadas;
+  }
+
+  private async markNoShowsOf(
+    clase: { sessionId: string; venueId: string; categoryId: string; startAt: Temporal.Instant },
+    ahora: Temporal.Instant,
+  ): Promise<number> {
+    const policy = policyFor(await this.venues.policyOf(clase.venueId), clase.categoryId);
+    // El que llegó tarde no es un ausente: la ventana de check-in tiene que
+    // haber cerrado.
+    if (!isNoShowDue(policy, clase.startAt, ahora)) return 0;
+
+    const pendientes = await this.bookings.awaitingCheckIn(clase.sessionId);
+
+    for (const booking of pendientes) {
+      const id = String(booking['publicId']);
+      await this.bookings.updateByPublicId(id, { $set: { status: 'no_show' } });
+
+      await this.events.emit('booking.no_show', {
+        bookingId: id,
+        sessionId: clase.sessionId,
+        memberId: booking.memberId,
+        venueId: clase.venueId,
+      });
+
+      await this.penalize(booking.memberId, policy, ahora);
+    }
+
+    return pendientes.length;
+  }
+
+  /**
+   * Cuenta las faltas de la ventana móvil y bloquea si se pasó del umbral.
+   *
+   * La falta se registra **siempre**, aunque el centro tenga la política
+   * desactivada: la métrica se mide igual, y es la que dice si hace falta
+   * cambiar la política (§2.1.5.d).
+   */
+  private async penalize(
+    memberId: string,
+    policy: BookingPolicy,
+    ahora: Temporal.Instant,
+  ): Promise<void> {
+    const enLaVentana = await this.bookings.noShowsSince(
+      memberId,
+      noShowWindowStart(policy, ahora),
+    );
+    const hasta = blockUntil(policy, enLaVentana, ahora);
+
+    await this.penalties.registerNoShow(memberId, hasta);
+    if (hasta) {
+      await this.events.emit('booking.blocked_by_no_shows', {
+        memberId,
+        until: hasta.toString(),
+        noShows: enLaVentana,
+      });
+    }
+  }
+
+  /** El socio penalizado no reserva hasta que se le vence el bloqueo. */
+  private async assertNotBlocked(memberId: string): Promise<void> {
+    const hasta = await this.penalties.bookingBlockedUntil(memberId);
+    if (!hasta || Temporal.Instant.compare(this.now(), hasta) >= 0) return;
+
+    throw blockedByNoShows(memberId, hasta);
   }
 
   /** Saca al socio de todas las filas en las que esté esperando. */
@@ -648,6 +782,20 @@ function lateCancelNeedsConfirmation(id: string, policy: BookingPolicy): AppErro
       : 'Pasó el plazo de cancelación: si cancelás igual, se te descuenta el crédito.',
     action: 'Confirmá para cancelar de todos modos y liberar el lugar.',
     meta: { bookingId: id, lateCancelPolicy: policy.lateCancelPolicy },
+  });
+}
+
+/**
+ * §2.1.5.d: el bloqueo por faltas dice **hasta cuándo**. Un "no podés reservar"
+ * sin fecha deja al socio sin saber si es por hoy o para siempre.
+ */
+function blockedByNoShows(memberId: string, hasta: Temporal.Instant): AppError {
+  return new AppError({
+    code: 'LP-BOOK-403-010',
+    status: 403,
+    message: `Tenés las reservas bloqueadas hasta el ${hasta.toString()} por ausencias.`,
+    action: 'Hablá con el centro si creés que hay un error.',
+    meta: { memberId, blockedUntil: hasta.toString() },
   });
 }
 

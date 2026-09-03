@@ -77,6 +77,11 @@ function armar(overrides: {
     },
     arrears: { assertCanTransact: () => Promise.resolve() },
     venues: { policyOf: () => Promise.resolve(DEFAULT_BOOKING_POLICY) },
+    history: { startedBetweenAcrossTenants: () => Promise.resolve([]) },
+    penalties: {
+      registerNoShow: () => Promise.resolve(),
+      bookingBlockedUntil: () => Promise.resolve(null),
+    },
     events: { emit: () => Promise.resolve(), on: () => undefined } as never,
     now: () => AHORA,
   });

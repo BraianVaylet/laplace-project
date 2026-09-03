@@ -86,6 +86,33 @@ export class ClassSessionRepository extends TenantRepository<ClassSessionDoc> {
    * leerian el mismo contador y entrarian los cincuenta: eso es sobreventa, y a
    * las 6:05 hay diez personas paradas afuera.
    */
+  /**
+   * 🔴 Las clases que empezaron dentro del rango, de **todos los tenants**.
+   *
+   * La usa el job de no-shows, que no corre dentro del pedido de nadie: es el
+   * uso legitimo de `skipTenantScope` que documenta el plugin, y por eso
+   * devuelve el `tenantId` — quien llama abre el contexto de cada centro antes
+   * de tocar nada.
+   *
+   * Se recorren las clases y no las reservas porque las clases que empezaron en
+   * la ultima hora son un punado, y las reservas abiertas de todo el sistema no.
+   */
+  async startedBetweenAcrossTenants(
+    from: Temporal.Instant,
+    to: Temporal.Instant,
+    limit = 500,
+  ): Promise<ClassSessionDoc[]> {
+    return ClassSessionModel.find({
+      deletedAt: null,
+      status: { $ne: 'cancelled' },
+      startAt: { $gte: toBsonDate(from), $lte: toBsonDate(to) },
+    })
+      .setOptions({ skipTenantScope: true })
+      .limit(limit)
+      .lean<ClassSessionDoc[]>()
+      .exec();
+  }
+
   async claimSeat(publicId: string): Promise<ClassSessionDoc | null> {
     const { tenantId } = requireTenant();
 

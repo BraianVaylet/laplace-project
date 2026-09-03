@@ -104,6 +104,19 @@ export interface DomainEvents {
     sessionId: string;
     memberId: string;
   };
+  /** Reservo y no fue (§2.1.5.d). Lo escuchan Notifications y Metrics. */
+  'booking.no_show': {
+    bookingId: string;
+    sessionId: string;
+    memberId: string;
+    venueId: string;
+  };
+  /** Se paso del umbral de faltas y quedo sin reservar por un rato. */
+  'booking.blocked_by_no_shows': {
+    memberId: string;
+    until: string;
+    noShows: number;
+  };
   'attendance.checked_in': {
     bookingId: string;
     memberId: string;

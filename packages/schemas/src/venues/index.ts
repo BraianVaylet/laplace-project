@@ -109,6 +109,11 @@ export const bookingPolicyBaseSchema = z.object({
   allowDebt: z.boolean().default(false),
   /** Cuántos no-shows habilitan el bloqueo temporal. `0` desactiva la política. */
   noShowThreshold: z.number().int().min(0).max(20).default(3),
+  /**
+   * En cuántos días se cuentan esas faltas. Contarlas desde siempre haría que
+   * tres ausencias en tres años pesaran igual que tres en un mes.
+   */
+  noShowWindowDays: z.number().int().min(1).max(365).default(30),
   /** Cuánto dura ese bloqueo. Default: 48 horas (§2.1.5.d). */
   noShowBlockMinutes: z
     .number()

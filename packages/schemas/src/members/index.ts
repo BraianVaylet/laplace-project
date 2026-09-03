@@ -187,6 +187,9 @@ export const memberResponseSchema = z.object({
   balanceCents: z.number().int(),
   joinedAt: z.string(),
   lastAttendanceAt: z.string().nullable(),
+  /** Faltas acumuladas y bloqueo por ausencias (§2.1.5.d). Lo maneja Booking. */
+  noShowCount: z.number().int(),
+  bookingBlockedUntil: z.string().nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

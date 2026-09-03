@@ -23,6 +23,30 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-03 — F1-17: no-show y penalización configurable
+
+- **Módulo:** `booking`
+- **Tipo:** feature
+- **Commit/PR:** pendiente (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/viAET6ZL (F1-17) — movida a **Completadas**
+- **Qué cambió:** el job de cada hora marca ausente a quien reservó y no hizo check-in, sin
+  devolverle el crédito, y aplica la penalización del centro: superado el umbral de faltas, el
+  socio queda sin reservar por el tiempo configurado y se le dice hasta cuándo.
+- **Por qué:** quien reserva y no va le sacó el lugar a otro. Es la práctica estándar del sector
+  (§2.1.5.d), y sin ella la lista de espera pierde sentido.
+- **Impacto:** `Member` suma `noShowCount` y `bookingBlockedUntil`, y los dos salen en la respuesta
+  del socio · `bookingPolicy` suma `noShowWindowDays` · job `markNoShows` cada hora · dos eventos
+  nuevos (`booking.no_show`, `booking.blocked_by_no_shows`) · sin migración.
+- **Pendiente:** el check-in que evita la falta es F1-18 y F1-19. Hasta entonces, toda reserva de
+  una clase que pasó termina en `no_show`, que es lo correcto mientras no exista la asistencia.
+
+### El umbral no se cuenta con un contador
+
+`Member.noShowCount` existe y se mantiene, pero la decisión de bloquear se toma contando las
+reservas que quedaron en `no_show` dentro de la ventana móvil. Un contador hay que resetearlo, y el
+reseteo que no corre convierte una falta de hace ocho meses en un bloqueo de hoy. La ventana es
+configurable porque tres ausencias en tres años no son las tres ausencias de un mes.
+
 ## 2026-09-02 — F1-16: lista de espera con promoción automática
 
 - **Módulo:** `booking`

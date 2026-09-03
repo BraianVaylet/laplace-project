@@ -7,7 +7,7 @@ import type {
 import { Temporal } from '@js-temporal/polyfill';
 import type { DomainEventBus } from '../../../events/bus.js';
 import { AppError } from '../../../http/errors.js';
-import { toBsonDate } from '../../../persistence/bson-date.js';
+import { fromBsonDate, toBsonDate } from '../../../persistence/bson-date.js';
 import { requireTenant } from '../../../tenancy/context.js';
 import { publicId } from '../../../tenancy/public-id.js';
 import type { Page } from '../../../tenancy/repository.js';
@@ -223,6 +223,26 @@ export class MemberService {
    * no está asociada al centro. Es el puerto que consume Booking: el `userId` es
    * de la sesión, el `memberId` es del centro.
    */
+  /**
+   * Registra una falta y, si corresponde, bloquea las reservas hasta `until`
+   * (§2.1.5.d). Lo llama Booking por interfaz: quien sabe contar faltas es el
+   * modulo de las reservas, y quien guarda la ficha del socio es este.
+   */
+  async registerNoShow(memberId: string, until: Temporal.Instant | null): Promise<void> {
+    await this.members.updateByPublicId(memberId, {
+      $inc: { noShowCount: 1 },
+      ...(until === null ? {} : { $set: { bookingBlockedUntil: toBsonDate(until) } }),
+    } as never);
+  }
+
+  /** Hasta cuando el socio tiene las reservas bloqueadas, si lo esta. */
+  async bookingBlockedUntil(memberId: string): Promise<Temporal.Instant | null> {
+    const member = await this.members.findByPublicId(memberId);
+    const hasta = member?.bookingBlockedUntil;
+
+    return hasta ? fromBsonDate(hasta) : null;
+  }
+
   async findIdByUserId(userId: string): Promise<string | null> {
     const member = await this.members.findOne({ userId } as never);
 

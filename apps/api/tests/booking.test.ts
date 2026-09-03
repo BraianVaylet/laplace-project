@@ -1304,6 +1304,176 @@ describe('lista de espera: promoción automática (§2.1.5.b)', () => {
   });
 });
 
+describe('no-show y penalización (§2.1.5.d)', () => {
+  const socioEnBase = async (memberId: string) =>
+    mongoose.connection.db
+      ?.collection('members')
+      .findOne<{ noShowCount: number; bookingBlockedUntil: Date | null }>({ publicId: memberId });
+
+  const reservaEnBase2 = async (bookingId: string) =>
+    mongoose.connection.db
+      ?.collection('bookings')
+      .findOne<{ status: string }>({ publicId: bookingId });
+
+  /** Deja pasar la clase entera y corre el job. */
+  const pasarLaClaseYCorrerElJob = async () => {
+    // La clase empieza 10:00 UTC y el check-in cierra 30 minutos después.
+    ahora = Temporal.Instant.from('2026-03-03T10:31:00Z');
+    await correrJob('markNoShows');
+  };
+
+  it('quien no hizo check-in queda en `no_show` y no recupera el crédito', async () => {
+    const centro = await centroListo('noshow-marca');
+    const contractId = await darPack(centro, centro.memberId);
+    const reserva = await reservarOk(centro, centro.memberId);
+
+    await pasarLaClaseYCorrerElJob();
+
+    expect((await reservaEnBase2(reserva.booking.publicId))?.status).toBe('no_show');
+    // §2.1.9: el lugar que ocupó no se lo pudo llevar nadie más.
+    expect((await contratoEnBase(contractId))?.creditsUsed).toBe(1);
+  });
+
+  it('durante la ventana de check-in todavía no marca: puede estar llegando', async () => {
+    const centro = await centroListo('noshow-temprano');
+    await darPack(centro, centro.memberId);
+    const reserva = await reservarOk(centro, centro.memberId);
+
+    // Veinte minutos después del inicio, con la ventana abierta media hora.
+    ahora = Temporal.Instant.from('2026-03-03T10:20:00Z');
+    await correrJob('markNoShows');
+
+    expect((await reservaEnBase2(reserva.booking.publicId))?.status).toBe('booked');
+  });
+
+  it('correr el job dos veces no marca dos veces ni penaliza doble', async () => {
+    const centro = await centroListo('noshow-idempotente');
+    await darPack(centro, centro.memberId);
+    await reservarOk(centro, centro.memberId);
+
+    await pasarLaClaseYCorrerElJob();
+    await correrJob('markNoShows');
+
+    expect((await socioEnBase(centro.memberId))?.noShowCount).toBe(1);
+  });
+
+  it('debajo del umbral se cuenta la falta pero no se bloquea', async () => {
+    const centro = await centroListo('noshow-umbral-no');
+    await darPack(centro, centro.memberId);
+    await reservarOk(centro, centro.memberId);
+
+    await pasarLaClaseYCorrerElJob();
+    const socio = await socioEnBase(centro.memberId);
+
+    expect(socio?.noShowCount).toBe(1);
+    expect(socio?.bookingBlockedUntil ?? null).toBeNull();
+  });
+
+  it('🔴 alcanzado el umbral, el socio queda sin reservar por el tiempo configurado', async () => {
+    const centro = await centroListo('noshow-umbral-si', {
+      bookingPolicy: { noShowThreshold: 2, noShowBlockMinutes: 2880 },
+    });
+    await darPack(centro, centro.memberId, 8);
+    const otra = await otraClase(centro, '2026-03-03T14:00:00Z');
+    await reservarOk(centro, centro.memberId);
+    await reservarEn(centro, otra, centro.memberId);
+
+    // Faltó a las dos: la segunda pasa el umbral.
+    ahora = Temporal.Instant.from('2026-03-03T14:31:00Z');
+    await correrJob('markNoShows');
+    const socio = await socioEnBase(centro.memberId);
+
+    expect(socio?.noShowCount).toBe(2);
+    expect(socio?.bookingBlockedUntil).not.toBeNull();
+  });
+
+  it('bloqueado, no puede reservar y se le dice hasta cuándo (LP-BOOK-403-010)', async () => {
+    const centro = await centroListo('noshow-bloqueado', {
+      bookingPolicy: { noShowThreshold: 1, noShowBlockMinutes: 2880 },
+    });
+    await darPack(centro, centro.memberId, 8);
+    await reservarOk(centro, centro.memberId);
+    await pasarLaClaseYCorrerElJob();
+
+    const tercera = await otraClase(centro, '2026-03-04T13:00:00Z');
+    const res = await app.request(
+      '/api/v1/bookings',
+      req(
+        centro.cookie,
+        'POST',
+        { sessionId: tercera, memberId: centro.memberId },
+        { 'Idempotency-Key': nuevaClave() },
+      ),
+    );
+
+    expect(res.status).toBe(403);
+    const body = (await res.json()) as ErrorBody;
+    expect(body.error.code).toBe('LP-BOOK-403-010');
+    // Un "no podés reservar" sin fecha deja al socio sin saber si es por hoy o
+    // para siempre.
+    expect(body.error.message).toContain('2026-03-05');
+  });
+
+  it('vencido el bloqueo, vuelve a reservar sin que nadie lo destrabe', async () => {
+    const centro = await centroListo('noshow-vencido', {
+      bookingPolicy: { noShowThreshold: 1, noShowBlockMinutes: 60 },
+    });
+    await darPack(centro, centro.memberId, 8);
+    await reservarOk(centro, centro.memberId);
+    await pasarLaClaseYCorrerElJob();
+
+    const tercera = await otraClase(centro, '2026-03-04T13:00:00Z');
+    ahora = Temporal.Instant.from('2026-03-03T12:00:00Z');
+    const res = await app.request(
+      '/api/v1/bookings',
+      req(
+        centro.cookie,
+        'POST',
+        { sessionId: tercera, memberId: centro.memberId },
+        { 'Idempotency-Key': nuevaClave() },
+      ),
+    );
+
+    expect(res.status).toBe(201);
+  });
+
+  it('con la política desactivada se marca igual, pero no se penaliza', async () => {
+    const centro = await centroListo('noshow-sin-politica', {
+      bookingPolicy: { noShowThreshold: 0 },
+    });
+    await darPack(centro, centro.memberId);
+    const reserva = await reservarOk(centro, centro.memberId);
+
+    await pasarLaClaseYCorrerElJob();
+    const socio = await socioEnBase(centro.memberId);
+
+    // La métrica se mide siempre, aunque el centro decida no castigar.
+    expect((await reservaEnBase2(reserva.booking.publicId))?.status).toBe('no_show');
+    expect(socio?.noShowCount).toBe(1);
+    expect(socio?.bookingBlockedUntil ?? null).toBeNull();
+  });
+
+  it('quien está en la lista de espera no es un ausente', async () => {
+    const centro = await centroListo('noshow-espera', { capacity: 1 });
+    const conLugar = await socioCon(centro, 'ConLugar', 8);
+    const enFila = await socioCon(centro, 'EnFila', 8);
+    await reservarOk(centro, conLugar);
+    const espera = await reservarOk(centro, enFila);
+
+    await pasarLaClaseYCorrerElJob();
+
+    // Nunca tuvo lugar: marcarlo ausente sería penalizarlo por esperar.
+    expect((await reservaEnBase2(espera.booking.publicId))?.status).toBe('waitlisted');
+    expect((await socioEnBase(enFila))?.noShowCount).toBe(0);
+  });
+
+  it('el job corre cada hora (§10)', () => {
+    const job = modules.jobs.find((candidate) => candidate.name === 'markNoShows');
+
+    expect(job?.cron).toBe('5 * * * *');
+  });
+});
+
 describe('aislamiento de tenant', () => {
   it('el atacante no ve ni cancela la reserva del otro centro', async () => {
     const victima = await centroListo('bkg-victima');

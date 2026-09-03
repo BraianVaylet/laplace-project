@@ -459,6 +459,34 @@ export class ScheduleService {
     return this.sessions.findByPublicId(sessionId);
   }
 
+  /**
+   * Las clases que empezaron dentro del rango, de todos los tenants. Es el
+   * puerto que consume el job de ausentes de Booking (F1-17): quien sabe qué
+   * clases hubo es la agenda, y quien sabe quién faltó son las reservas.
+   */
+  async startedBetweenAcrossTenants(
+    from: Temporal.Instant,
+    to: Temporal.Instant,
+  ): Promise<
+    Array<{
+      tenantId: string;
+      sessionId: string;
+      venueId: string;
+      categoryId: string;
+      startAt: Temporal.Instant;
+    }>
+  > {
+    const clases = await this.sessions.startedBetweenAcrossTenants(from, to);
+
+    return clases.map((clase) => ({
+      tenantId: String(clase['tenantId']),
+      sessionId: String(clase['publicId']),
+      venueId: clase.venueId,
+      categoryId: clase.categoryId,
+      startAt: fromBsonDate(clase.startAt),
+    }));
+  }
+
   /** Cuántas clases futuras tiene una sala. Es el puerto que consume Rooms (F1-02). */
   async countFutureSessions(roomId: string): Promise<number> {
     return this.sessions.countFutureOfRoom(roomId, this.now());

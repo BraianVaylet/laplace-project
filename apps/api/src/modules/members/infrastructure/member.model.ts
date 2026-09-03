@@ -34,6 +34,14 @@ export interface MemberDoc extends Record<string, unknown> {
   balanceCents: number;
   joinedAt: Date;
   lastAttendanceAt?: Date | null;
+  /**
+   * Faltas acumuladas (§2.1.5.d). Es un contador de la ficha, no la fuente de
+   * verdad de la penalizacion: el umbral se cuenta sobre las reservas en
+   * `no_show` de la ventana movil, que no se puede desincronizar.
+   */
+  noShowCount: number;
+  /** Hasta cuando no puede reservar por faltas. `null` si no esta penalizado. */
+  bookingBlockedUntil?: Date | null;
   /** Notas internas del staff. NUNCA salen en la respuesta del miembro (§2.1.7). */
   notes: MemberNoteDoc[];
 }
@@ -68,6 +76,8 @@ const memberSchema = new Schema<MemberDoc>(
     balanceCents: { type: Number, required: true, default: 0 },
     joinedAt: { type: Date, required: true },
     lastAttendanceAt: { type: Date, required: false, default: null },
+    noShowCount: { type: Number, required: true, default: 0 },
+    bookingBlockedUntil: { type: Date, required: false, default: null },
     notes: [
       {
         _id: false,
