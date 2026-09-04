@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, TextareaHTMLAttributes } from 'react';
+import type { InputHTMLAttributes, Ref, TextareaHTMLAttributes } from 'react';
 import { cn } from '../cn.js';
 import { useFieldProps } from './FormField.js';
 
@@ -15,7 +15,14 @@ const CONTROL = [
   'aria-[invalid=true]:border-danger-500',
 ].join(' ');
 
-export type InputProps = InputHTMLAttributes<HTMLInputElement>;
+/**
+ * `ref` va declarada porque en React 19 es una prop normal de los componentes
+ * de funcion: sin declararla, quien necesita enfocar el campo desde afuera —
+ * el buscador global del DFSM, por ejemplo — no tiene como.
+ */
+export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
+  ref?: Ref<HTMLInputElement>;
+}
 
 export function Input({ className, ...props }: InputProps) {
   const field = useFieldProps();

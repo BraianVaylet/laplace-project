@@ -28,6 +28,9 @@ export function toMemberResponse(doc: MemberDoc): MemberResponse {
     balanceCents: doc.balanceCents,
     joinedAt: isoOf(doc.joinedAt) ?? '',
     lastAttendanceAt: isoOf(doc.lastAttendanceAt),
+    // El mostrador tiene que poder explicar por qué alguien no puede reservar.
+    noShowCount: doc.noShowCount ?? 0,
+    bookingBlockedUntil: isoOf(doc.bookingBlockedUntil),
     createdAt: isoOf(doc['createdAt']) ?? '',
     updatedAt: isoOf(doc['updatedAt']) ?? '',
   };

@@ -12,9 +12,13 @@ import { currentTenant, requireTenant } from './context.js';
  * un 500 con su codigo a un listado con los socios de otro box.
  *
  * 🔴 **La unica salida es `.setOptions({ skipTenantScope: true })`**, y existe
- * para el puñado de operaciones que ocurren ANTES de que haya un tenant: hoy,
- * solo el canje de un codigo de invitacion (F1-04), donde el tenant sale del
- * codigo porque la persona todavia no pertenece a ningun centro.
+ * para el puñado de operaciones que corren FUERA del pedido de un tenant. Hoy
+ * son dos, y las dos estan documentadas donde se usan:
+ *
+ * 1. El canje de un codigo de invitacion (F1-04): el tenant sale del codigo,
+ *    porque la persona todavia no pertenece a ningun centro.
+ * 2. Los jobs diarios (F1-09): recorren todos los centros, y abren el contexto
+ *    de cada uno antes de tocar sus datos.
  *
  * Es explicita y greppable a proposito. Cada uso nuevo tiene que poder
  * justificarse en la revision igual que un `tenantScoped: false` en el registro

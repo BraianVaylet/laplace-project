@@ -36,20 +36,39 @@ export function validated<T, E extends { Variables: Record<string, unknown> }>(
       const mapped = options.mapIssues?.(parsed.error.issues);
       if (mapped) throw mapped;
 
-      const detail = parsed.error.issues
-        .map((issue) => `${issue.path.join('.') || 'body'}: ${issue.message}`)
-        .join(' · ');
-
-      throw new AppError({
-        code: 'LP-SYS-422-006',
-        status: 422,
-        // El mensaje dice QUE campo esta mal: "datos invalidos" a secas obliga
-        // al usuario a adivinar cual de doce.
-        message: `Revisá los datos: ${detail}`,
-        meta: { issues: parsed.error.issues },
-      });
+      throw invalidInput(parsed.error.issues, 'body');
     }
 
     return handler(c, parsed.data);
   };
+}
+
+/**
+ * Valida la query string y traduce el error de Zod al envelope de §5.0.
+ *
+ * 🔴 Existe porque `schema.parse(c.req.query())` a secas tira un `ZodError`
+ * pelado, y el handler global lo trata como un fallo no manejado: el usuario
+ * que escribe una letra de mas en un filtro recibe un **500** en vez del 422
+ * que le dice que arreglar.
+ */
+export function parseQuery<T>(schema: ZodType<T>, raw: Record<string, string>): T {
+  const parsed = schema.safeParse(raw);
+  if (!parsed.success) throw invalidInput(parsed.error.issues, 'query');
+
+  return parsed.data;
+}
+
+function invalidInput(issues: ZodIssue[], where: 'body' | 'query'): AppError {
+  const detail = issues
+    .map((issue) => `${issue.path.join('.') || where}: ${issue.message}`)
+    .join(' · ');
+
+  return new AppError({
+    code: 'LP-SYS-422-006',
+    status: 422,
+    // El mensaje dice QUE campo esta mal: "datos invalidos" a secas obliga
+    // al usuario a adivinar cual de doce.
+    message: `Revisá los datos: ${detail}`,
+    meta: { issues },
+  });
 }

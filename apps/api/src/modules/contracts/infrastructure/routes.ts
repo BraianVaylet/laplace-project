@@ -4,10 +4,12 @@ import {
   adjustCreditsSchema,
   contractSchema,
   contractStatusSchema,
+  freezeContractSchema,
   paginatedSchema,
   paginationQuerySchema,
   sellContractSchema,
   type AdjustCreditsInput,
+  type FreezeContractInput,
   type SellContractInput,
 } from '@laplace/schemas';
 import type { AppEnv } from '../../../app.js';
@@ -125,6 +127,36 @@ export function createContractRoutes(
     },
     {
       method: 'POST',
+      path: '/api/v1/contracts/:id/freeze',
+      tenantScoped: true,
+      isolationFixture: subPath('/freeze'),
+      summary: 'Congelar un contrato por vacaciones o lesión',
+      tags: ['contracts'],
+      permission: { contract: ['freeze'] },
+      request: { params: idParams, body: freezeContractSchema },
+      response: { status: 200, schema: contractSchema },
+      errorCodes: [
+        'LP-CTRT-404-005',
+        'LP-CTRT-422-004',
+        'LP-CTRT-422-006',
+        'LP-SYS-422-006',
+        'LP-AUTH-403-002',
+      ],
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/contracts/:id/unfreeze',
+      tenantScoped: true,
+      isolationFixture: subPath('/unfreeze'),
+      summary: 'Descongelar un contrato',
+      tags: ['contracts'],
+      permission: { contract: ['freeze'] },
+      request: { params: idParams },
+      response: { status: 200, schema: contractSchema },
+      errorCodes: ['LP-CTRT-404-005', 'LP-CTRT-422-004', 'LP-AUTH-403-002'],
+    },
+    {
+      method: 'POST',
       path: '/api/v1/contracts/:id/credits',
       tenantScoped: true,
       isolationFixture: subPath('/credits'),
@@ -177,6 +209,18 @@ export function createContractRoutes(
 
   routes.post('/api/v1/contracts/:id/cancel', requirePermission({ contract: ['cancel'] }), (c) =>
     service.changeStatus(c.req.param('id'), 'cancelled').then((contract) => c.json(contract)),
+  );
+
+  routes.post(
+    '/api/v1/contracts/:id/freeze',
+    requirePermission({ contract: ['freeze'] }),
+    validated<FreezeContractInput, AppEnv>(freezeContractSchema, async (c, input) =>
+      c.json(await service.freeze(c.req.param('id') as string, input)),
+    ),
+  );
+
+  routes.post('/api/v1/contracts/:id/unfreeze', requirePermission({ contract: ['freeze'] }), (c) =>
+    service.unfreeze(c.req.param('id')).then((contract) => c.json(contract)),
   );
 
   routes.post(

@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |      6 |
+| Fase 1 — MVP vendible   |       32 |          186 |     27 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -742,11 +742,11 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   - `soldCount` y `priceSnapshotCents` los escribe Contracts (F1-08). Acá solo se declara el cupo
     (`maxSales`) y se verifica que archivar no toque nada vendido.
 
-## [ ] F1-08 · Módulo Contracts
+## [x] F1-08 · Módulo Contracts
 
-> **Hereda dos deudas de F1-07:** conectar el puerto `PurchaseHistory` de Products con el historial
-> real de contratos (hasta que se haga, el trial único por persona está escrito y testeado pero
-> nunca se dispara), e incrementar `soldCount` al vender para que el cupo `maxSales` aplique.
+> **Deudas de F1-07, ya saldadas:** el puerto `PurchaseHistory` está conectado al historial real
+> (el trial único por persona se dispara y tiene su test de integración), y la venta incrementa
+> `soldCount`, así que el cupo `maxSales` aplica.
 
 - **module:** contracts
 - **description:** La instancia comprada por un miembro, con su máquina de estados y sus créditos.
@@ -776,10 +776,23 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **test_plan:** Unit del selector FIFO con empates y categorías. Integración del consumo atómico:
   N consumos simultáneos sobre 1 crédito → exactamente 1 gana. Máquina de estados completa.
   Aislamiento. Cobertura mínima 95%.
-- **error-codes:** `LP-CTRT-422-004` (transición de estado inválida), `LP-CTRT-404-005`
+- **error-codes:** `LP-CTRT-402-001`, `LP-CTRT-402-002`, `LP-CTRT-422-003`, `LP-CTRT-422-004`,
+  `LP-CTRT-404-005`
 - **data-model-impact:** `Contract` de §5.2.2. Índice `{ tenantId, memberId, status, endsAt }`.
+  **Colección `auditLogs` en uso** desde acá: el ajuste manual de créditos deja su registro.
+- **decisiones de diseño:**
+  - El contrato guarda una **copia** de las condiciones del producto (tipo, categorías, franjas,
+    topes), no solo el precio. El producto se puede editar mañana y lo vendido tiene que seguir
+    valiendo por lo que se vendió. Es `priceSnapshotCents` extendido al resto.
+  - El vencimiento se calcula en el **calendario del centro** (§2.1.2), no sumando 30×24 horas.
+  - Un producto gratis nace `active`, no `pending_payment`: dejar la clase de prueba esperando un
+    pago de $0 sería una traba inventada en la puerta de entrada del socio.
+  - El consumo intenta con el **siguiente candidato** si el elegido pierde la carrera por su último
+    crédito. Descartar la reserva teniendo otro pack disponible sería un error nuestro.
+  - `expired`, `exhausted` y `cancelled` son terminales. La renovación crea un contrato nuevo, que
+    es lo que mantiene legible el histórico de lo cobrado.
 
-## [ ] F1-09 · Congelamiento y vencimiento de contratos
+## [x] F1-09 · Congelamiento y vencimiento de contratos
 
 - **module:** contracts
 - **description:** El freeze por vacaciones o lesión (§2.1.9: muy pedida y ausente en la v1) y el
@@ -804,9 +817,24 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   freeze: corrimiento de fecha, cancelación de futuras, devolución de créditos, salida de waitlist.
   Test de idempotencia de ambos jobs. Test del máximo anual de días.
 - **error-codes:** `LP-CTRT-422-006` (máximo de días de freeze superado)
-- **data-model-impact:** `Contract.freeze { days, from, to }`, `Contract.freezeDaysUsedThisYear`.
+- **data-model-impact:** `Contract.freeze { days, from, to }`, `Contract.freezeDaysUsedThisYear`,
+  `Contract.freezeYear` y `Contract.lastExpiryNoticeDays`. En `Venue.bookingPolicy` entra
+  `maxFreezeDaysPerYear` (default 30).
+- **decisiones de diseño:**
+  - El vencimiento se corre **al congelar**, no al descongelar. Si se corriera al final, el socio
+    que se olvida de avisar que volvió tendría el pack parado para siempre.
+  - `lastExpiryNoticeDays` es lo que hace idempotente a `notifyExpiring`: sin él, correr el job dos
+    veces el mismo día manda el mismo mail dos veces, que es la clase de error que hace que el
+    centro apague las notificaciones.
+  - Los jobs son el **segundo uso legítimo** de `skipTenantScope`: no corren dentro del pedido de
+    nadie, así que recorren todos los centros y abren el contexto de cada uno antes de tocar sus
+    datos. Está documentado en el plugin de tenancy.
+- **deuda declarada, saldada en F1-14:** cancelar las reservas futuras y devolver esos créditos se
+  pide a través del puerto `FutureBookingReleaser`. El pedido salía con su motivo
+  (`frozen` / `expired`) y con su test desde acá; Booking es quien lo contesta, y el puerto dejó de
+  tener un default: hoy es obligatorio.
 
-## [ ] F1-10 · Billing: cargos, pagos manuales y estado de cuenta
+## [x] F1-10 · Billing: cargos, pagos manuales y estado de cuenta
 
 - **module:** billing
 - **description:** El gap más grave de la v1 (§2.1.16): el dinero entre el centro y sus socios.
@@ -836,9 +864,23 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   Cobertura mínima 95%.
 - **error-codes:** `LP-BILL-422-003`, `LP-BILL-404-004`, `LP-BILL-409-005` (reembolso mayor al pago)
 - **data-model-impact:** `Charge`, `Payment`, `Refund` de §5.2.2. Índice único
-  `{ tenantId, idempotencyKey }` en `Payment`.
+  `{ tenantId, idempotencyKey }` en `Payment`. `Charge.paidCents` se suma al modelo de §5.2.2: sin
+  él no se puede representar un pago parcial, que es un criterio de esta tarea.
+- **decisiones de diseño:**
+  - `requireIdempotencyKey` es infraestructura HTTP compartida (`src/http/idempotency.ts`), no del
+    módulo: F1-14 (reserva) y F1-19 (check-in) la reutilizan. El middleware **solo exige y valida
+    la clave**; la deduplicación real la hace el índice único, porque una caché de respuestas en
+    memoria se pierde justo cuando el proceso se reinicia, que es cuando el cliente reintenta.
+  - Un pago se imputa **del cargo más viejo al más nuevo**: es lo que espera el mostrador cuando
+    alguien paga "lo que debe", y evita que una deuda vieja quede abierta mientras se saldan las
+    nuevas.
+  - El estado de cuenta es la **fuente de verdad** del saldo; `Member.balanceCents` es una copia que
+    Billing refresca para que el listado de socios no tenga que recalcularlo por fila. El flag
+    `debtor` se deriva del mismo número.
+  - Un reembolso parcial revierte **el último cargo saldado**, no el primero: la deuda que reaparece
+    es la que se acababa de cobrar.
 
-## [ ] F1-11 · Billing: mora, caja diaria y reembolsos
+## [x] F1-11 · Billing: mora, caja diaria y reembolsos
 
 - **module:** billing
 - **description:** La morosidad es el KPI número 1 del mercado argentino (§2.1.12). El pasaje a mora
@@ -862,10 +904,22 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **test_plan:** Test del job de mora con reloj inyectado e idempotente. Test de la interacción
   mora × reserva con `allowDebt` en ambos valores. Test del arqueo de caja contra pagos sembrados.
   Cobertura mínima 95%.
-- **error-codes:** `LP-BILL-402-006` (miembro en mora, acción bloqueada)
-- **data-model-impact:** `Charge.status = overdue`, `Member.flags.debtor`.
+- **error-codes:** `LP-BOOK-403-005` (miembro en mora, reserva bloqueada). El
+  `LP-BILL-402-006` queda para cuando la mora bloquee una acción de facturación y no una reserva:
+  el corte que pide esta tarea es sobre reservar, y §11.2 ya tiene su código en el módulo BOOK.
+- **data-model-impact:** `Charge.status = overdue`, `Member.flags.debtor`. Ninguno nuevo.
+- **decisiones de diseño:**
+  - El estado de cobranza (`clear` / `pending` / `overdue` / `credit`) es **derivado**, no un campo:
+    guardarlo obligaría a un job que lo mantenga al día y a que ese job no se atrase nunca.
+  - El corte de la mora vive en Billing (`assertCanTransact`) y lo llama Booking desde F1-14: el
+    módulo que sabe cuánto se debe es el que decide, y el que reserva solo pregunta.
+  - El día de la caja es **el del centro**, en su zona horaria. Calculado en UTC, la caja de un
+    centro argentino cerraría a las 21:00 y los pagos de la última hora caerían en el día siguiente.
+  - El efectivo se reporta aparte del resto: es lo único que hay que contar a mano al cerrar el
+    turno, y es donde aparecen las diferencias.
+- **ya cubierto en F1-10:** los reembolsos con motivo obligatorio, tope y `AuditLog`.
 
-## [ ] F1-12 · Schedule: plantillas y materialización de sesiones
+## [x] F1-12 · Schedule: plantillas y materialización de sesiones
 
 - **module:** schedule
 - **description:** La agenda del centro (§2.1.5.a): plantillas recurrentes tipo RRULE y sesiones
@@ -893,13 +947,26 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **error-codes:** `LP-SCHD-422-004` (recurrencia inválida), `LP-SCHD-409-003` (sala ocupada)
 - **data-model-impact:** `ClassTemplate` y `ClassSession` de §5.2.2. Índice
   `{ tenantId, venueId, startAt }`.
-- **hereda una deuda de F1-02:** conectar el puerto `FutureSessionCounter` de Rooms con el contador
-  real de sesiones (`apps/api/src/modules/index.ts`). Hasta que se haga, el bloqueo de borrado de
-  una sala con clases programadas está escrito y testeado pero nunca se dispara, porque el default
-  responde 0. También hay que usar `resolveSessionCapacity` del dominio de Rooms para heredar el
-  cupo de la sala (§2.1.5.b).
+- **deuda de F1-02, saldada:** el puerto `FutureSessionCounter` de Rooms está conectado al contador
+  real, y hay tres tests que lo verifican de punta a punta. La herencia de capacidad de la sala
+  también quedó: la sesión materializada toma el cupo de la sala salvo que la plantilla declare el
+  suyo.
+- **decisiones de diseño:**
+  - La recurrencia se modela **nativa**, no como un string RRULE: es el subconjunto
+    `FREQ=WEEKLY;BYDAY;BYHOUR` de RFC 5545, que es la forma que de verdad tiene una grilla de
+    clases. El expansor no parsea nada y el formulario del SMU son seis campos, no una gramática.
+    Ensancharla (mensual, por día del mes) es aditivo.
+  - El job es **idempotente por doble vía**: consulta los inicios ya materializados antes de
+    escribir, y un índice único `{ tenantId, templateId, startAt }` (migración
+    `20260902150000`) cierra la ventana entre esa consulta y el `insert`.
+  - Archivar una plantilla **no borra** las clases ya materializadas: la del jueves ya está
+    publicada y puede tener gente anotada. Para bajarla hay que cancelarla, que avisa y devuelve
+    créditos (F1-13).
+  - La vista por día, semana y mes es **un solo endpoint por rango**: la agenda se pide entre dos
+    instantes y el front decide cómo la dibuja. La vista horizontal por sala de §2.1.5.f es
+    presentación, y entra con el DFSM.
 
-## [ ] F1-13 · Schedule: edición, excepciones y cancelación de clase
+## [x] F1-13 · Schedule: edición, excepciones y cancelación de clase
 
 - **module:** schedule
 - **description:** El comportamiento tipo Google Calendar de §2.1.5.a — "solo esta / esta y
@@ -924,10 +991,34 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **test_plan:** Test transaccional de la cancelación: si falla la devolución, no se cancela nada.
   Test de "esta y futuras" verificando que las pasadas quedan intactas. Test de duplicación de
   semana con feriado en el medio.
-- **error-codes:** `LP-SCHD-422-005` (cancelar una sesión ya terminada)
-- **data-model-impact:** `ClassSession.status`, `VenueClosure { tenantId, venueId, from, to, reason }`.
+- **error-codes:** `LP-SCHD-422-005` (editar o cancelar una sesión ya terminada)
+- **data-model-impact:** `ClassSession.status`, `VenueClosure { tenantId, venueId, from, to, reason,
+cancelledSessions }` — colección nueva con su migración (`20260902160000`).
+- **decisiones de diseño:**
+  - **Primero se liberan las reservas, después se cancela la clase.** Si la devolución falla, la
+    clase queda en pie y el centro reintenta; al revés quedaría una clase cancelada con los créditos
+    retenidos, que es plata del socio. Hay un test que hace fallar la devolución y verifica que la
+    clase siga `scheduled`.
+  - Sin `scope`, editar la plantilla **no** propaga: reescribir clases ya publicadas sin que nadie
+    lo pida es peor que un click de más.
+  - Una clase que ya terminó no se edita ni se cancela **aunque su estado siga siendo `scheduled`**:
+    nadie transiciona la grilla vieja, y reescribirla cambiaría el histórico.
+  - Los cierres guardan `from`/`to` como `YYYY-MM-DD`, no como instantes: un feriado es un día del
+    calendario del centro, y guardarlo como instante obligaría a elegir una hora arbitraria.
+- **deuda declarada, saldada en F1-14:** el criterio pide que la cancelación y la devolución ocurran
+  **en la misma transacción**. Se cerró acá como dos operaciones ordenadas para que un fallo no
+  dejara créditos retenidos; F1-14 las metió en `withTransaction`, que es donde puede: ahí las
+  reservas y el contador de la sesión viven en el mismo módulo.
 
-## [ ] F1-14 · Booking: reserva atómica con descuento de crédito
+## [x] F1-14 · Booking: reserva atómica con descuento de crédito
+
+> **Heredó tres deudas, y las tres quedaron saldadas acá:**
+>
+> - De F1-09: el puerto `FutureBookingReleaser` de Contracts ya está conectado. Congelar o vencer un
+>   contrato cancela sus reservas futuras y devuelve los créditos, en una transacción.
+> - De F1-11: `billing.assertCanTransact(memberId, allowDebt)` se llama **antes** de tomar el lugar.
+> - De F1-13: cancelar una clase cancela sus reservas y devuelve los créditos dentro de
+>   `withTransaction`, no como dos operaciones ordenadas.
 
 - **module:** booking
 - **description:** El corazón del producto y su condición de carrera clásica: dos personas tomando
@@ -959,8 +1050,28 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **error-codes:** `LP-BOOK-403-005` (miembro en mora, ADR-004), `LP-BOOK-404-006`
 - **data-model-impact:** `Booking` de §5.2.2. Índice **único** `{ tenantId, sessionId, memberId }`.
   `ClassSession.bookedCount`.
+- **decisiones de diseño:**
+  - El lugar se toma con un `findOneAndUpdate` que exige `bookedCount < capacity` **en la misma
+    operación**, no con un `read` y después un `write`: cincuenta pedidos leerían el mismo contador
+    y entrarían los cincuenta. Es lo que hace imposible la sobreventa, y lo que verifica el test de
+    §Testing.2.
+  - El orden de la reserva es deliberado: idempotencia → clase → reservable → duplicado → **mora** →
+    lugar → crédito → reserva. El corte de la mora va antes de tomar el lugar, porque rechazar
+    después obligaría a devolverlo y por un rato la clase figuraría llena.
+  - Si algo falla después de tomar el lugar, se compensa **hacia atrás** y el error que sube es el
+    original: dejar ganar al error de la compensación mandaría a mirar el lugar equivocado.
+  - El único `{ tenantId, sessionId, memberId }` de F0-10 se reemplaza por uno **parcial** sobre los
+    estados vivos. El de F0-10 bloqueaba para siempre a quien cancelaba y quería volver a anotarse.
+  - La lista de espera **no consume crédito**: todavía no tiene lugar, y cobrárselo por esperar
+    sería cobrarle por nada.
+  - Las transacciones viajan por `AsyncLocalStorage` y no como parámetro: si hubiera que pasarlas a
+    mano, alcanzaría con que un repositorio se la olvidara para que su escritura quedara afuera sin
+    que nadie lo note. Requieren replica set, que el runbook ya declara obligatorio.
+  - `releaseFuture` pregunta por contrato, no por socio: traerse las últimas N reservas del socio y
+    filtrar en memoria dejaría afuera, sin avisar, a quien tuviera más.
+  - El reloj lo inyecta la raíz de composición. El servicio nunca lee la hora sola.
 
-## [ ] F1-15 · Booking: ventanas de tiempo y devolución de crédito
+## [x] F1-15 · Booking: ventanas de tiempo y devolución de crédito
 
 - **module:** booking
 - **description:** Las cinco ventanas configurables de §2.1.5.c y la matriz completa de devolución
@@ -987,8 +1098,31 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   Test de las 5 ventanas con reloj inyectado y TZ del Venue.
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** `Booking.creditConsumed`, `Booking.cancelledAt`.
+- **decisiones de diseño:**
+  - La tabla de §2.1.9 vive en **una función pura** (`domain/credit-matrix.ts`) y no repartida por
+    los servicios que la aplican. La misma regla la consultan Booking, Schedule (clase cancelada),
+    Contracts (congelamiento), Attendance (walk-in) y el job de no-shows: cinco copias de una regla
+    de plata son cinco versiones de la verdad, y la que se desactualiza le cobra de más a alguien.
+  - **El late cancel pide confirmación en vez de rechazar o de cobrar callado.** El primer pedido
+    responde `LP-BOOK-422-004` diciendo qué se pierde; con `acceptsLateCancel: true` cancela igual.
+    Rechazarlo dejaría el lugar tomado por alguien que no va a ir, y cancelarlo sin avisar es lo
+    que hace que el centro parezca arbitrario (§2.1.5.d).
+  - Salir de la lista de espera **nunca es tarde**: nunca tuvo lugar ni crédito, así que no hay
+    nada que penalizar.
+  - Los dos lados de la ventana de reserva devuelven el **mismo código** con mensajes distintos:
+    para quien reserva son el mismo problema, pero "todavía no" sin la fecha desde la que sí no le
+    sirve a nadie.
+  - Las excepciones por categoría solo pisan **ventanas y late cancel**. La deuda, el tope de
+    freeze y el bloqueo por no-shows son del centro entero: por categoría, la misma persona debería
+    plata para spinning y no para funcional.
+  - Booking le pide al Venue la **política entera** y resuelve las ventanas él. Preguntar campo por
+    campo sería un viaje a la base por regla, y todas se evalúan en la misma reserva.
+- **encontrado de paso:** la caja diaria leía "hoy" con el reloj de pared en vez del inyectado, y
+  era lo único del módulo que no se podía testear con un reloj fijo. Ahora lo resuelve el servicio.
+  Y el `status` que dejaba un cargo después de un reembolso tenía una rama muerta: la imputación
+  nunca sobrepaga un cargo, así que sacarle algo siempre lo deja debiendo.
 
-## [ ] F1-16 · Waitlist con promoción automática
+## [x] F1-16 · Waitlist con promoción automática
 
 - **module:** booking
 - **description:** La lista de espera de §2.1.5.b: FIFO, con ventana de confirmación y promoción
@@ -1020,8 +1154,30 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   `LP-BOOK-422-009` (confirmación vencida)
 - **data-model-impact:** `Booking.status = waitlisted`, `Booking.waitlistPosition`,
   `Booking.holdExpiresAt`. `ClassSession.waitlistCount`.
+- **decisiones de diseño:**
+  - **El lugar se toma al promover, no al confirmar.** Si quedara libre durante la ventana,
+    cualquiera que abriera la app se lo llevaría y el aviso que acabás de recibir sería mentira.
+    Se toma con el mismo `findOneAndUpdate` atómico de la reserva, que es lo que impide que dos
+    cancelaciones simultáneas promuevan a la misma persona dos veces.
+  - El promovido sigue en `waitlisted` y lo que lo distingue es tener `holdExpiresAt`. No hace
+    falta un estado nuevo para algo que dura quince minutos, y agregarlo obligaría a tocar la
+    máquina de estados de §14 y todas sus transiciones.
+  - **El crédito se descuenta al confirmar**, no al promover: mientras esperaba no tenía nada que
+    consumir, y cobrarle por un lugar que todavía no aceptó sería cobrarle por un aviso.
+  - La ventana de confirmación **nunca se estira más allá del inicio de la clase**. Quince minutos
+    otorgados a cinco del comienzo dejarían el lugar bloqueado después de que la clase arrancó.
+  - El job corre **cada minuto** porque la ventana se mide en minutos: cada cinco, el que confirmó
+    a horario podría encontrarse con que ya se lo pasaron al siguiente.
+  - Salir de la fila reescribe **solo las posiciones que se movieron**. Reescribir la fila entera
+    en cada baja son N escrituras para arreglar N−k, y en una clase con veinte esperando eso pasa
+    varias veces por hora.
+  - La baja del socio llega **por evento** (`member.status_changed`): Members no puede tocar el
+    modelo de Booking (ADR-003), y el bus aísla el fallo — si la limpieza falla, la baja queda
+    hecha igual.
+  - `promotedAt` y `confirmedAt` quedan guardados: son los dos números que necesita F1-23 para la
+    tasa de conversión de la fila, que es lo que dice si falta oferta en ese horario (§2.1.5.b).
 
-## [ ] F1-17 · No-show y política de penalización
+## [x] F1-17 · No-show y política de penalización
 
 - **module:** booking
 - **description:** El job que marca no-show pasada la ventana de check-in y aplica la penalización
@@ -1045,9 +1201,28 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **test_plan:** Test del job idempotente con reloj inyectado. Test del umbral: N-1 no penaliza, N
   sí. Test con la política desactivada.
 - **error-codes:** `LP-BOOK-403-010`
-- **data-model-impact:** `Member.noShowCount`, `Member.bookingBlockedUntil`.
+- **data-model-impact:** `Member.noShowCount`, `Member.bookingBlockedUntil`. `bookingPolicy` suma
+  `noShowWindowDays`.
+- **decisiones de diseño:**
+  - **El umbral se cuenta sobre las reservas en `no_show`, no sobre el contador del socio.** Un
+    contador hay que resetearlo, y el reseteo que no corre convierte una falta vieja en un bloqueo
+    de hoy. `Member.noShowCount` queda igual, pero como dato de la ficha, no como fuente de verdad.
+  - La ventana es **móvil y configurable** (`noShowWindowDays`, default 30). Contar desde siempre
+    haría que tres ausencias en tres años pesaran igual que tres en un mes. El campo es nuevo: la
+    spec pedía el umbral pero no decía sobre qué período.
+  - El job recorre **las clases, no las reservas**: las que empezaron en las últimas horas son un
+    puñado, y las reservas abiertas de todo el sistema no. Mira 24 horas para atrás, así las clases
+    de la madrugada se marcan igual si el runner estuvo caído.
+  - Es idempotente **por construcción**: marcar saca a la reserva de `booked`, así que la segunda
+    corrida sobre la misma hora no encuentra nada que marcar ni a quién penalizar.
+  - **La falta se registra siempre**, aunque el centro tenga la política desactivada: la métrica es
+    la que después dice si hace falta activarla (§2.1.5.d).
+  - Quien está en la lista de espera **nunca es un ausente**: nunca tuvo lugar, y marcarlo sería
+    penalizarlo por haber esperado.
+  - El mensaje del bloqueo dice **hasta cuándo**. Un "no podés reservar" sin fecha deja al socio sin
+    saber si es por hoy o para siempre.
 
-## [ ] F1-18 · Attendance: check-in manual y lista de clase del coach
+## [x] F1-18 · Attendance: check-in manual y lista de clase del coach
 
 - **module:** attendance
 - **description:** La pantalla que el coach usa de pie, con una mano, en el piso del box (§5.1.2).
@@ -1074,8 +1249,32 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **error-codes:** `LP-ATTD-409-001` (ya tiene check-in), `LP-ATTD-422-002` (fuera de ventana),
   `LP-ATTD-403-003` (waiver faltante)
 - **data-model-impact:** `Booking.checkedInAt`, `Booking.checkInMethod`, `Booking.checkedInBy`.
+- **decisiones de diseño:**
+  - **Attendance no tiene colección propia.** La asistencia es un estado de la reserva; guardarla
+    aparte serían dos verdades sobre si alguien entró. El módulo aporta la decisión —quién puede
+    entrar, cuándo, con qué alertas— y la vista; el documento lo sigue escribiendo Booking.
+  - La lista llega **resuelta en una sola llamada**, con nombres y alertas incluidos. El coach la
+    abre de pie con el gimnasio lleno: encadenar tres pedidos es hacerlo esperar tres veces.
+  - **"Todos presentes" no se cae por uno.** Los que no pasan una validación vuelven con su motivo
+    en `skipped`. Cortar la operación entera porque uno debe plata sería cambiar ocho segundos de
+    trabajo por una discusión en el piso del box.
+  - La ventana de check-in **cierra**, y no solo abre: sin cierre, quien faltó podría marcarse
+    presente al día siguiente y el no-show dejaría de significar algo.
+  - Las alertas viajan como **códigos**, no como texto: el mismo dato lo muestran la lista del coach
+    y la ficha del socio, y traducirlo en el backend obligaría a cambiar la API para cambiar una
+    palabra.
+  - La mezcla de la política por categoría se mudó a `@laplace/schemas`
+    (`effectiveBookingPolicy`): la consultan la reserva, el check-in y la pantalla que le muestra al
+    socio hasta cuándo puede cancelar. Tres copias son tres formas de mostrar un horario distinto
+    del que se va a aplicar.
+  - El DFSM estrena **router**: la lista lleva el `sessionId` en la URL porque el coach la abre
+    desde el horario, la comparte y vuelve a ella después de cerrar la app.
+- **deuda declarada:** el waiver se consulta por el puerto `WaiverGate`, que hasta F1-20 contesta
+  que está todo firmado. Es preferible a un `if` comentado esperando el módulo. La validación de
+  crédito al entrar la trae F1-19 con el walk-in: en una reserva el crédito ya se descontó
+  (ADR-001).
 
-## [ ] F1-19 · Attendance: QR con token rotativo y walk-in
+## [x] F1-19 · Attendance: QR con token rotativo y walk-in
 
 - **module:** attendance
 - **description:** El QR de la WAFM que abre la puerta (§2.1.18), con token de vida corta para que
@@ -1103,8 +1302,35 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   Test de la cola offline y su sincronización.
 - **error-codes:** `LP-ATTD-422-004` (token inválido o vencido), `LP-ATTD-404-005`
 - **data-model-impact:** `CheckInToken { userId, tokenHash, expiresAt, usedAt }` con TTL.
+- **decisiones de diseño:**
+  - **Se guarda el hash del token, nunca el token.** El QR vive 30 segundos, pero una colección con
+    los códigos en claro sería una colección de llaves de la puerta, y el documento tarda hasta un
+    minuto en borrarse (el TTL de Mongo corre cada 60s). El hash no sirve para nada si se filtra.
+  - **Un token vencido y uno inexistente dan el mismo error** (`LP-ATTD-422-004`). Distinguirlos le
+    diría a quien prueba códigos ajenos cuál de los dos casi funcionó — la misma decisión que ya
+    tomó F1-15 para las dos puntas de la ventana de reserva.
+  - **El canje no manda `sessionId`.** El backend resuelve la clase eligiendo, entre las reservas del
+    socio, la que tiene la ventana de check-in abierta ahora. Pedirle a la tablet de la puerta que
+    supiera qué clase corre en cada momento significaría reconfigurarla cada vez que cambia el
+    horario del centro.
+  - **El walk-in reusa el orden atómico de la reserva** (lugar → crédito → documento) y no una
+    versión simplificada: dos walk-ins simultáneos sobre el último cupo tienen la misma condición de
+    carrera que dos reservas, así que necesitan la misma solución.
+  - **El kiosko no lee la cámara.** Un lector de QR de hardware "escribe" el código en un input
+    enfocado y manda un Enter, como cualquier lector de código de barras de retail — sin librería de
+    cámara, sin permisos del navegador, sin nada que pedirle al sistema operativo de la tablet.
+  - **La cola offline encola antes de intentar mandar, no después de que falle.** Así un corte de
+    batería o de red a mitad de camino no pierde el escaneo, y como la clave de idempotencia se fija
+    al encolar (no al reintentar), el reintento es el mismo pedido, no uno nuevo — reintentarlo no
+    duplica el check-in. Vive en `@laplace/client` porque cualquier pantalla que necesite "no perder
+    lo que el usuario ya hizo" la puede reusar, no solo el kiosko.
+  - **Un 4xx de la cola no se reintenta; un error de red o un 5xx sí, hasta un tope.** El primero es
+    un problema del pedido (el código venció, por ejemplo) que reintentar no arregla; el segundo es
+    la razón por la que existe la cola.
+  - Se agregó `.claude/launch.json` para poder levantar `wafm` y `dfsm` con el navegador integrado:
+    es lo que permitió probar las dos pantallas nuevas contra un server real, no solo con jsdom.
 
-## [ ] F1-20 · Módulo Waivers
+## [x] F1-20 · Módulo Waivers
 
 - **module:** waivers
 - **description:** Deslindes y consentimientos versionados con firma trazable (§2.1.20). Es riesgo
@@ -1131,10 +1357,44 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **test_plan:** Test de que el hash del contenido se guarda y se puede verificar contra el texto.
   Test de re-aceptación al publicar versión nueva. Test del bloqueo de check-in con el flag en
   ambos valores. Aislamiento (los documentos globales son de solo lectura para el tenant).
-- **error-codes:** `LP-HLTH-403-002` (documento obligatorio sin aceptar)
-- **data-model-impact:** `LegalDocument` y `Consent` de §5.2.2.
+- **error-codes:** `LP-ATTD-403-003` (ya declarado por F1-18: es el que bloquea el check-in),
+  `LP-SYS-404-002` (documento inexistente, reusado — no hay nada específico de Waivers que un 404
+  genérico no diga ya). `LP-HLTH-403-002` queda declarado en `docs/errors.md` desde antes de esta
+  tarea pero sin dueño: nada en Waivers necesitó su propio "documento obligatorio sin aceptar"
+  aparte del que ya tira Attendance al bloquear el check-in.
+- **data-model-impact:** `LegalDocument` y `Consent` de §5.2.2, más `contentHash` en los dos (no
+  está en el sketch de §5.2.2, pero la propia tarea lo pide: "hash del texto de esa versión").
+  `bookingPolicy` de Venue suma `enforceWaivers`.
+- **decisiones de diseño:**
+  - **`enforceWaivers` es la parte de "configurable por Venue" que la propia spec pide y el sketch
+    del criterio no explicitaba dónde vivía.** Default `false`: prenderlo de una es una decisión
+    del centro, que en ese momento asume que sus socios van a tener cuenta en la WAFM y sus
+    documentos publicados. Vive en `bookingPolicy`, al lado de `allowDebt` — el mismo patrón de
+    "barrera configurable que Attendance consulta antes de dejar entrar a alguien".
+  - **Sin cuenta vinculada, siempre falta algo.** `missingFor` no tiene forma de verificar un
+    consentimiento digital de alguien sin `userId`, así que un socio dado de alta directo por
+    staff (sin invitación) queda bloqueado hasta que tenga cuenta — coherente con que la firma es
+    "digital simple" y no hay un camino de "consentimiento en papel" en el alcance de esta tarea.
+  - **`guardian_consent` se publica siempre obligatorio.** El servidor ignora lo que llegue en
+    `required` para ese tipo: no es una decisión que el SMU tenga que tomar cada vez, es la regla
+    del tipo de documento (§2.1.20).
+  - **La re-aceptación no corre un job.** Publicar una versión nueva simplemente crea otra fila;
+    "lo pendiente" se recalcula preguntando por la versión vigente en cada pedido, así que la
+    vigencia de la v2 alcanza sola en cuanto se publica.
+  - **El HTML del documento se sanea antes de mostrarse en la WAFM** (`sanitizeHtml`, nuevo en
+    `@laplace/client`, con DOMPurify). Lo escribe el staff del centro, no Laplace: una cuenta de
+    staff comprometida no tiene que poder convertirse en un XSS almacenado contra cada socio que
+    abre la app.
+  - **El CSV del panel de cumplimiento escapa cada campo** contra la inyección de fórmulas de
+    Excel/Sheets (OWASP): un nombre que empiece con `=`, `+`, `-` o `@` no se ejecuta al abrirlo.
+  - El WAFM estrena la pantalla "Tus documentos" (`/documentos`, fuera de la bottom nav fija de
+    §5.1.3) y un aviso en el home cuando algo queda pendiente de firmar.
+- **queda afuera a propósito:** publicar documentos de `scope: 'global'` (el T&C/Privacidad del
+  SaaS entre Laplace y el suscriptor, ADR-000 regla 6). Esta tarea es la de los documentos que un
+  _socio_ firma para _su gimnasio_ — org-scoped. Los globales son otra audiencia (el SMU al
+  suscribirse) y entran con F1-25. El modelo ya soporta `scope`; el módulo solo escribe `'org'`.
 
-## [ ] F1-21 · Notifications: motor in-app y email transaccional
+## [x] F1-21 · Notifications: motor in-app y email transaccional
 
 - **module:** notifications
 - **description:** El motor de §2.1.14 para los canales de Fase 1: in-app y email. Con cola,
@@ -1165,8 +1425,12 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **error-codes:** `LP-NOTF-500-001` (envío fallido tras reintentos), `LP-NOTF-422-002`
 - **data-model-impact:** `Notification` de §5.2.2, `NotificationTemplate`,
   `NotificationPreference { userId, channel, eventType, enabled }`.
+- **deuda declarada:** el motor queda enganchado a un solo evento (`booking.created`, el del
+  ejemplo de la tarjeta). Los otros siete avisos transaccionales y el job `classReminders` son
+  F1-22, que ya no toca el motor: solo se suscribe. La pantalla de plantillas del DFSM (la API está
+  entera: listar, guardar con validación y vista previa) entra con el resto del DFSM en F1-24.
 
-## [ ] F1-22 · Las notificaciones transaccionales del MVP
+## [x] F1-22 · Las notificaciones transaccionales del MVP
 
 - **module:** notifications
 - **description:** Las automáticas de §2.1.14 que cubre Fase 1. Sin estas, el motor no le sirve a
@@ -1189,9 +1453,15 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **test_plan:** Un test por notificación: que se dispare con el evento correcto, una sola vez, con
   las variables resueltas. Test de idempotencia de `classReminders`.
 - **error-codes:** ninguno nuevo
-- **data-model-impact:** ninguno nuevo.
+- **data-model-impact:** ninguno nuevo. El evento `session.cancelled` suma `releasedMemberIds`:
+  cuando Notifications reacciona, la clase ya no tiene inscriptos, así que a quién avisarle solo
+  puede decirlo el que canceló.
+- **deuda declarada:** el aviso de pack por vencer trae el CTA en el texto, no como botón: la
+  pantalla de "mis packs" a la que tendría que llevar es F1-29. El de cambio de coach no dice a
+  quién: resolver un nombre de staff necesita un directorio que hoy no existe (los usuarios del
+  staff los guarda Better Auth, no Members).
 
-## [ ] F1-23 · MetricsDaily y KPIs básicos
+## [x] F1-23 · MetricsDaily y KPIs básicos
 
 - **module:** metrics
 - **description:** Los agregados diarios precalculados de §2.1.12. Calcular KPIs con agregaciones en
@@ -1214,9 +1484,15 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **test_plan:** Test de cada KPI con datos sembrados y resultado esperado calculado a mano. Test
   de idempotencia del job. Test de que el panel no ejecuta agregaciones en vivo. Aislamiento.
 - **error-codes:** ninguno nuevo
-- **data-model-impact:** `MetricsDaily` de §5.2.2. Índice único `{ tenantId, venueId, date }`.
+- **data-model-impact:** `MetricsDaily` de §5.2.2. Índice único `{ tenantId, venueId, date }` — ya
+  venía en la migración base (F0-10), sin migración nueva.
+- **deuda declarada:** los KPIs de Fase 1 son los seis de la tarjeta. MRR, churn, ARPM, LTV,
+  retención a 90 días, conversión de waitlist, utilización de coach y cohortes son Fase 2: necesitan
+  Suscriptions (F1-25) o series más largas que las que hay. "Lo facturado" corre sobre `dueAt` y no
+  sobre `createdAt`: un cargo pertenece al período en el que vence, que es como un centro piensa su
+  facturación mensual.
 
-## [ ] F1-24 · DFSM Home: tablero operativo del día
+## [x] F1-24 · DFSM Home: tablero operativo del día
 
 - **module:** metrics
 - **description:** El home del DFSM es un tablero, no un menú (§5.1.2). Y el panel de alertas
@@ -1246,8 +1522,13 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   light.
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** ninguno nuevo.
+- **deuda declarada:** las acciones rápidas (cobrar, vender pack, agregar miembro) necesitan los
+  formularios de las pantallas que todavía no existen — Cobranza, Productos y Miembros del DFSM —,
+  así que entran con ellas. Los ítems de alerta llevan al socio o a la clase; los que apuntan a
+  pantallas sin construir todavía no son enlaces. La búsqueda usa una regular expression anclada
+  sobre el tenant: con los volúmenes de Fase 1 alcanza, y un índice de texto es Fase 2.
 
-## [ ] F1-25 · Suscriptors y Suscriptions: signup self-service y planes
+## [x] F1-25 · Suscriptors y Suscriptions: signup self-service y planes
 
 - **module:** susc
 - **description:** El alta del suscriptor desde la landing con trial de 14 días sin tarjeta
@@ -1280,9 +1561,19 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **error-codes:** `LP-SUSC-422-001`, `LP-SUSC-409-002`, `LP-SUBS-422-001` (cambio de plan
   inválido), `LP-SUSC-403-003` (impersonación sin motivo)
 - **data-model-impact:** `Organization` completa de §5.2.2, `Plan`, `Subscription` con
-  `priceSnapshotCents`.
+  `priceSnapshotCents`. `subscriptions` y `plans` son colecciones **de plataforma**: no llevan
+  `tenantId` porque no son datos de un centro sino sobre los centros, y el SAU las consulta
+  cruzando todos. Se acotan por `organizationId`, que sale de la sesión.
+- **deuda declarada:** el cobro recurrente con Mercado Pago, los webhooks idempotentes, el dunning
+  y los cupones son Fase 2 (§2.1.4): acá está el ciclo de vida, no el cobro. Los precios que siembra
+  la migración son **valores iniciales** — el SAU los cambia desde su panel. La autorización de las
+  rutas `/api/v1/admin` la cierra F1-27, que trae el rol de SAU: hoy exigen sesión.
+- **encontrado de paso:** el lector del plan consultaba la organización por un campo `id` que Better
+  Auth **no guarda** — la fila nunca aparecía y cada centro caía al plan del trial en silencio, con
+  un cliente de Max operando como Basic. Se arregló y quedó cubierto con un test contra una
+  organización real, no contra un doble de la base.
 
-## [ ] F1-26 · Landing completa
+## [x] F1-26 · Landing completa
 
 - **module:** landing
 - **description:** Las nueve secciones de §5.1.4 más lo que agrega el `[+]`: CTA de prueba gratis,
@@ -1311,9 +1602,26 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **test_plan:** Test del HTML generado por sección. Test del formulario con el schema compartido.
   Lighthouse CI (SEO ≥ 95, accesibilidad ≥ 95). Auditoría axe.
 - **error-codes:** `LP-CRM-422-001` (formulario inválido)
-- **data-model-impact:** `Lead` de §5.2.2 (solo la captura; el pipeline completo es Fase 4).
+- **data-model-impact:** colección `contactRequests`, **de plataforma**. 🔴 **No es el `Lead` de
+  §5.2.2**: aquel es el prospecto _de un centro_ — alguien que quiere anotarse en el gimnasio — y
+  por eso lleva `tenantId`. Esto es un prospecto _de Laplace_: quien escribe todavía no tiene
+  centro, así que por definición no puede tener `tenantId`. Dos cosas distintas con el mismo nombre
+  en castellano; el `Lead` con su pipeline llega en Fase 4.
+- **deuda declarada:**
+  - **Testimonios: la sección y el carousel están, el contenido no.** Inventar testimonios es
+    publicar reseñas falsas — quien las lee cree que un centro real dijo eso y decide con eso. El
+    componente recibe los reales cuando existan y haya permiso para usar el nombre.
+  - **Los textos legales necesitan un abogado.** Las tres páginas tienen su estructura y los hechos
+    técnicos que sí podemos afirmar (qué se guarda, los 90 días de retención de ADR-004, la Ley
+    25.326); las cláusulas vinculantes están marcadas como pendientes en vez de redactadas.
+  - **Las pantallas son maquetas de CSS, y lo dicen.** Una captura trucada le promete al visitante
+    algo que no va a encontrar. Se reemplazan por capturas reales sin tocar el texto.
+  - El `CLAUDE.md` de la landing pide servir los legales desde `LegalDocument`; **no aplica a los
+    de Laplace**, que no tienen tenant, y además romperían el prerender que §5.1.4 exige. Los del
+    centro sí salen de ahí (F1-20).
+  - Lighthouse CI (SEO ≥ 95, accesibilidad ≥ 95) queda para el pipeline de F1-31, junto con el E2E.
 
-## [ ] F1-27 · DFSA mínimo
+## [x] F1-27 · DFSA mínimo
 
 - **module:** susc
 - **description:** Lo que el SAU necesita para operar el SaaS en Fase 1 (§5.1.1): suscriptores,
@@ -1339,9 +1647,18 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
 - **test_plan:** Test de que los endpoints del DFSA no exponen colecciones con `tenantId`. Test del
   buscador por `requestId` y `errorCode`. Test de la auditoría del cambio de estado.
 - **error-codes:** ninguno nuevo
-- **data-model-impact:** `AuditLog` de §5.2.2. Índice `{ tenantId, at }` + TTL de retención.
+- **data-model-impact:** colección `errorEvents`, **de plataforma** y con TTL de 30 días. 🔴 Guarda
+  el **código** del error, nunca su contenido: en el `meta` puede estar el nombre y el saldo de un
+  socio, y el SAU no ve datos de miembros (ADR-004, decisión 7). Sin ella, el `requestId` que el
+  producto le pide compartir al usuario no tenía dónde pegarse.
+- **cerrado de F1-25:** todo `/api/v1/admin` exige ahora **SAU + segundo factor**. Hay un test que
+  barre las rutas registradas bajo ese prefijo y verifica que ninguna se abra: una ruta nueva sin
+  guard rompe el CI.
+- **deuda declarada:** la pantalla de planes del DFSA (la API está: editar nombre, precio,
+  descripción y qué incluye) y la de textos legales quedan para cuando se necesiten — están en la
+  navegación. Los webhooks pendientes informan cero hasta Fase 2, que es cuando existen.
 
-## [ ] F1-28 · WAFM: horario, reservar y cancelar
+## [x] F1-28 · WAFM: horario, reservar y cancelar
 
 - **module:** schedule
 - **description:** Lo que el socio abre todos los días. La meta de §2.0 es que más del 80% de las
@@ -1368,7 +1685,16 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   política en el modal. Test del flujo de waitlist. E2E de reservar y cancelar. Auditoría axe,
   prueba a 360 px.
 - **error-codes:** ninguno nuevo
-- **data-model-impact:** ninguno nuevo.
+- **data-model-impact:** ninguno nuevo. El rol `member` gana `venue.read`: el socio necesita el
+  nombre de la sede para elegir en cuál entrena, y la política de reserva es la regla que lo rige.
+- **encontrado de paso:** `GET /api/v1/bookings` aceptaba `?memberId=` **sin chequear permiso**.
+  `booking.read` lo tiene también el socio — lo necesita para ver las suyas —, así que cualquiera
+  podía pedir las reservas de un compañero de su mismo centro. El aislamiento por tenant no lo
+  tapaba: los dos son del mismo tenant. Ahora el parámetro solo lo honra quien puede reservar por
+  otro (`booking.createForOther`), que es el mostrador, con test de los dos lados.
+- **deuda declarada:** el E2E de reservar y cancelar va con F1-31, que instala los navegadores de
+  Playwright y suma el job al CI. El caché sin red es el `staleTime` de Query más el service worker
+  que ya tiene la PWA; una prueba real de modo avión también es de F1-31.
 
 ## [ ] F1-29 · WAFM: mis packs, mi QR y mi perfil
 

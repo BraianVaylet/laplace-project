@@ -1,15 +1,33 @@
 import { Hono } from 'hono';
+import { fromBsonDate } from '../persistence/bson-date.js';
 import { createAuditWriter } from '../audit/audit-log.js';
-import type { Temporal } from '@js-temporal/polyfill';
+import { Temporal } from '@js-temporal/polyfill';
 import type { Logger } from 'pino';
 import type { AppEnv } from '../app.js';
+import { planFor, type PlanId } from '../entitlements/catalog.js';
 import type { EntitlementsLoader } from '../entitlements/middleware.js';
 import type { DomainEventBus } from '../events/bus.js';
+import { AppError } from '../http/errors.js';
+import { runWithTenant } from '../tenancy/context.js';
 import { createMembersModule, type OrganizationMembershipPort } from './members/index.js';
-import { createContractsModule } from './contracts/index.js';
+import { createBillingModule } from './billing/index.js';
+import { createAttendanceModule, type AttendanceBooking } from './attendance/index.js';
+import { createBookingModule } from './booking/index.js';
+import { createContractsModule, type FutureBookingReleaser } from './contracts/index.js';
 import { createProductsModule } from './products/index.js';
+import { createScheduleModule, type SessionBookingReleaser } from './schedule/index.js';
 import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
 import { createVenuesModule } from './venues/index.js';
+import { createCrmModule } from './crm/index.js';
+import { createMetricsModule } from './metrics/index.js';
+import { createSuscModule, type JobRunLookup, type OrganizationCreator } from './susc/index.js';
+import type { ErrorEventStore } from '../observability/error-events.js';
+import { createWaiverModule } from './waivers/index.js';
+import {
+  createLoggingMailer,
+  createNotificationModule,
+  type NotificationMailer,
+} from './notifications/index.js';
 
 export interface ModuleDeps {
   events: DomainEventBus;
@@ -29,6 +47,42 @@ export interface ModuleDeps {
    * desde `index.ts`: los modulos no conocen la libreria de identidad.
    */
   memberships: OrganizationMembershipPort;
+  /**
+   * Crea la organizacion del suscriptor en el alta self-service (F1-25). Lo
+   * implementa Better Auth desde `index.ts`: los modulos no conocen la
+   * libreria de identidad.
+   */
+  organizations?: OrganizationCreator | undefined;
+  /** Cuantos usuarios de staff tiene el centro. Lo contesta Better Auth. */
+  staffCount?: ((organizationId: string) => Promise<number>) | undefined;
+  /**
+   * El dueño de la cuenta del centro. Lo contesta Better Auth, y es a quien le
+   * llega el aviso de que soporte entro (§2.1.3).
+   */
+  owner?:
+    | ((
+        organizationId: string,
+      ) => Promise<{ userId: string; name: string; email: string | null } | null>)
+    | undefined;
+  /** El registro de errores del panel de soporte del DFSA (§11.3). */
+  errorEvents?: ErrorEventStore | undefined;
+  /** Las corridas de job fallidas, para el panel de salud. */
+  jobRuns?: JobRunLookup | undefined;
+  /**
+   * Libera las reservas futuras de un contrato al congelarlo o vencerlo. Lo va a
+   * contestar Booking (F1-14); hasta entonces no hay reservas que liberar.
+   */
+  bookings?: FutureBookingReleaser | undefined;
+  /**
+   * Libera las reservas de una clase cancelada y devuelve sus creditos. Lo va a
+   * contestar Booking (F1-14); hasta entonces cancelar no libera nada.
+   */
+  sessionBookings?: SessionBookingReleaser | undefined;
+  /**
+   * El proveedor de mail de Notifications. Se inyecta para que ningun test
+   * mande un mail; sin nada, deja el aviso en el log (modo dev).
+   */
+  mailer?: NotificationMailer | undefined;
 }
 
 /**
@@ -39,13 +93,45 @@ export interface ModuleDeps {
  * implementacion: Rooms pregunta si una sede existe a traves de `VenueLookup`,
  * que hoy contesta Venues y mañana podria contestar otra cosa.
  */
-export function createModuleRoutes(deps: ModuleDeps): Hono<AppEnv> {
+export function createModules(deps: ModuleDeps) {
   const routes = new Hono<AppEnv>();
+
+  const audit = createAuditWriter();
 
   const venues = createVenuesModule(deps);
   const rooms = createRoomsModule({
     ...deps,
     venues: { exists: (venueId) => venues.service.exists(venueId) },
+    /*
+     * Salda la deuda de F1-02: el bloqueo de borrado de una sala con clases
+     * programadas ya no responde 0, lo contesta Schedule de verdad.
+     *
+     * Un `sessions` explicito gana: es el que le deja a un test probar la logica
+     * de Rooms sin montar la agenda entera.
+     */
+    sessions: deps.sessions ?? {
+      countFutureSessions: (roomId) => schedule.service.countFutureSessions(roomId),
+    },
+  });
+
+  const schedule = createScheduleModule({
+    entitlements: deps.entitlements,
+    events: deps.events,
+    audit,
+    rooms: { capacityOf: (roomId) => rooms.service.capacityOf(roomId) },
+    venues: { timeZoneOf: (venueId) => venues.service.timeZoneOf(venueId) },
+    /*
+     * Cancelar una clase devuelve los creditos de sus inscriptos (§2.1.9). Lo
+     * contesta Booking (F1-14); hasta entonces no hay reservas que liberar.
+     */
+    /*
+     * Salda la deuda de F1-13: cancelar una clase ahora libera de verdad sus
+     * reservas y devuelve los creditos, en una transaccion.
+     */
+    bookings: deps.sessionBookings ?? {
+      releaseSession: (params) => booking.service.releaseSession(params),
+    },
+    ...(deps.now ? { now: deps.now } : {}),
   });
 
   const members = createMembersModule(deps);
@@ -62,7 +148,7 @@ export function createModuleRoutes(deps: ModuleDeps): Hono<AppEnv> {
 
   const contracts = createContractsModule({
     ...deps,
-    audit: createAuditWriter(),
+    audit,
     products: {
       assertPurchasable: async (productId, memberId) => {
         const product = await products.service.assertPurchasable(productId, memberId);
@@ -85,7 +171,69 @@ export function createModuleRoutes(deps: ModuleDeps): Hono<AppEnv> {
       registerSale: (productId) => products.service.registerSale(productId),
       releaseSale: (productId) => products.service.releaseSale(productId),
     },
+    venues: {
+      timeZoneOf: (venueId) => venues.service.timeZoneOf(venueId),
+      maxFreezeDaysOf: (venueId) => venues.service.maxFreezeDaysOf(venueId),
+    },
+    /*
+     * Salda la deuda de F1-09: congelar o vencer un contrato ahora libera de
+     * verdad las reservas futuras y devuelve sus creditos, en una transaccion.
+     */
+    bookings: deps.bookings ?? {
+      releaseFuture: (params) => booking.service.releaseFuture(params),
+    },
+  });
+
+  const billing = createBillingModule({
+    ...deps,
+    audit,
+    /*
+     * El saldo del socio se guarda tambien en su ficha, para no recalcularlo por
+     * cada fila del listado. La fuente de verdad sigue siendo el estado de
+     * cuenta, que se calcula sobre cargos y pagos.
+     */
+    members: {
+      set: (memberId, balanceCents) => members.service.setBalance(memberId, balanceCents),
+    },
     venues: { timeZoneOf: (venueId) => venues.service.timeZoneOf(venueId) },
+  });
+
+  /*
+   * Booking orquesta: toma el lugar en Schedule, descuenta el credito en
+   * Contracts y consulta la mora en Billing. Cada pieza la resuelve el modulo
+   * que la conoce, y Booking solo las ordena (ADR-003).
+   */
+  const booking = createBookingModule({
+    entitlements: deps.entitlements,
+    events: deps.events,
+    sessions: {
+      claimSeat: (sessionId) => toClaimed(schedule.service.claimSeat(sessionId), venues.service),
+      releaseSeat: (sessionId) => schedule.service.releaseSeat(sessionId),
+      adjustWaitlist: (sessionId, delta) => schedule.service.adjustWaitlist(sessionId, delta),
+      find: (sessionId) => toClaimed(schedule.service.findSession(sessionId), venues.service),
+    },
+    credits: {
+      consume: (memberId, context) => contracts.service.consume(memberId, context),
+      refund: async (contractId) => {
+        await contracts.service.refund(contractId);
+      },
+    },
+    arrears: {
+      assertCanTransact: (memberId, allowDebt) =>
+        billing.service.assertCanTransact(memberId, allowDebt),
+    },
+    venues: { policyOf: (venueId, categoryId) => venues.service.policyOf(venueId, categoryId) },
+    members: (userId) => members.service.findIdByUserId(userId),
+    history: {
+      startedBetweenAcrossTenants: (from, to) =>
+        schedule.service.startedBetweenAcrossTenants(from, to),
+    },
+    penalties: {
+      registerNoShow: (memberId, blockedUntil) =>
+        members.service.registerNoShow(memberId, blockedUntil),
+      bookingBlockedUntil: (memberId) => members.service.bookingBlockedUntil(memberId),
+    },
+    now: deps.now ?? (() => Temporal.Now.instant()),
   });
 
   routes.route('/', venues.routes);
@@ -93,6 +241,346 @@ export function createModuleRoutes(deps: ModuleDeps): Hono<AppEnv> {
   routes.route('/', members.routes);
   routes.route('/', products.routes);
   routes.route('/', contracts.routes);
+  routes.route('/', billing.routes);
+  routes.route('/', schedule.routes);
 
-  return routes;
+  /*
+   * Waivers va antes que Attendance: el check-in necesita preguntarle "¿le
+   * falta algo obligatorio a este socio?" (WaiverGate), y esa pregunta la
+   * contesta este modulo.
+   */
+  const waivers = createWaiverModule({
+    entitlements: deps.entitlements,
+    events: deps.events,
+    now: deps.now ?? (() => Temporal.Now.instant()),
+    members: {
+      contextOf: (memberId) => members.service.waiverContextOf(memberId),
+      memberOf: (userId) => members.service.findByUserId(userId),
+      contextsOf: (memberIds) => members.service.waiverContextsOf(memberIds),
+    },
+    resolveMember: (userId) => members.service.findIdByUserId(userId),
+  });
+
+  routes.route('/', waivers.routes);
+
+  /*
+   * Attendance orquesta y no guarda: la reserva la escribe Booking, la clase la
+   * conoce Schedule y la ficha la guarda Members. La asistencia es un estado de
+   * la reserva, y duplicarla en otra coleccion serian dos verdades sobre si
+   * alguien entro (ADR-003).
+   */
+  const attendance = createAttendanceModule({
+    entitlements: deps.entitlements,
+    events: deps.events,
+    now: deps.now ?? (() => Temporal.Now.instant()),
+    waivers: { missingFor: (memberId) => waivers.service.missingFor(memberId) },
+    bookings: {
+      find: async (bookingId) => {
+        const reserva = await booking.service.findOne(bookingId);
+
+        return reserva ? toAttendanceBooking(reserva) : null;
+      },
+      ofSession: async (sessionId) =>
+        (await booking.service.ofSession(sessionId)).map(toAttendanceBooking),
+      awaitingCheckInOf: async (memberId) =>
+        (await booking.service.awaitingCheckInOf(memberId)).map(toAttendanceBooking),
+      markCheckedIn: async (bookingId, data) =>
+        toAttendanceBooking(await booking.service.markCheckedIn(bookingId, data)),
+      createWalkIn: (data) => booking.service.walkIn(data),
+    },
+    sessions: {
+      find: async (sessionId) => {
+        const clase = await schedule.service.findSession(sessionId);
+        if (!clase) return null;
+
+        return {
+          publicId: String(clase['publicId']),
+          name: clase.name,
+          venueId: clase.venueId,
+          categoryId: clase.categoryId,
+          startAt: fromBsonDate(clase.startAt),
+          endAt: fromBsonDate(clase.endAt),
+          capacity: clase.capacity,
+          status: clase.status,
+          timeZone: await venues.service.timeZoneOf(clase.venueId),
+        };
+      },
+    },
+    members: {
+      summariesOf: (memberIds) => members.service.summariesOf(memberIds),
+      recordAttendance: (memberId, at) => members.service.recordAttendance(memberId, at),
+    },
+    arrears: {
+      assertCanTransact: (memberId, allowDebt) =>
+        billing.service.assertCanTransact(memberId, allowDebt),
+    },
+    venues: {
+      policyFor: (venueId, categoryId) => venues.service.policyOf(venueId, categoryId),
+    },
+    resolveMember: (userId) => members.service.findIdByUserId(userId),
+    seedVictim: async (victimTenantId) => ({
+      sessionId: (await schedule.seedVictim(victimTenantId)).sessionId,
+      bookingId: await booking.seedVictim(victimTenantId),
+    }),
+  });
+
+  routes.route('/', booking.routes);
+  routes.route('/', attendance.routes);
+
+  /*
+   * Notifications va ultimo y no lo conoce nadie: se engancha a los eventos que
+   * los demas ya emiten (ADR-003). Que el aviso falle no puede romper la
+   * reserva que lo origino, y por eso no hay ninguna llamada directa hacia aca.
+   */
+  const notifications = createNotificationModule({
+    entitlements: deps.entitlements,
+    events: deps.events,
+    now: deps.now ?? (() => Temporal.Now.instant()),
+    mailer: deps.mailer ?? createLoggingMailer((msg, meta) => deps.logger.info(meta, msg)),
+    recipients: {
+      byMemberId: (memberId) => members.service.notificationRecipientOf(memberId),
+      ownerOf: (organizationId) => deps.owner?.(organizationId) ?? Promise.resolve(null),
+    },
+    sessions: {
+      find: async (sessionId) => {
+        const clase = await schedule.service.findSession(sessionId);
+        if (!clase) return null;
+
+        return {
+          name: clase.name,
+          venueId: clase.venueId,
+          startAt: fromBsonDate(clase.startAt),
+        };
+      },
+    },
+    venues: { find: (venueId) => venues.service.summaryOf(venueId) },
+    roster: {
+      of: async (sessionId) =>
+        (await booking.service.ofSession(sessionId)).map((reserva) => ({
+          memberId: reserva.memberId,
+          status: reserva.status,
+        })),
+    },
+    contracts: { find: (contractId) => contracts.service.notificationContextOf(contractId) },
+    charges: { find: (chargeId) => billing.service.chargeContextOf(chargeId) },
+    payments: { find: (paymentId) => billing.service.paymentContextOf(paymentId) },
+    upcoming: {
+      startingBetween: (from, to) => schedule.service.startedBetweenAcrossTenants(from, to),
+    },
+  });
+
+  routes.route('/', notifications.routes);
+
+  /*
+   * Metrics tambien va al final y tampoco lo conoce nadie: solo lee y cuenta
+   * (ADR-003). Ningun puerto suyo escribe, a proposito — un modulo de metricas
+   * que puede tocar datos es un modulo de metricas que algun dia los va a tocar.
+   */
+  const metrics = createMetricsModule({
+    entitlements: deps.entitlements,
+    now: deps.now ?? (() => Temporal.Now.instant()),
+    venues: {
+      allAcrossTenants: () => venues.service.allAcrossTenants(),
+      timeZoneOf: (venueId) => venues.service.timeZoneOf(venueId),
+    },
+    sessions: {
+      ofWindow: (venueId, from, to) => schedule.service.sessionsOfWindow(venueId, from, to),
+    },
+    bookings: { byStatusOf: (sessionIds) => booking.service.countByStatusOf(sessionIds) },
+    members: { activeIn: (venueId) => members.service.activeCountIn(venueId) },
+    billing: {
+      ofDay: (venueId, date, timeZone) => billing.service.dailyTotalsOf(venueId, date, timeZone),
+    },
+    dashboardSessions: {
+      ofWindow: (venueId, from, to) => schedule.service.sessionsOfWindow(venueId, from, to),
+    },
+    occupancy: {
+      bySession: (sessionIds) => booking.service.occupancyBySession(sessionIds),
+    },
+    alertMembers: {
+      inactiveSince: (venueId, since) => members.service.inactiveSince(venueId, since),
+      debtors: (venueId) => members.service.debtorsIn(venueId),
+      activeIn: (venueId) => members.service.activeMembersIn(venueId),
+    },
+    /*
+     * El nombre del socio lo junta aca: Contracts no conoce el modelo de
+     * Members, y una alerta que dice "ctr_3f8k vence el 11" no le sirve a nadie.
+     */
+    alertContracts: {
+      expiringIn: async (venueId, until) => {
+        const contratos = await contracts.service.expiringIn(venueId, until);
+        const socios = await members.service.summariesOf(
+          contratos.map((contrato) => contrato.memberId),
+        );
+        const nombres = new Map(socios.map((socio) => [socio.publicId, socio.fullName]));
+
+        return contratos.map((contrato) => ({
+          memberId: contrato.memberId,
+          memberName: nombres.get(contrato.memberId) ?? 'Socio',
+          productName: contrato.productName,
+          endsAt: contrato.endsAt,
+        }));
+      },
+    },
+    waivers: { missingAmong: (memberIds) => waivers.service.missingAmong(memberIds) },
+  });
+
+  routes.route('/', metrics.routes);
+
+  /*
+   * Suscriptions es el unico modulo que NO es de un centro: sus datos son
+   * sobre los centros. Va al final y nadie lo consume — el resto del producto
+   * lo ve a traves de los entitlements, no de este modulo.
+   */
+  const susc = createSuscModule({
+    audit,
+    events: deps.events,
+    ...(deps.errorEvents ? { errorEvents: deps.errorEvents } : {}),
+    ...(deps.jobRuns ? { jobRuns: deps.jobRuns } : {}),
+    now: deps.now ?? (() => Temporal.Now.instant()),
+    organizations: deps.organizations ?? {
+      // Sin Better Auth cableado no se puede dar de alta: fallar es mejor que
+      // crear una suscripcion huerfana de organizacion.
+      create: () =>
+        Promise.reject(
+          new AppError({
+            code: 'LP-SUSC-422-001',
+            status: 422,
+            message: 'El alta self-service no está disponible en este entorno.',
+          }),
+        ),
+    },
+    usage: {
+      of: async (organizationId) =>
+        runWithTenant(
+          { tenantId: organizationId, userId: 'system:usage', requestId: 'usage-check' },
+          async () => ({
+            venues: await venues.service.countActive(),
+            activeMembers: await members.service.countActive(),
+            staffUsers: (await deps.staffCount?.(organizationId)) ?? 0,
+          }),
+        ),
+    },
+    limits: {
+      of: (planId) => {
+        const { limits } = planFor(planId as PlanId);
+
+        return {
+          venues: limits.venues,
+          activeMembers: limits.activeMembers,
+          staffUsers: limits.staffUsers,
+        };
+      },
+    },
+  });
+
+  routes.route('/', susc.routes);
+
+  /*
+   * CRM en Fase 1 es solo el formulario de la landing: publico, sin sesion y
+   * sin tenant. El pipeline de leads de un centro es Fase 4.
+   */
+  const crm = createCrmModule({ now: deps.now ?? (() => Temporal.Now.instant()) });
+
+  routes.route('/', crm.routes);
+
+  /** Todo lo que el runner tiene que programar (§10). */
+  const jobs = [
+    ...contracts.jobs,
+    ...billing.jobs,
+    ...schedule.jobs,
+    ...booking.jobs,
+    ...notifications.jobs,
+    ...metrics.jobs,
+    ...susc.jobs,
+  ];
+
+  return {
+    routes,
+    jobs,
+    venues,
+    rooms,
+    members,
+    products,
+    contracts,
+    billing,
+    schedule,
+    booking,
+    waivers,
+    attendance,
+    notifications,
+    metrics,
+    susc,
+    crm,
+  };
+}
+
+/**
+ * Solo las rutas. Es lo que necesita `createApp`; los modulos enteros los usan
+ * los tests y las tareas que orquestan varios (F1-14 en adelante).
+ */
+export function createModuleRoutes(deps: ModuleDeps): Hono<AppEnv> {
+  return createModules(deps).routes;
+}
+
+/**
+ * El documento de la clase a lo que Booking necesita saber de ella.
+ *
+ * La zona horaria se resuelve al vuelo contra el Venue: es contra la hora
+ * **local** que se evalua la franja horaria de un pack (§2.1.9), asi que
+ * resolverla en UTC dejaria pasar reservas que el pack matutino no cubre.
+ */
+async function toClaimed(
+  pending: Promise<{
+    publicId?: unknown;
+    venueId: string;
+    categoryId: string;
+    startAt: Date;
+    endAt: Date;
+    capacity: number;
+    bookedCount: number;
+    status: string;
+  } | null>,
+  venues: { timeZoneOf(venueId: string): Promise<string> },
+) {
+  const session = await pending;
+  if (!session) return null;
+
+  return {
+    publicId: String(session.publicId),
+    venueId: session.venueId,
+    categoryId: session.categoryId,
+    startAt: fromBsonDate(session.startAt),
+    endAt: fromBsonDate(session.endAt),
+    capacity: session.capacity,
+    bookedCount: session.bookedCount,
+    status: session.status,
+    timeZone: await venues.timeZoneOf(session.venueId),
+  };
+}
+
+/**
+ * La reserva, como la ve Attendance. Convierte las fechas de BSON a Temporal
+ * en el borde: adentro del modulo no hay `Date` (§3.1).
+ */
+function toAttendanceBooking(booking: {
+  publicId?: unknown;
+  sessionId: string;
+  memberId: string;
+  venueId: string;
+  status: string;
+  waitlistPosition?: number | null;
+  checkedInAt?: Date | null;
+  checkInMethod?: string | null;
+}): AttendanceBooking {
+  return {
+    publicId: String(booking.publicId),
+    sessionId: booking.sessionId,
+    memberId: booking.memberId,
+    venueId: booking.venueId,
+    status: booking.status,
+    waitlistPosition: booking.waitlistPosition ?? null,
+    checkedInAt: booking.checkedInAt ? fromBsonDate(booking.checkedInAt) : null,
+    checkInMethod: (booking.checkInMethod ?? null) as AttendanceBooking['checkInMethod'],
+  };
 }

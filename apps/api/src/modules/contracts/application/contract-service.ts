@@ -1,9 +1,11 @@
 import { Temporal } from '@js-temporal/polyfill';
 import {
+  EXPIRY_MILESTONES,
   consumesCredits,
   type AdjustCreditsInput,
   type Consumption,
   type ContractStatus,
+  type FreezeContractInput,
   type ProductType,
   type SellContractInput,
 } from '@laplace/schemas';
@@ -11,7 +13,9 @@ import type { AuditWriter } from '../../../audit/audit-log.js';
 import type { DomainEventBus } from '../../../events/bus.js';
 import { AppError } from '../../../http/errors.js';
 import { fromBsonDate, toBsonDate } from '../../../persistence/bson-date.js';
+import { runWithTenant } from '../../../tenancy/context.js';
 import type { Page } from '../../../tenancy/repository.js';
+import { assertFreezeAllowed, expiryMilestone, shiftExpiry } from '../domain/freeze.js';
 import {
   assertUsable,
   canTransition,
@@ -49,9 +53,32 @@ export interface SoldProduct {
   autoRenew: boolean;
 }
 
-/** La zona horaria del Venue. El vencimiento se calcula en el calendario del centro (§2.1.2). */
+/**
+ * La zona horaria del Venue y su política. El vencimiento se calcula en el
+ * calendario del centro (§2.1.2), y el tope de días de freeze es del centro.
+ */
 export interface VenueClock {
   timeZoneOf(venueId: string): Promise<string>;
+  /** `bookingPolicy.maxFreezeDaysPerYear`. */
+  maxFreezeDaysOf(venueId: string): Promise<number>;
+}
+
+/**
+ * Libera las reservas futuras de un contrato y lo saca de las listas de espera,
+ * devolviendo cuántas liberó. Lo va a contestar Booking (F1-14) y Waitlist
+ * (F1-16).
+ *
+ * Hasta que existan, el default responde 0: hoy no hay reservas en la base, así
+ * que no hay nada que liberar. §2.1.9 exige que al congelar se cancelen las
+ * futuras y **se devuelvan esos créditos**; la devolución la hace Booking, que
+ * es quien sabe cuáles cancela.
+ */
+export interface FutureBookingReleaser {
+  releaseFuture(params: {
+    contractId: string;
+    memberId: string;
+    reason: 'frozen' | 'expired';
+  }): Promise<number>;
 }
 
 export interface ContractServiceDeps {
@@ -60,6 +87,7 @@ export interface ContractServiceDeps {
   venues: VenueClock;
   events: DomainEventBus;
   audit: AuditWriter;
+  bookings: FutureBookingReleaser;
   now?: (() => Temporal.Instant) | undefined;
 }
 
@@ -69,6 +97,7 @@ export class ContractService {
   private readonly venues: VenueClock;
   private readonly events: DomainEventBus;
   private readonly audit: AuditWriter;
+  private readonly bookings: FutureBookingReleaser;
   private readonly now: () => Temporal.Instant;
 
   constructor(deps: ContractServiceDeps) {
@@ -77,6 +106,7 @@ export class ContractService {
     this.venues = deps.venues;
     this.events = deps.events;
     this.audit = deps.audit;
+    this.bookings = deps.bookings;
     this.now = deps.now ?? (() => Temporal.Now.instant());
   }
 
@@ -279,6 +309,222 @@ export class ContractService {
     });
 
     return updated;
+  }
+
+  /**
+   * Congela por vacaciones o lesión (§2.1.9). Muy pedida y ausente en la v1.
+   *
+   * Corre el vencimiento por los días declarados, cancela las reservas futuras y
+   * saca al socio de las listas de espera. Los créditos de esas reservas se
+   * devuelven al cancelarlas, que es donde se sabe cuántas eran.
+   *
+   * Los días se declaran por adelantado y el vencimiento se corre **al
+   * congelar**, no al descongelar: si se corriera al final, el socio que se
+   * olvida de avisar que volvió tendría el pack parado para siempre.
+   */
+  async freeze(id: string, input: FreezeContractInput): Promise<ContractDoc> {
+    const contract = await this.getByPublicId(id);
+    const now = this.now();
+    const year = now.toZonedDateTimeISO('UTC').year;
+
+    if (!canTransition(contract.status as ContractStatus, 'frozen')) {
+      throw new AppError({
+        code: 'LP-CTRT-422-004',
+        status: 422,
+        message: `No se puede congelar un contrato ${contract.status}.`,
+        meta: { contractId: id, status: contract.status },
+      });
+    }
+
+    // El contador se reinicia con el año calendario: el tope es "por año".
+    const used = contract.freezeYear === year ? contract.freezeDaysUsedThisYear : 0;
+    assertFreezeAllowed({
+      used,
+      requested: input.days,
+      max: await this.venues.maxFreezeDaysOf(contract.venueId),
+    });
+
+    const timeZone = await this.venues.timeZoneOf(contract.venueId);
+    const endsAt =
+      contract.endsAt === null || contract.endsAt === undefined
+        ? null
+        : shiftExpiry(fromBsonDate(contract.endsAt), input.days, timeZone);
+
+    const liberadas = await this.bookings.releaseFuture({
+      contractId: id,
+      memberId: contract.memberId,
+      reason: 'frozen',
+    });
+
+    const updated = await this.contracts.updateByPublicId(id, {
+      $set: {
+        status: 'frozen',
+        freeze: {
+          days: input.days,
+          from: toBsonDate(now),
+          to: toBsonDate(now.toZonedDateTimeISO(timeZone).add({ days: input.days }).toInstant()),
+        },
+        freezeDaysUsedThisYear: used + input.days,
+        freezeYear: year,
+        ...(endsAt === null ? {} : { endsAt: toBsonDate(endsAt) }),
+      },
+    });
+    if (!updated) throw notFound(id);
+
+    await this.audit.record({
+      action: 'contract.frozen',
+      targetType: 'contract',
+      targetId: id,
+      reason: input.reason ?? `Congelado ${input.days} días.`,
+      before: { status: contract.status },
+      after: { status: 'frozen', bookingsReleased: liberadas },
+    });
+
+    await this.events.emit('contract.status_changed', {
+      contractId: id,
+      from: contract.status,
+      to: 'frozen',
+    });
+
+    return updated;
+  }
+
+  /** Descongela. El vencimiento ya se corrió al congelar, así que no se toca. */
+  async unfreeze(id: string): Promise<ContractDoc> {
+    return this.changeStatus(id, 'active');
+  }
+
+  /**
+   * Job diario: pasa a `expired` los contratos vencidos y libera sus reservas
+   * futuras.
+   *
+   * **Idempotente**: el filtro solo trae los que siguen `active` o `frozen`, así
+   * que correrlo dos veces el mismo día no cambia nada la segunda vez.
+   */
+  async expireDueContracts(): Promise<number> {
+    const now = this.now();
+    const vencidos = await this.contracts.dueToExpireAcrossTenants(now);
+    let expirados = 0;
+
+    for (const contract of vencidos) {
+      const tenantId = String(contract['tenantId']);
+      const id = String(contract['publicId']);
+
+      await runWithTenant(
+        { tenantId, userId: 'system:expireContracts', requestId: `job-expire-${id}` },
+        async () => {
+          await this.bookings.releaseFuture({
+            contractId: id,
+            memberId: contract.memberId,
+            reason: 'expired',
+          });
+          await this.contracts.updateByPublicId(id, { $set: { status: 'expired' } });
+          await this.events.emit('contract.expired', {
+            contractId: id,
+            memberId: contract.memberId,
+          });
+        },
+      );
+
+      expirados += 1;
+    }
+
+    return expirados;
+  }
+
+  /**
+   * Job diario: avisa 7, 3 y 1 día antes del vencimiento (§2.1.9). Los avisos de
+   * vencimiento son ingreso directo: es el momento en que el socio renueva.
+   *
+   * **Idempotente por hito**: se guarda el último hito avisado, así que correr el
+   * job dos veces el mismo día no manda el aviso dos veces.
+   */
+  async notifyExpiringContracts(): Promise<number> {
+    const now = this.now();
+    const proximos = await this.contracts.expiringSoonAcrossTenants(now, EXPIRY_MILESTONES[0]);
+    let avisados = 0;
+
+    for (const contract of proximos) {
+      if (contract.endsAt === null || contract.endsAt === undefined) continue;
+
+      const tenantId = String(contract['tenantId']);
+      const id = String(contract['publicId']);
+      const context = {
+        tenantId,
+        userId: 'system:notifyExpiring',
+        requestId: `job-notify-${id}`,
+      };
+
+      const timeZone = await runWithTenant(context, () =>
+        this.venues.timeZoneOf(contract.venueId),
+      ).catch(() => null);
+      if (timeZone === null) continue;
+
+      const milestone = expiryMilestone(fromBsonDate(contract.endsAt), now, timeZone);
+      if (milestone === null) continue;
+      // Ya se avisó este hito: el job puede correr de nuevo sin duplicar el mail.
+      if (contract.lastExpiryNoticeDays === milestone) continue;
+
+      await runWithTenant(context, async () => {
+        await this.contracts.updateByPublicId(id, { $set: { lastExpiryNoticeDays: milestone } });
+        await this.events.emit('contract.expiring', {
+          contractId: id,
+          memberId: contract.memberId,
+          daysLeft: milestone,
+        });
+      });
+
+      avisados += 1;
+    }
+
+    return avisados;
+  }
+
+  /**
+   * Los contratos que vencen antes de esa fecha, en una sede. Es el puerto que
+   * consume el panel de alertas del DFSM (F1-24). El nombre del socio lo pone
+   * quien llama: Contracts no conoce el modelo de Members (ADR-003).
+   */
+  async expiringIn(
+    venueId: string,
+    until: Temporal.Instant,
+  ): Promise<
+    Array<{ contractId: string; memberId: string; productName: string; endsAt: Temporal.Instant }>
+  > {
+    const contratos = await this.contracts.expiringIn(venueId, toBsonDate(until));
+
+    return contratos.flatMap((contract) =>
+      contract.endsAt
+        ? [
+            {
+              contractId: String(contract['publicId']),
+              memberId: contract.memberId,
+              productName: contract.productName,
+              endsAt: fromBsonDate(contract.endsAt),
+            },
+          ]
+        : [],
+    );
+  }
+
+  /**
+   * El pack, como lo necesita un aviso: que producto es, de que sede y cuando
+   * vence. Es el puerto que consume Notifications (F1-22).
+   *
+   * `null` en vez de excepcion: un aviso que no encuentra su contrato no sale,
+   * no rompe el job que lo estaba encolando.
+   */
+  async notificationContextOf(
+    contractId: string,
+  ): Promise<{ productName: string; venueId: string; endsAt: Temporal.Instant | null } | null> {
+    const contract = await this.contracts.findByPublicId(contractId);
+    if (!contract) return null;
+
+    return {
+      productName: contract.productName,
+      venueId: contract.venueId,
+      endsAt: contract.endsAt ? fromBsonDate(contract.endsAt) : null,
+    };
   }
 
   /** ¿Ya usó su clase de prueba? Es el puerto que consume Products (F1-07). */

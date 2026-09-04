@@ -1,6 +1,16 @@
 @import 'tailwindcss';
 
 /*
+ * Tailwind v4 detecta clases escaneando el proyecto, pero **nunca entra a
+ * node_modules**. Cada app consume este paquete como symlink de pnpm en
+ * node_modules/@laplace/ui, asi que sin esto Tailwind no ve las clases que
+ * solo usan los componentes de @laplace/ui (hidden, md:hidden, md:block,
+ * sr-only, …) y no las emite en el CSS de la app. El path es relativo a este
+ * archivo → escanea packages/ui/src.
+ */
+@source '../src';
+
+/*
  * Tokens de Laplace. **Dark-first** (spec §6): el default es dark y light se
  * activa con [data-theme='light'].
  *

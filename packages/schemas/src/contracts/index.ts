@@ -70,6 +70,28 @@ export const adjustCreditsSchema = z.object({
 
 export type AdjustCreditsInput = z.infer<typeof adjustCreditsSchema>;
 
+/**
+ * Congelamiento por vacaciones o lesión (§2.1.9). Muy pedida y ausente en la v1.
+ *
+ * Los días se declaran por adelantado: el vencimiento se corre al congelar, no
+ * al descongelar. Si se corriera al descongelar, el socio que se olvida de
+ * avisar que volvió tendría el pack parado para siempre.
+ */
+export const freezeContractSchema = z.object({
+  days: z
+    .number()
+    .int('Los días de congelamiento son enteros.')
+    .min(1, 'Congelá al menos un día.')
+    .max(365),
+  reason: z.string().trim().max(300).optional(),
+});
+
+export type FreezeContractInput = z.infer<typeof freezeContractSchema>;
+
+/** Los hitos de aviso previo al vencimiento (§2.1.9). */
+export const EXPIRY_MILESTONES = [7, 3, 1] as const;
+export type ExpiryMilestone = (typeof EXPIRY_MILESTONES)[number];
+
 export const contractSchema = z.object({
   publicId: z.string(),
   memberId: z.string(),
@@ -90,6 +112,13 @@ export const contractSchema = z.object({
   endsAt: z.string().nullable(),
   status: contractStatusSchema,
   autoRenew: z.boolean(),
+  /** El congelamiento vigente, si lo hay. */
+  freeze: z
+    .object({ days: z.number().int(), from: z.string(), to: z.string() })
+    .nullable()
+    .optional(),
+  /** Cuántos días de congelamiento lleva usados este año calendario. */
+  freezeDaysUsedThisYear: z.number().int(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

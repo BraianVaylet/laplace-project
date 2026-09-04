@@ -1,5 +1,10 @@
 import type { CreateVenueInput, UpdateVenueInput } from '@laplace/schemas';
-import { DEFAULT_BOOKING_POLICY, bookingPolicySchema } from '@laplace/schemas';
+import {
+  DEFAULT_BOOKING_POLICY,
+  bookingPolicySchema,
+  effectiveBookingPolicy,
+  type BookingPolicy,
+} from '@laplace/schemas';
 import type { DomainEventBus } from '../../../events/bus.js';
 import { AppError } from '../../../http/errors.js';
 import type { Page } from '../../../tenancy/repository.js';
@@ -108,6 +113,64 @@ export class VenueService {
    */
   async timeZoneOf(publicId: string): Promise<string> {
     return (await this.getByPublicId(publicId)).timeZone;
+  }
+
+  /**
+   * Todas las sedes activas de todos los centros, con su zona horaria. Es el
+   * puerto que consume el job de metricas (F1-23): recorre centro por centro y
+   * abre el contexto de cada uno antes de tocar nada.
+   */
+  async allAcrossTenants(): Promise<
+    Array<{ tenantId: string; venueId: string; timeZone: string }>
+  > {
+    const sedes = await this.venues.allAcrossTenants();
+
+    return sedes.map((venue) => ({
+      tenantId: String(venue['tenantId']),
+      venueId: String(venue['publicId']),
+      timeZone: venue.timeZone,
+    }));
+  }
+
+  /**
+   * El nombre y la zona de una sede, sin romper si no existe. Es el puerto que
+   * consume Notifications: un aviso al que le falta el nombre de la sede sale
+   * igual, y hacerlo fallar seria peor que decir "el centro".
+   */
+  async summaryOf(publicId: string): Promise<{ name: string; timeZone: string } | null> {
+    const venue = await this.venues.findByPublicId(publicId);
+
+    return venue ? { name: venue.name, timeZone: venue.timeZone } : null;
+  }
+
+  /**
+   * La politica de reserva del centro, completa: las cinco ventanas de §2.1.5.c,
+   * el flag de deuda de ADR-004 y las excepciones por categoria. Es el puerto
+   * que consume Booking, que resuelve las ventanas por su cuenta.
+   *
+   * Se devuelve completa y no campo por campo porque preguntar de a uno seria
+   * un viaje a la base por regla, y todas se evaluan en la misma reserva.
+   */
+  async policyOf(publicId: string, categoryId?: string): Promise<BookingPolicy> {
+    const guardada = (await this.getByPublicId(publicId)).bookingPolicy;
+
+    // Las sedes creadas antes de que una regla existiera no la tienen guardada:
+    // el default la completa sin necesidad de migrar datos.
+    const delCentro = {
+      ...DEFAULT_BOOKING_POLICY,
+      ...((guardada ?? {}) as Partial<BookingPolicy>),
+    };
+
+    return effectiveBookingPolicy(delCentro, categoryId);
+  }
+
+  /** Tope anual de dias de congelamiento del centro (§2.1.9). */
+  async maxFreezeDaysOf(publicId: string): Promise<number> {
+    const policy = (await this.getByPublicId(publicId)).bookingPolicy as {
+      maxFreezeDaysPerYear?: number;
+    };
+
+    return policy.maxFreezeDaysPerYear ?? DEFAULT_BOOKING_POLICY.maxFreezeDaysPerYear;
   }
 
   /**

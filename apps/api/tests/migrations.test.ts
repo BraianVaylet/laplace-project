@@ -12,6 +12,25 @@ import { COLLECTIONS } from '../src/persistence/collections.js';
  * y la no-sobreventa.
  */
 const require = createRequire(import.meta.url);
+const closures = require('../../../migrations/20260902160000-venue-closures.cjs') as {
+  COLLECTIONS: Record<string, string>;
+};
+const tokens = require('../../../migrations/20260903120000-check-in-tokens.cjs') as {
+  COLLECTIONS: Record<string, string>;
+  up(db: Db): Promise<void>;
+  INDEXES: Array<[string, Record<string, number>, Record<string, unknown>]>;
+};
+const subscriptions = require('../../../migrations/20260906090000-subscriptions.cjs') as {
+  COLLECTIONS: Record<string, string>;
+  up(db: Db): Promise<void>;
+  INDEXES: Array<[string, Record<string, number>, Record<string, unknown>]>;
+  PLANS: Array<{ planId: string; priceCents: number }>;
+};
+const notifications = require('../../../migrations/20260905090000-notifications.cjs') as {
+  COLLECTIONS: Record<string, string>;
+  up(db: Db): Promise<void>;
+  INDEXES: Array<[string, Record<string, number>, Record<string, unknown>]>;
+};
 const migration = require('../../../migrations/20260901120000-mandatory-indexes.cjs') as {
   up(db: Db): Promise<void>;
   down(db: Db): Promise<void>;
@@ -41,9 +60,115 @@ async function indexesOf(collection: string) {
   return db.collection(collection).indexes();
 }
 
-describe('la migracion y el codigo hablan de las mismas colecciones', () => {
+describe('las migraciones y el codigo hablan de las mismas colecciones', () => {
   it('los nombres coinciden exactamente', () => {
-    expect(migration.COLLECTIONS).toEqual(COLLECTIONS);
+    /*
+     * Cada migracion declara las colecciones que trae; juntas tienen que cubrir
+     * exactamente lo que el codigo usa. Una coleccion nueva sin su migracion
+     * rompe acá, que es antes de que exista sin indices en produccion.
+     */
+    const declaradas = {
+      ...migration.COLLECTIONS,
+      ...closures.COLLECTIONS,
+      ...tokens.COLLECTIONS,
+      ...notifications.COLLECTIONS,
+      ...subscriptions.COLLECTIONS,
+    };
+
+    expect(declaradas).toEqual(COLLECTIONS);
+  });
+});
+
+describe('las suscripciones son de plataforma, no de un tenant (F1-25)', () => {
+  it('🔴 una organizacion no puede tener dos suscripciones', async () => {
+    await subscriptions.up(db);
+    const indices = await indexesOf('subscriptions');
+    const unico = indices.find((indice) => indice.name === 'organization_unique');
+
+    // Dos suscripciones serian dos planes, dos precios y ninguna forma de
+    // saber cual vale.
+    expect(unico?.unique).toBe(true);
+    expect(unico?.key).toEqual({ organizationId: 1 });
+  });
+
+  it('los indices NO llevan tenantId: son datos sobre los centros, no de uno', () => {
+    for (const [, keys] of subscriptions.INDEXES) {
+      expect(Object.keys(keys)).not.toContain('tenantId');
+    }
+  });
+
+  it('siembra el catalogo de planes y correrla dos veces no lo pisa', async () => {
+    await subscriptions.up(db);
+    await db.collection('plans').updateOne({ planId: 'pro' }, { $set: { priceCents: 1 } });
+    await subscriptions.up(db);
+
+    const pro = await db.collection('plans').findOne<{ priceCents: number }>({ planId: 'pro' });
+
+    // El precio que ya edito el SAU no se pisa con el inicial.
+    expect(pro?.priceCents).toBe(1);
+    expect(await db.collection('plans').countDocuments({})).toBe(subscriptions.PLANS.length);
+  });
+});
+
+describe('la cola de avisos no manda lo mismo dos veces (F1-21)', () => {
+  it('la clave de deduplicacion es unica por tenant', async () => {
+    await notifications.up(db);
+    const indices = await indexesOf('notifications');
+    const dedupe = indices.find((indice) => indice.name === 'tenant_dedupe_unique');
+
+    /*
+     * Es lo que hace que dos corridas del job que se pisen no encolen el mismo
+     * recordatorio dos veces: la segunda escritura choca contra el indice en
+     * vez de ganar una carrera entre un `findOne` y un `insert`.
+     */
+    expect(dedupe?.unique).toBe(true);
+    expect(dedupe?.key).toEqual({ tenantId: 1, dedupeKey: 1 });
+  });
+
+  it('el reclamo del job tiene su indice: tenant, estado y proximo intento', async () => {
+    await notifications.up(db);
+    const indices = await indexesOf('notifications');
+
+    expect(indices.some((indice) => indice.name === 'tenant_status_next')).toBe(true);
+  });
+
+  it('no hay dos plantillas ni dos preferencias para lo mismo', async () => {
+    await notifications.up(db);
+
+    const plantillas = await indexesOf('notificationTemplates');
+    const preferencias = await indexesOf('notificationPreferences');
+
+    expect(plantillas.find((indice) => indice.name === 'tenant_event_channel_unique')?.unique).toBe(
+      true,
+    );
+    expect(
+      preferencias.find((indice) => indice.name === 'tenant_user_event_channel_unique')?.unique,
+    ).toBe(true);
+  });
+});
+
+describe('los tokens del QR se limpian solos (F1-19)', () => {
+  it('el TTL borra el token cuando vence, sin que nadie lo barra', async () => {
+    await tokens.up(db);
+    const indices = await indexesOf('checkInTokens');
+    const ttl = indices.find((indice) => indice.name === 'checkin_token_ttl');
+
+    /*
+     * Se emite un token cada vez que alguien abre su QR: sin TTL la coleccion
+     * crece para siempre. `expireAfterSeconds: 0` borra el documento cuando pasa
+     * su propia `expiresAt`.
+     */
+    expect(ttl?.expireAfterSeconds).toBe(0);
+    expect(ttl?.key).toEqual({ expiresAt: 1 });
+  });
+
+  it('el hash es unico por tenant: el canje es de un solo uso', async () => {
+    await tokens.up(db);
+    const indices = await indexesOf('checkInTokens');
+    const unico = indices.find((indice) => indice.name === 'tenant_token_hash_unique');
+
+    expect(unico?.unique).toBe(true);
+    expect(unico?.key).toEqual({ tenantId: 1, tokenHash: 1 });
   });
 });
 

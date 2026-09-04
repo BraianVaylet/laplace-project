@@ -23,6 +23,779 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-04 — Fix: los entitlements leían la organización por un campo que no existe
+
+- **Módulo:** `entitlements`
+- **Tipo:** fix
+- **Commit/PR:** `597b5ea` (rama `feat/phase-1-mvp`)
+- **Trello:** —
+- **Qué cambió:** `createOrganizationPlanReader` consultaba la organización de Better Auth por un
+  campo `id` que el adaptador de Mongo **no guarda** — la guarda con `_id`, y además como
+  `ObjectId`. La consulta no encontraba nunca la fila, así que todo centro caía al plan del trial:
+  un cliente de Max operando como Basic, sin que nada fallara ni se logueara.
+- **Por qué:** apareció escribiendo F1-25, cuando un test contra la colección real devolvió `null`
+  donde tenía que haber una organización. El test unitario del lector no lo veía porque su doble de
+  la base tenía la forma equivocada — el mismo error, copiado a los dos lados.
+- **Impacto:** ninguno sobre el modelo de datos. El lector ahora consulta por `_id`, aceptando el
+  `ObjectId` y el texto. Se corrigió también el doble de la base del test unitario, y se agregó un
+  test de integración contra una organización real: un doble no puede probar la forma de lo real.
+- **Pendiente:** ninguno.
+
+## 2026-09-04 — Fix: un socio podía leer las reservas de un compañero
+
+- **Módulo:** `booking`
+- **Tipo:** fix
+- **Commit/PR:** `5a8ca45` (rama `feat/phase-1-mvp`)
+- **Trello:** —
+- **Qué cambió:** `GET /api/v1/bookings` aceptaba `?memberId=` sin chequear permiso. Como
+  `booking.read` lo tiene también el socio — lo necesita para ver las suyas —, cualquiera podía
+  pedir `/api/v1/bookings?memberId=mem_otro` y leer las reservas de un compañero de su mismo
+  centro. Ahora el parámetro solo lo honra quien puede reservar por otro
+  (`booking.createForOther`), que es el mostrador.
+- **Por qué:** apareció escribiendo F1-28, al cablear la pantalla que consume ese endpoint. La
+  suite de aislamiento no lo veía porque prueba **entre tenants**, y acá atacante y víctima son del
+  mismo.
+- **Impacto:** ninguno sobre el modelo de datos. Dos tests nuevos: que el socio no vea las ajenas y
+  que el mostrador sí.
+- **Pendiente:** vale revisar si hay otros endpoints que acepten un identificador de otro por query
+  con un permiso que el socio también tiene. Es el mismo patrón.
+
+## 2026-09-04 — F1-28: el horario y la reserva del socio
+
+- **Módulo:** `wafm` · `booking` · `auth`
+- **Tipo:** feature
+- **Commit/PR:** `5a8ca45` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/Vfq9bsed (F1-28) — movida a **Completadas**
+- **Qué cambió:** el socio abre la WAFM, ve el horario de la semana con el cupo de cada clase,
+  reserva y cancela. El botón responde **al instante** y se revierte con el mensaje del error si la
+  API dice que no. Antes de confirmar ve la política de cancelación, y antes de cancelar sabe si
+  recupera el crédito. La clase llena ofrece la lista de espera con su posición.
+- **Por qué:** §2.1.5 y §5.1.3. La meta de §2.0 es que más del 80% de las reservas las haga el
+  socio y no el staff: es exactamente el ahorro de tiempo que se vende.
+- **Impacto:** ninguna colección ni código de error nuevos · el rol `member` gana `venue.read` para
+  poder elegir sede · el botón del modal pasó a decir "Confirmar reserva": decía lo mismo que el de
+  la fila, y dos botones con el mismo nombre son ambiguos también para un lector de pantalla.
+- **Pendiente:** el E2E de reservar y cancelar y la prueba real de modo avión van con F1-31.
+
+## 2026-09-04 — F1-27: el panel del super admin y el buscador de soporte
+
+- **Módulo:** `susc` · `observability` · `http` · `dfsa`
+- **Tipo:** feature
+- **Commit/PR:** `5cc155d` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/Qbem5GRG (F1-27) — movida a **Completadas**
+- **Qué cambió:** el SAU ve los suscriptores con su plan, su estado y su uso contra los límites;
+  cambia estados y edita planes; tiene panel de salud con errores por código y jobs fallidos; y
+  puede pegar un `requestId` o un código de error y ver qué pasó. Todo `/api/v1/admin` exige ahora
+  super admin **y** segundo factor — hasta acá solo pedía sesión.
+- **Por qué:** §5.1.1 y §11.3. El producto le dice al usuario "compartí el código con soporte" en
+  cada error: sin este panel, del otro lado no había dónde pegarlo.
+- **Impacto:** colección `errorEvents` de plataforma, con TTL de 30 días · 5 endpoints nuevos bajo
+  `/api/v1/admin` · el handler global de errores escribe el registro sin poder romper la respuesta ·
+  ningún código de error nuevo · las tres pantallas del DFSA (suscriptores, salud y buscador).
+- **Decisión de privacidad:** el registro guarda el **código** del error, no su contenido. En el
+  `meta` puede estar el nombre y el saldo de un socio, y ADR-004 decisión 7 dice que el SAU no ve
+  datos de miembros. Hay tests de los dos lados: que el listado no traiga nombres y que el buscador
+  no devuelva el mensaje.
+- **Pendiente:** la pantalla de planes del DFSA (la API está entera) y la de textos legales. Los
+  webhooks pendientes informan cero hasta Fase 2, que es cuando existen.
+
+## 2026-09-04 — F1-26: la landing completa y el formulario de contacto
+
+- **Módulo:** `landing` · `crm` (nuevo) · `schemas`
+- **Tipo:** feature
+- **Commit/PR:** `e068be8` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/vyoqqQsK (F1-26) — movida a **Completadas**
+- **Qué cambió:** la landing tiene las nueve secciones de §5.1.4 más la comparativa contra "Excel y
+  WhatsApp" y la de seguridad y privacidad. Los precios se **prerenderizan**: están en el HTML que
+  lee el buscador, no detrás de un `fetch`. El formulario de contacto valida con el Zod compartido,
+  se defiende de bots con un campo trampa en vez de un captcha, y guarda la consulta. Hay página de
+  acuerdo de tratamiento de datos y botón de volver arriba que respeta `prefers-reduced-motion`.
+- **Por qué:** §5.1.4. La landing es el canal de adquisición: si el precio no está en el HTML, no lo
+  ve ni el buscador ni el visitante apurado.
+- **Impacto:** colección `contactRequests`, de plataforma (sin `tenantId`) · 1 endpoint público
+  nuevo (`POST /api/v1/contact`) con `LP-CRM-422-001` · página `/tratamiento-de-datos` · el catálogo
+  de precios de la landing vive en `@laplace/schemas` y un test lo compara contra lo que siembra la
+  migración: son dos representaciones en dos lenguajes que no pueden compartir código.
+- **Pendiente:** los testimonios reales (la sección está, inventarlos sería publicar reseñas
+  falsas), los textos legales vinculantes (necesitan abogado; están la estructura y los hechos), las
+  capturas de pantalla reales (hoy son maquetas de CSS que lo dicen) y Lighthouse CI, que va con el
+  pipeline de F1-31.
+
+## 2026-09-04 — F1-25: alta self-service, trial de 14 días y planes
+
+- **Módulo:** `susc` (nuevo) · `entitlements` · `notifications` · `events`
+- **Tipo:** feature
+- **Commit/PR:** `597b5ea` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/qhzF6UVa (F1-25) — movida a **Completadas**
+- **Qué cambió:** el dueño de un centro se registra desde la landing y en dos pedidos tiene su
+  cuenta operativa, con trial de 14 días **sin tarjeta**. A los 14 días, si no eligió plan, la
+  cuenta se suspende y **no se borra nada**: sus socios y su agenda siguen ahí. Subir de plan es
+  inmediato con prorrateo, bajar es al fin del ciclo y valida antes que lo que ya tiene entre.
+  Cambiar el precio de un plan no cambia lo que paga quien ya estaba. El SAU puede entrar a una
+  cuenta para dar soporte con motivo obligatorio, y al dueño le llega el aviso.
+- **Por qué:** §2.1.3, §2.1.4 y ADR-004. Es el módulo del que depende que el producto cobre.
+- **Impacto:** colecciones `subscriptions` y `plans`, **de plataforma** (sin `tenantId`: son datos
+  sobre los centros, no de uno) · **migración** (`20260906090000`) con sus únicos y el catálogo de
+  planes sembrado · 8 endpoints nuevos, 2 de ellos públicos (`GET /api/v1/plans` y el alta) ·
+  3 eventos de dominio nuevos · aviso `organization.impersonated`, crítico y no apagable · 2 jobs
+  (`expireTrials`, `applyPendingPlanChanges`) · umbral de cobertura del módulo al 95%.
+- **Pendiente:** el cobro recurrente con Mercado Pago, los webhooks, el dunning y los cupones son
+  Fase 2. Los precios sembrados son valores iniciales que el SAU cambia desde su panel. La
+  autorización de `/api/v1/admin` la cierra F1-27, que trae el rol de SAU.
+
+## 2026-09-04 — F1-24: el home del DFSM es un tablero
+
+- **Módulo:** `metrics` · `members` · `waivers` · `dfsm` · `ui` · `http`
+- **Tipo:** feature
+- **Commit/PR:** `79b4ef9` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/h0C4rOia (F1-24) — movida a **Completadas**
+- **Qué cambió:** el DFSM abre en un tablero y no en un menú: las clases de hoy con su ocupación,
+  cuánta gente entró, la caja del día y el panel de alertas de §2.1.12 — quién no viene hace dos
+  semanas, qué packs vencen esta semana, quién debe, qué clases están flojas y a quién le falta
+  firmar. Cada alerta trae los ítems con los que se resuelve, no solo un número. Y hay buscador
+  global de socios, con Ctrl+K, por nombre, documento o teléfono.
+- **Por qué:** §5.1.2 y §2.1.12. El panel de alertas accionables vale más que cualquier gráfico, y
+  el motivo es concreto: un gráfico se mira, una alerta se toca.
+- **Impacto:** 2 endpoints nuevos (`GET /api/v1/dashboard`, `GET /api/v1/members/search`) · ninguna
+  colección ni código de error nuevos · ninguna migración · el `Input` de `@laplace/ui` acepta
+  `ref`, que en React 19 es una prop normal · helper `parseQuery` en `http/validate.ts`.
+- **Pendiente:** las acciones rápidas (cobrar, vender pack, agregar miembro) entran con las
+  pantallas que las van a contener — Cobranza, Productos y Miembros. Encontrado de paso y **no
+  arreglado acá**: las rutas que validan la query con `schema.parse()` devuelven 500 en vez de 422;
+  el helper que lo arregla ya existe y falta aplicarlo al resto de los módulos.
+
+## 2026-09-04 — F1-23: MetricsDaily y los KPIs del centro
+
+- **Módulo:** `metrics` (nuevo) · `venues` · `schedule` · `booking` · `members` · `billing`
+- **Tipo:** feature
+- **Commit/PR:** `8c981df` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/HWDINRZV (F1-23) — movida a **Completadas**
+- **Qué cambió:** el job `computeMetricsDaily` corre a las 03:00 y deja precalculados, por sede y
+  por día, los seis KPIs de Fase 1: socios activos, asistencias, utilización, tasa de no-show,
+  ingresos y deuda vencida. El panel del DFSM los lee ya calculados. Un día pasado se puede
+  reprocesar a mano cuando aparecen datos tarde.
+- **Por qué:** §2.1.12. Calcular KPIs con agregaciones en vivo sobre colecciones que crecen es la
+  causa número uno de dashboards lentos, y el dashboard lento es el que nadie abre.
+- **Impacto:** colección `metricsDaily` estrena dueño (el único `{ tenantId, venueId, date }` ya
+  venía de F0-10, sin migración nueva) · 2 endpoints nuevos bajo `/api/v1/metrics`, los dos con
+  permiso `businessMetrics.read` — el staff no ve métricas de negocio (§2.1.12) · job
+  `computeMetricsDaily` · cinco puertos de lectura nuevos en Venues, Schedule, Booking, Members y
+  Billing, todos de conteo · ningún código de error nuevo.
+- **Pendiente:** MRR, churn, ARPM, LTV, retención a 90 días, conversión de waitlist, utilización de
+  coach y cohortes son Fase 2: necesitan Suscriptions (F1-25) o series más largas que las que hay.
+  El panel visual del DFSM y las alertas accionables son F1-24.
+
+## 2026-09-03 — F1-22: los avisos transaccionales del MVP
+
+- **Módulo:** `notifications` · `booking` · `schedule` · `contracts` · `billing`
+- **Tipo:** feature
+- **Commit/PR:** `909b156` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/4aS5u66G (F1-22) — movida a **Completadas**
+- **Qué cambió:** los ocho avisos automáticos de §2.1.14 ya salen solos. Cancelar una reserva,
+  entrar desde la lista de espera, que se caiga la clase o cambie el coach, que el pack esté por
+  vencer o se venza, que una cuota entre en mora o que se registre un pago: cada uno avisa por la
+  campana y por mail. Los recordatorios de clase (24 h y 1 h antes) los manda el job
+  `classReminders`, una sola vez por hito aunque el job corra veinte veces.
+- **Por qué:** sin estas, el motor de F1-21 no le sirve a nadie. Son las que hacen que el socio no
+  tenga que abrir la app para enterarse de lo que le pasa a su plata y a sus clases.
+- **Impacto:** ningún código de error ni colección nueva · el evento `session.cancelled` suma
+  `releasedMemberIds` (y `releaseSession` de Booking devuelve esa lista en vez de un número):
+  cuando Notifications reacciona, las reservas ya se cancelaron y la clase no tiene inscriptos, así
+  que a quién avisarle solo lo sabe el que canceló · job `classReminders` nuevo (cada 5 min) ·
+  tres puertos de lectura nuevos, en Contracts (`notificationContextOf`) y Billing
+  (`chargeContextOf`, `paymentContextOf`), todos devolviendo `null` en vez de tirar.
+- **Pendiente:** el aviso de pack por vencer trae el CTA en el texto y no como botón — la pantalla
+  de "mis packs" a la que llevaría es F1-29. El de cambio de coach no dice a quién: un directorio
+  de staff no existe todavía. Web Push y WhatsApp son Fase 2.
+
+## 2026-09-03 — F1-21: motor de notificaciones in-app y email
+
+- **Módulo:** `notifications` (nuevo) · `members` · `venues` · `auth` · `client` · `wafm`
+- **Tipo:** feature
+- **Commit/PR:** `7898f61` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/2Gs04wwb (F1-21) — movida a **Completadas**
+- **Qué cambió:** los avisos del producto ya tienen motor. Un evento de dominio encola el aviso por
+  los canales que correspondan (campana y mail), un job los manda con reintentos a los 30 s, 2 min
+  y 10 min, y lo que no sale queda en la cola de fallidos con su error, visible para soporte. El
+  socio elige qué recibir y por dónde desde la WAFM; el SMU edita las plantillas con variables y
+  ve la vista previa antes de que salgan. La primera enganchada es la confirmación de reserva.
+- **Por qué:** §2.1.14. "No me llegó el aviso" tiene que ser una pregunta contestable, y un
+  proveedor de mail caído no puede hacer fallar una reserva que ya está hecha.
+- **Impacto:** colecciones `notificationTemplates` y `notificationPreferences` nuevas; `notifications`
+  estrena dueño · **migración** (`20260905090000`) con el único de deduplicación
+  `{tenantId, dedupeKey}`, el índice del reclamo `{tenantId, status, nextAttemptAt}` y los únicos
+  de plantillas y preferencias · 9 endpoints nuevos bajo `/api/v1/notification*` · recurso
+  `notification` en la matriz de permisos (`read`, `manageTemplates`, `viewDeliveryLog`) · job
+  `dispatchNotifications` · `LP-NOTF-500-001` y `LP-NOTF-422-002` ya estaban declarados, sin
+  códigos nuevos · el `ApiClient` de `@laplace/client` gana `put`, que la API ahora usa.
+- **Pendiente:** el motor queda enganchado a un solo evento (`booking.created`). Los otros siete
+  avisos transaccionales y el job `classReminders` son F1-22, que ya no toca el motor: solo se
+  suscribe. La pantalla de plantillas del DFSM entra en F1-24 — la API está entera. Web Push y
+  WhatsApp son Fase 2: el enum de canales crece, el resto del motor no cambia.
+
+## 2026-09-03 — F1-20: módulo Waivers, deslindes y consentimientos
+
+- **Módulo:** `waivers` (nuevo) · `attendance` · `members` · `wafm`
+- **Tipo:** feature
+- **Commit/PR:** `2cdd481` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/QXxTpx5h (F1-20) — movida a **Completadas**
+- **Qué cambió:** el centro publica deslindes, consentimientos y demás documentos legales,
+  versionados; el socio los ve y los firma desde la WAFM, con hash del texto, IP, user agent y
+  fecha guardados. Si el Venue lo exige (`enforceWaivers`, apagado por default), el check-in queda
+  bloqueado mientras falte algo obligatorio — y al menor de edad, el consentimiento del tutor
+  siempre le aplica. Hay un panel de cumplimiento por documento, exportable a CSV.
+- **Por qué:** es riesgo legal, no una funcionalidad opcional (§2.1.20). Un centro tiene que poder
+  probar exactamente qué firmó cada socio, no solo que "aceptó algo".
+- **Impacto:** colecciones `legalDocuments` y `consents` (ya declaradas desde Fase 0, sin dueño
+  hasta ahora) · **migración** (`20260904090000`) que corrige el único de `consents` heredado de la
+  migración base — estaba copiado del de `RmRecord` (`userId` primero, sin `unique`), pero un
+  consentimiento es del centro y no del socio: `tenantId` va primero (ADR-000 regla 4) · cuatro
+  rutas nuevas · `Venue.bookingPolicy` suma `enforceWaivers` · dos permisos nuevos
+  (`waiver.accept` para el socio, ya declarado `waiver.publish`/`read` para el staff) ·
+  `@laplace/client` suma `sanitizeHtml` (DOMPurify) · la WAFM suma la pantalla "Tus documentos" y
+  un aviso en el home.
+- **Pendiente:** nada declarado. Es la última deuda que quedaba abierta desde F1-18/F1-19
+  (`WaiverGate`), y con esta tarea queda saldada.
+
+### El índice heredado de la migración base estaba mal para `consents`
+
+`{ userId, tenantId, documentId }`, copiado del índice de `RmRecord` — que sí arranca por
+`userId` porque un RM es del atleta, no del centro (ADR-000 regla 7, el único caso con nombre en
+la spec). Un consentimiento **no es portable entre centros**: aceptar el deslinde de Box Toro no
+dice nada del de otro gimnasio. Le corresponde el orden normal de todo índice compuesto —
+`tenantId` primero— y de paso se le agregó `unique`, que es lo que hace que aceptar el mismo
+documento dos veces (doble click) no duplique el registro.
+
+### `enforceWaivers` es la parte de "configurable por Venue" que el criterio no explicitaba
+
+Vive en `bookingPolicy`, al lado de `allowDebt`: el mismo patrón de barrera que Attendance
+consulta antes de dejar entrar a alguien. Default apagado — prenderlo de una habría bloqueado a
+cualquier centro que todavía no publicó sus documentos ni migró a que sus socios tengan cuenta en
+la WAFM, incluidos los tests de F1-18/F1-19 que ya estaban en verde.
+
+### El HTML del documento no se muestra tal cual
+
+Lo escribe el staff del centro, no Laplace, y una cuenta de staff comprometida no tiene que poder
+convertirse en un XSS almacenado contra cada socio que abre la app. `sanitizeHtml` (DOMPurify,
+nuevo en `@laplace/client`) sanea el contenido antes de renderizarlo en la WAFM, con un allowlist
+de las etiquetas de un documento de texto — nada de `<script>`, `<iframe>` ni manejadores `on*`.
+El CSV del panel de cumplimiento tiene su propio escape, contra la inyección de fórmulas de
+Excel/Sheets.
+
+---
+
+## 2026-09-03 — F1-19: QR con token rotativo y walk-in
+
+- **Módulo:** `attendance` · `booking` · `wafm` · `dfsm`
+- **Tipo:** feature
+- **Commit/PR:** `9ab0a20` (rama `feat/phase-1-mvp`)
+- **Trello:** F1-19 — movida a **Completadas**
+- **Qué cambió:** el socio tiene "Mi QR" a un toque desde el home de la WAFM: un código que se
+  renueva solo cada 30 segundos y se muestra en la tablet de la puerta para entrar. La tablet no
+  lee cámara — es un lector de hardware que "escribe" el código, como en cualquier kiosko de
+  retail — y si se queda sin red, encola el escaneo local y lo sincroniza solo al volver la
+  conexión. El mostrador puede registrar a alguien que llegó sin reserva (walk-in): ahí, y solo
+  ahí, el crédito se descuenta en el check-in y no al reservar.
+- **Por qué:** es el camino de entrada que usa la mayoría de los socios en el día a día (§2.1.18),
+  y el WiFi de un gimnasio es el peor lugar del mundo para depender de la conexión.
+- **Impacto:** colección `checkInTokens` nueva, con **migración** (`20260903120000`) que le pone
+  TTL — el documento se borra solo cuando vence — y único por `{tenantId, tokenHash}` para que el
+  canje sea de un solo uso incluso con dos escaneos simultáneos (sin filtro parcial: a diferencia
+  de `bookings` o `payments`, acá `tokenHash` está en todas las filas, nunca falta) · tres rutas
+  (`POST /check-in-tokens`, `POST /check-in-tokens/redeem`, `POST /sessions/:id/walk-in`) ·
+  `createOfflineQueue` nuevo en `@laplace/client`, reusable por cualquier pantalla que no pueda
+  perder lo que el usuario ya hizo · la WAFM estrena router y su primera pantalla real · el DFSM
+  suma la pantalla de kiosko, fuera del chrome del coach.
+- **Pendiente:** el waiver se sigue pidiendo por el puerto `WaiverGate`, que hasta F1-20 contesta
+  que está todo firmado.
+
+### El QR guarda el hash, nunca el código
+
+El documento de `checkInTokens` vive 30 segundos y se emite uno cada vez que alguien abre su QR,
+pero una colección con los códigos en claro sería una colección de llaves de la puerta — y el TTL
+de Mongo corre cada 60 segundos, así que un documento puede sobrevivir hasta un minuto a su propio
+vencimiento. Lo que valida el canje no es que el documento siga existiendo: es que
+`assertTokenUsable` compare el vencimiento guardado contra el reloj. El índice es higiene de la
+colección, no la regla de negocio.
+
+### La cola offline encola antes de intentar mandar
+
+Si encolara solo después de que la primera mandada fallara, un corte de batería o de red justo en
+el medio del primer intento perdería el escaneo sin dejar rastro. Encolando primero, lo peor que
+puede pasar es un reintento — y como la clave de idempotencia se fija al encolar y no al mandar,
+el reintento es el mismo pedido, no uno nuevo. Vive en `@laplace/client` y no en el kiosko porque
+cualquier pantalla de Laplace que no pueda darse el lujo de perder lo que el usuario ya hizo la
+puede reusar.
+
+### Verificado en un navegador, no solo en jsdom
+
+Las dos pantallas nuevas se probaron contra servers de desarrollo reales (se agregó
+`.claude/launch.json`): el QR de la WAFM pasa de cargando a un estado de error legible cuando no
+hay backend, y el kiosko del DFSM encola de verdad en `localStorage` y muestra "1 escaneo esperando
+para sincronizar" cuando se le corta la red. De paso apareció un bug preexistente, ajeno a esta
+tarea — la utilidad `hidden` de Tailwind no genera CSS en este build, así que el toggle de nav
+mobile/desktop de `MobileShell` no esconde nada — quedó anotado como tarea aparte, no se tocó acá.
+
+---
+
+## 2026-09-03 — F1-18: check-in manual y lista de clase del coach
+
+- **Módulo:** `attendance` (nuevo) · `dfsm`
+- **Tipo:** feature
+- **Commit/PR:** `46b3937` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/d7wJ0zxW (F1-18) — movida a **Completadas**
+- **Qué cambió:** el coach abre la lista de su clase en el teléfono y ve inscriptos, presentes,
+  lista de espera y las alertas de cada uno. Marca a uno de un toque o a todos de una, con la
+  ventana de check-in y las validaciones del centro respetadas.
+- **Por qué:** es la pantalla que se usa de pie, con una mano, en el piso del box (§5.1.2). Si no
+  funciona perfecto en un teléfono, no se usa — y sin asistencia no hay métricas.
+- **Impacto:** módulo `attendance` nuevo · tres rutas (`GET /sessions/:id/roster`,
+  `POST /bookings/:id/check-in`, `POST /sessions/:id/check-in-all`) · `Booking` suma `checkedInAt`,
+  `checkInMethod` y `checkedInBy` · código nuevo `LP-ATTD-409-006` · el DFSM estrena router y su
+  primera pantalla real · sin migración.
+- **Pendiente:** el QR con token rotativo y el walk-in son F1-19. El waiver se pide por un puerto
+  que hasta F1-20 contesta que está firmado.
+
+### Attendance no guarda nada
+
+La asistencia es un estado de la reserva. Una colección propia serían dos verdades sobre si alguien
+entró, y la que se desincronice va a ser la que mire el coach. El módulo aporta la decisión —quién
+puede entrar, cuándo y con qué alertas— y la vista; el documento lo sigue escribiendo Booking, que
+es su dueño.
+
+### "Todos presentes" no se cae por uno
+
+Los que no pasan una validación vuelven en `skipped` con su código. Cortar la operación entera
+porque uno de los catorce debe plata sería cambiar ocho segundos de trabajo por una discusión en el
+piso del box.
+
+## 2026-09-03 — F1-17: no-show y penalización configurable
+
+- **Módulo:** `booking`
+- **Tipo:** feature
+- **Commit/PR:** `5e217a7` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/viAET6ZL (F1-17) — movida a **Completadas**
+- **Qué cambió:** el job de cada hora marca ausente a quien reservó y no hizo check-in, sin
+  devolverle el crédito, y aplica la penalización del centro: superado el umbral de faltas, el
+  socio queda sin reservar por el tiempo configurado y se le dice hasta cuándo.
+- **Por qué:** quien reserva y no va le sacó el lugar a otro. Es la práctica estándar del sector
+  (§2.1.5.d), y sin ella la lista de espera pierde sentido.
+- **Impacto:** `Member` suma `noShowCount` y `bookingBlockedUntil`, y los dos salen en la respuesta
+  del socio · `bookingPolicy` suma `noShowWindowDays` · job `markNoShows` cada hora · dos eventos
+  nuevos (`booking.no_show`, `booking.blocked_by_no_shows`) · sin migración.
+- **Pendiente:** el check-in que evita la falta es F1-18 y F1-19. Hasta entonces, toda reserva de
+  una clase que pasó termina en `no_show`, que es lo correcto mientras no exista la asistencia.
+
+### El umbral no se cuenta con un contador
+
+`Member.noShowCount` existe y se mantiene, pero la decisión de bloquear se toma contando las
+reservas que quedaron en `no_show` dentro de la ventana móvil. Un contador hay que resetearlo, y el
+reseteo que no corre convierte una falta de hace ocho meses en un bloqueo de hoy. La ventana es
+configurable porque tres ausencias en tres años no son las tres ausencias de un mes.
+
+## 2026-09-02 — F1-16: lista de espera con promoción automática
+
+- **Módulo:** `booking`
+- **Tipo:** feature
+- **Commit/PR:** `8c3a162` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/bQrvQ9gC (F1-16) — movida a **Completadas**
+- **Qué cambió:** la fila es FIFO de verdad y se mueve sola. Cuando alguien cancela, el primero de
+  la lista recibe el lugar guardado y quince minutos para confirmar; si no contesta, el job de cada
+  minuto se lo pasa al siguiente. Congelar el contrato o dar de baja al socio lo saca de todas las
+  listas, y la fila tiene tope.
+- **Por qué:** §2.1.5.b pide que la promoción sea automática, sin que el staff intervenga. Una
+  lista de espera que hay que atender a mano es una lista que nadie atiende.
+- **Impacto:** `Booking` suma `holdExpiresAt`, `promotedAt` y `confirmedAt` · ruta nueva
+  `POST /api/v1/bookings/:id/confirm` · job `expireWaitlistHolds` cada minuto · evento nuevo
+  `booking.waitlist_hold_expired` · sin migración.
+- **Pendiente:** la notificación al promovido es F1-22, que escucha `booking.waitlist_promoted`.
+  La tasa de conversión de la fila la calcula F1-23 con `promotedAt` y `confirmedAt`.
+
+### Por qué el lugar se toma al promover y no al confirmar
+
+Si el lugar quedara libre durante los quince minutos de la ventana, cualquiera que abriera la app
+se lo llevaría, y el aviso que el primero de la fila acaba de recibir sería mentira. Se toma con el
+mismo `findOneAndUpdate` atómico de la reserva, así que dos cancelaciones simultáneas promueven a
+dos personas distintas — hay un test que lo verifica.
+
+### Con esto, el corazón del producto está entero
+
+Alta de centro → sala → producto → socio → contrato → clase → reserva → cupo lleno → fila →
+promoción → confirmación → cancelación con su crédito. Es el corte de revisión que marcaba el plan
+al terminar F1-16.
+
+## 2026-09-02 — F1-15: ventanas de tiempo y devolución de crédito
+
+- **Módulo:** `booking`
+- **Tipo:** feature
+- **Commit/PR:** `4e1515d` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/LnUNw1UM (F1-15) — movida a **Completadas**
+- **Qué cambió:** las cinco ventanas de §2.1.5.c se respetan de verdad — abrir, cerrar, cancelar,
+  promover y hacer check-in —, cada categoría puede tener las suyas, y el socio ve el texto de la
+  política **antes** de confirmar. Cancelar fuera de plazo ahora avisa qué se pierde y recién
+  cancela si el socio lo confirma.
+- **Por qué:** es donde se define si el producto se siente justo o arbitrario. La regla de que el
+  late cancel no devuelve el crédito ya existía; lo que faltaba era que se supiera antes.
+- **Impacto:** `bookingPolicy` suma `lateCancelPolicy` y `categoryPolicies` · ruta nueva
+  `GET /api/v1/booking-policies/:sessionId` · el cuerpo de la cancelación acepta
+  `acceptsLateCancel` · sin migración: las sedes viejas toman los defaults.
+- **Pendiente:** la promoción automática de la lista de espera (F1-16) y el job de no-show (F1-17)
+  son los que van a consumir `waitlistPromotionCutoffMinutes` y la fila `no_show` de la matriz.
+
+### La matriz de §2.1.9 ahora tiene un solo lugar
+
+`domain/credit-matrix.ts` responde qué pasa con el crédito en cada uno de los ocho eventos de la
+tabla, y §Testing.5 la recorre fila por fila. La consultan Booking al cancelar, Schedule al cancelar
+una clase y Contracts al congelar; Attendance y el job de no-shows la van a consultar igual. La
+alternativa —la regla escrita en cada servicio— es la que termina cobrándole de más a alguien
+cuando una copia se desactualiza.
+
+### Dos cosas que aparecieron mirando la cobertura
+
+La caja diaria leía "hoy" con `Temporal.Now` en la ruta en vez del reloj inyectado del servicio: era
+lo único del módulo de plata que no se podía testear con un reloj fijo. Y el estado en el que queda
+un cargo después de un reembolso tenía una rama inalcanzable, porque la imputación nunca sobrepaga
+un cargo — lo que sobra queda como saldo a favor.
+
+## 2026-09-02 — F1-14: reserva atómica con descuento de crédito
+
+- **Módulo:** `booking`
+- **Tipo:** feature
+- **Commit/PR:** `e11b4f1` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/wzD96bLn (F1-14) — movida a **Completadas**
+- **Qué cambió:** el corazón del producto. Un socio reserva y el crédito se descuenta en la misma
+  operación; si la clase está llena entra a la lista de espera sin gastar crédito; si debe plata y
+  el centro no permite deuda, no reserva. Cancelar devuelve el lugar y el crédito. Y las tres
+  deudas que arrastraban F1-09, F1-11 y F1-13 quedaron saldadas.
+- **Por qué:** sin reserva no hay producto, y una reserva que puede vender el mismo lugar dos veces
+  deja a alguien parado en la puerta de una clase llena.
+- **Impacto:** colección `bookings` · **migración nueva** (`20260902170000`) que reemplaza el único
+  `{ tenantId, sessionId, memberId }` de F0-10 por uno **parcial** sobre los estados vivos, y agrega
+  el único parcial de `idempotencyKey` · cuatro rutas nuevas · evento `booking.created` ·
+  `src/persistence/transaction.ts`, la plomería de transacciones que faltaba (§5.2.4).
+- **Pendiente:** la promoción automática de la lista de espera es F1-16, y las ventanas de tiempo y
+  el late cancel con su matriz de 8 casos son F1-15. `cancel` hoy siempre devuelve el crédito.
+
+### El índice de F0-10 estaba mal y esto lo destapó
+
+El único `{ tenantId, sessionId, memberId }` de la migración de F0-10 no tenía filtro parcial: quien
+cancelaba una clase quedaba **bloqueado para siempre** para volver a anotarse en esa misma clase,
+porque la fila cancelada seguía ocupando la clave. La migración de esta tarea lo baja y lo recrea
+filtrado por `status ∈ {booked, waitlisted, checked_in}`. Hay un test que lo cubre.
+
+### Lo que verifica el test que no se negocia
+
+50 reservas paralelas sobre una clase de 1 cupo: entra **una**, las otras 49 quedan en la fila y
+`bookedCount` termina en 1 (§Testing.2). El lugar se toma con un `findOneAndUpdate` que exige
+`bookedCount < capacity` dentro de la misma operación; con un `read` y después un `write`, las 50
+leerían el mismo contador y entrarían las 50.
+
+## 2026-09-02 — F1-13: edición, feriados y cancelación de clase
+
+- **Módulo:** `schedule`
+- **Tipo:** feature
+- **Commit/PR:** `9a312dc` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/kpxJMwoQ (F1-13) — movida a **Completadas**
+- **Qué cambió:** el comportamiento tipo Google Calendar de §2.1.5.a — editar solo una clase o "esta
+  y futuras" —, los feriados y cierres que cancelan en bloque, la cancelación con devolución de
+  créditos, el aviso de cambio de coach y la duplicación de una semana respetando feriados.
+- **Por qué:** una grilla que no se puede corregir sin romper el histórico no sirve; y una
+  cancelación que no devuelve el crédito es plata del socio retenida.
+- **Impacto:** colección `venueClosures` con su **migración nueva** (`20260902160000`) · cinco rutas
+  nuevas · dos eventos (`session.cancelled`, `session.coach_changed`).
+- **Pendiente:** ver la deuda declarada abajo.
+
+**Decisiones:**
+
+- **Primero se liberan las reservas, después se cancela la clase.** Si la devolución falla, la clase
+  queda en pie y el centro puede reintentar. Al revés quedaría una clase cancelada con los créditos
+  retenidos, que es plata del socio y nadie se enteraría hasta que reclame. Hay un test que hace
+  fallar la devolución a propósito y verifica que la clase siga `scheduled`.
+- **Sin `scope`, editar la plantilla no propaga nada.** Reescribir clases ya publicadas sin que
+  nadie lo pida es peor que obligar a un click de más.
+- **Las clases pasadas nunca se tocan.** Son el histórico de lo que de verdad ocurrió; reescribirlas
+  haría que la lista de asistencia de la semana pasada dejara de coincidir con lo que la gente hizo.
+  El test mueve el reloj un mes y verifica que la mitad vieja de la grilla quedó intacta.
+- **Una clase que ya terminó no se edita ni se cancela, aunque su estado siga siendo `scheduled`.**
+  Nadie transiciona la grilla vieja, así que el corte tiene que ser por reloj, no por estado. Lo
+  encontró el test: la primera versión solo miraba el estado y dejaba editar una clase de marzo en
+  mayo.
+- **Los cierres guardan las fechas como `YYYY-MM-DD`.** Un feriado es un día del calendario del
+  centro, no una ventana de 24 horas; guardarlo como instante obligaría a elegir una hora arbitraria
+  y a recalcularla en cada zona.
+- **Un cierre declarado tarde no cancela lo que ya se dio.** La clase ocurrió: borrarla del registro
+  sería mentir sobre lo que pasó.
+- **Duplicar una semana dice qué no copió y por qué.** Feriado o sala ocupada: sin el motivo, el SMU
+  ve un hueco en la grilla y no sabe si es un bug.
+- **Cancelar dos veces no libera dos veces.** Liberar de nuevo devolvería el crédito otra vez, que
+  es regalar clases.
+
+**Deuda declarada:** el criterio pide que la cancelación y la devolución ocurran **en la misma
+transacción**. Hoy son dos operaciones ordenadas para que un fallo no deje créditos retenidos, con
+la devolución detrás del puerto `SessionBookingReleaser`. F1-14 las mete en una transacción de Mongo,
+que es donde puede hacerlo: ahí las reservas y el contador de la sesión viven en el mismo módulo.
+Anotado en esa tarea, que ya hereda tres deudas.
+
+**Verificación:** 1501 tests verdes (1111 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido.
+
+---
+
+## 2026-09-02 — F1-12: la agenda y la materialización de clases
+
+- **Módulo:** `schedule`
+- **Tipo:** feature
+- **Commit/PR:** `f648109` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/wHIRoAUH (F1-12) — movida a **Completadas**
+- **Qué cambió:** el centro define plantillas recurrentes y un job diario materializa las clases de
+  los próximos 60 días. También se pueden cargar clases sueltas, y dos clases no pueden ocupar la
+  misma sala a la misma hora.
+- **Por qué:** es el módulo del que cuelga el corazón del producto. Sin grilla no hay reserva
+  (F1-14), ni lista de clase (F1-18), ni check-in (F1-19).
+- **Impacto:** colecciones `classTemplates` y `classSessions` · ocho rutas nuevas · un job nuevo ·
+  **migración nueva** (`20260902150000-session-materialization-unique.cjs`) · dos eventos.
+- **Pendiente:** la edición "solo esta / esta y futuras" y la cancelación de clase son F1-13.
+
+**Decisiones:**
+
+- **La recurrencia se modela nativa, no como un string RRULE.** Es el subconjunto
+  `FREQ=WEEKLY;BYDAY;BYHOUR` de RFC 5545, que es la forma que de verdad tiene una grilla de clases:
+  "lunes a viernes a las 7:00". El expansor no tiene que parsear nada y el formulario del SMU son
+  seis campos en vez de una gramática. Ensancharla más adelante —mensual, por día del mes— es
+  aditivo: se suma un `freq` y el expansor crece con un caso.
+- **La clase de las 7:00 es a las 7:00 todo el año.** El expansor recorre día por día en el
+  calendario del centro y arma cada fecha con su hora local. Hay cuatro tests contra Santiago de
+  Chile, que sí cambia de hora: expandiendo con sumas de 24 h, la clase del lunes siguiente al
+  cambio caería a las 8:00 y el socio se encontraría el gimnasio cerrado. Y uno que verifica que la
+  hora que **no existe** el día del salto se corre hacia adelante en vez de perderse.
+- **El job es idempotente por doble vía.** Consulta los inicios ya materializados antes de escribir,
+  y un índice único `{ tenantId, templateId, startAt }` cierra la ventana entre esa consulta y el
+  `insert`. Sin el índice, dos instancias del runner arrancando a la vez duplicarían la grilla y el
+  socio la vería dos veces. El índice es **parcial** sobre `templateId`, porque una clase suelta no
+  tiene plantilla y con un `sparse` compuesto todas colisionarían en `null` — la misma trampa que
+  ya documentaba F0-10.
+- **El intervalo se cuenta desde la vigencia, no desde hoy.** Con "una semana sí y una no", correr
+  el job un mes después no puede correr la grilla media semana.
+- **El job no materializa hacia atrás.** Una clase cuya hora ya pasó hoy no se crea: nadie podría
+  reservarla, y aparecería en la grilla como un hueco raro.
+- **Archivar una plantilla no borra las clases ya materializadas.** La del jueves ya está publicada
+  y puede tener gente anotada; bajarla es cancelarla, que avisa y devuelve créditos (F1-13).
+- **Los bordes que se tocan no chocan.** La clase de 10 a 11 y la de 11 a 12 conviven en la misma
+  sala: es la grilla normal de un box, y tratarlas como colisión haría el producto inusable.
+- **El error de colisión dice cuál choca y a qué hora.** Sin eso, el SMU tiene que salir a buscarla
+  en la grilla.
+- **La agenda es un solo endpoint por rango.** Día, semana y mes son la misma consulta con otras
+  fechas; cómo se dibuja es del front.
+
+**Deuda de F1-02, saldada:** el puerto `FutureSessionCounter` de Rooms ahora lo contesta Schedule.
+Una sala con clases programadas ya no se puede borrar, una sin ellas sí, y las clases que ya pasaron
+no bloquean — los tres casos tienen test. La herencia de capacidad de §2.1.5.b también quedó.
+
+**Verificación:** 1482 tests verdes (1092 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido.
+
+---
+
+## 2026-09-02 — F1-11: mora automática y caja diaria
+
+- **Módulo:** `billing`
+- **Tipo:** feature
+- **Commit/PR:** `ee576e7` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/cxZpencT (F1-11) — movida a **Completadas**
+- **Qué cambió:** un job diario pasa a mora los cargos vencidos, marca al socio como deudor y avisa.
+  El estado de cobranza se ve en tiempo real, y cada sede tiene su arqueo de caja del día por método
+  de pago, exportable a CSV.
+- **Por qué:** §2.1.12 marca la morosidad como el KPI número 1 del mercado argentino. El pasaje a
+  mora tiene que ser automático: si hay que calcularlo a mano, no se calcula.
+- **Impacto:** un job nuevo (`dunning`) · una ruta nueva (`/venues/:venueId/till`) · evento
+  `charge.overdue` · sin cambios en el modelo.
+- **Pendiente:** el corte sobre la reserva está implementado y testeado, pero quien lo llama es
+  Booking (F1-14). Ver la deuda declarada abajo.
+
+**Decisiones:**
+
+- **El estado de cobranza es derivado, no un campo.** `clear`, `pending`, `overdue` o `credit` se
+  calculan sobre cargos y pagos. Guardarlo obligaría a un job que lo mantenga al día y a que ese job
+  no se atrase nunca; y un estado de cobranza atrasado es peor que no tenerlo.
+- **El corte de la mora vive en Billing, no en Booking.** `assertCanTransact(memberId, allowDebt)`:
+  el módulo que sabe cuánto se debe es el que decide, y el que reserva solo pregunta. `allowDebt`
+  sale de la política del Venue y su default es `false` (ADR-004, decisión 2).
+- **El mensaje del corte dice cuánto debe.** "Regularizá" sin número manda al socio al mostrador a
+  preguntar cuánto, que es exactamente la fricción que la mora automática viene a sacar.
+- **El día de la caja es el del centro.** Calculado en UTC, la caja de un centro argentino cerraría
+  a las 21:00 y los pagos de la última hora caerían en el día siguiente, con el arqueo sin cerrar.
+- **El efectivo va aparte del resto.** Es lo único que hay que contar a mano al cerrar el turno, y
+  es donde aparecen las diferencias. El CSV sale con el mismo corte para pegarlo en la planilla.
+- **El job corre a las 06:00.** El socio que llega a entrenar y está en mora tiene que verlo en la
+  puerta, no a media mañana.
+- **El job es idempotente por su filtro:** solo trae los que siguen `pending` y de verdad deben
+  algo, así que la segunda corrida del día no encuentra nada. Un cargo parcialmente pagado sí entra,
+  por lo que falta.
+
+**Sobre el código de error:** la tarjeta pedía `LP-BILL-402-006`, pero el corte que describe es
+sobre **reservar**, y §11.2 ya tiene ese caso en el módulo BOOK: `LP-BOOK-403-005`, con la nota de
+que solo se emite cuando `allowDebt` es `false`. Se usó ese. El `LP-BILL-402-006` queda libre para
+cuando la mora bloquee una acción de facturación.
+
+**Deuda declarada:** `assertCanTransact` está implementado y tiene cinco tests, pero hasta F1-14
+nadie lo llama desde el flujo de reserva. Anotado en esa tarea.
+
+**Verificación:** 1439 tests verdes (1049 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido.
+
+---
+
+## 2026-09-02 — F1-10: Billing, cargos y pagos manuales
+
+- **Módulo:** `billing`
+- **Tipo:** feature
+- **Commit/PR:** `6ff533f` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/dyKwcshG (F1-10) — movida a **Completadas**
+- **Qué cambió:** el centro genera cargos, registra pagos en efectivo, transferencia o POS, y abre
+  el estado de cuenta de cualquier socio con su saldo y su deuda vencida. Los pagos se anulan con un
+  reembolso, nunca borrándolos.
+- **Por qué:** §2.1.16 lo marca como el gap más grave de la v1. El registro manual es como cobra hoy
+  la mayoría de los centros.
+- **Impacto:** colecciones `charges`, `payments` y `refunds` · cinco rutas nuevas ·
+  `src/http/idempotency.ts` como infraestructura compartida · `Charge.paidCents` sumado al modelo ·
+  umbral de cobertura propio para `src/modules/billing/**`.
+- **Pendiente:** la mora automática y la caja diaria son F1-11.
+
+**Decisiones:**
+
+- **La idempotencia la garantiza el índice, no el middleware.** `requireIdempotencyKey` exige y
+  valida la clave; la deduplicación real es el único `{ tenantId, idempotencyKey }`. Una caché de
+  respuestas en memoria se pierde justo cuando el proceso se reinicia, que es exactamente cuando el
+  cliente reintenta. Hay un test que lanza tres pagos simultáneos con la misma clave y verifica que
+  gane uno solo, y otro que manda el mismo pago tres veces en serie: un registro, dos 409.
+- **El 409 del duplicado lleva el pago original.** Sin él, el mostrador no puede confirmar que el
+  cobro entró y termina cobrándolo de nuevo a mano, que es justo lo que la idempotencia evita.
+- **La clave es por tenant.** El índice es `{ tenantId, idempotencyKey }`: si fuera solo la clave,
+  el primer centro que use "abc" se la bloquearía a todos los demás. Tiene su test.
+- **Un pago se imputa del cargo más viejo al más nuevo.** Es lo que espera el mostrador cuando
+  alguien paga "lo que debe". Al revés, la deuda vieja queda abierta mientras se saldan las nuevas.
+  Lo que sobra queda como saldo a favor, no se pierde.
+- **Un pago nunca se borra (§5.2.4).** Se anula con un reembolso, con motivo obligatorio y registro
+  en `AuditLog`. Si el pago desapareciera, el arqueo del día anterior dejaría de coincidir y nadie
+  sabría por qué. Hay un test que verifica que el documento sigue existiendo después del reembolso.
+- **Un reembolso parcial revierte el último cargo saldado, no el primero.** La deuda que reaparece
+  es la que se acababa de cobrar; la vieja ya estaba cobrada y no tiene por qué volver a abrirse.
+- **El estado de cuenta es la fuente de verdad del saldo.** `Member.balanceCents` es una copia que
+  Billing refresca en cada movimiento, para que el listado de socios no recalcule por fila. El flag
+  `debtor` sale del mismo número, así que no puede desincronizarse de él.
+- **`Charge.paidCents` se sumó al modelo de §5.2.2.** Sin él no se puede representar un pago
+  parcial, que es un criterio explícito de la tarea.
+
+**Verificación:** 1421 tests verdes (1031 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde. Cobertura de `src/modules/billing/**`: **100% de líneas**.
+
+---
+
+## 2026-09-02 — F1-09: congelamiento y vencimiento de contratos
+
+- **Módulo:** `contracts`
+- **Tipo:** feature
+- **Commit/PR:** `5f23cda` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/SeFAtiva (F1-09) — movida a **Completadas**
+- **Qué cambió:** el staff congela un contrato por vacaciones o lesión y el vencimiento se corre por
+  los días declarados, respetando el tope anual del centro. Dos jobs diarios expiran los vencidos y
+  avisan 7, 3 y 1 día antes.
+- **Por qué:** el freeze es la feature más pedida que la v1 no tenía (§2.1.9), y los avisos de
+  vencimiento son ingreso directo: es el momento en que el socio renueva.
+- **Impacto:** `Contract.freeze`, `freezeDaysUsedThisYear`, `freezeYear` y `lastExpiryNoticeDays` ·
+  `Venue.bookingPolicy.maxFreezeDaysPerYear` (default 30) · dos rutas nuevas · dos jobs registrados
+  en el runner de F0-08.
+- **Pendiente:** ver la deuda declarada abajo.
+
+**Decisiones:**
+
+- **El vencimiento se corre al congelar, no al descongelar.** Los días se declaran por adelantado.
+  Si se corriera al final, el socio que se olvida de avisar que volvió tendría el pack parado para
+  siempre, y el centro no podría planificar nada.
+- **30 días son 30 días, no 30×24 horas.** Es el test que §Testing.6 marca como obligatorio y está
+  escrito contra Santiago de Chile, que sí cambia de hora: un pack vendido venciendo a las 19:00
+  pasaría a vencer a las 20:00 con la cuenta ingenua. Argentina no cambia de hora desde 2009, así
+  que con una sola zona de prueba el bug sería invisible para siempre.
+- **El tope de días es del centro, no del producto.** Vive en `bookingPolicy`, que es donde ya
+  estaban las demás ventanas configurables. Con el tope en `0`, el centro simplemente no habilita
+  la función.
+- **El contador de días se reinicia con el año calendario.** El tope es "por año", así que el
+  contrato guarda también de qué año es el número.
+- **`lastExpiryNoticeDays` hace idempotente al aviso.** Sin él, correr el job dos veces el mismo día
+  manda el mismo mail dos veces — que es exactamente la clase de error que hace que el centro apague
+  las notificaciones y pierda el canal de renovación.
+- **El job de expiración es idempotente por su filtro:** solo trae los que siguen `active` o
+  `frozen`, así que la segunda corrida del día no encuentra nada.
+- **Los jobs son el segundo uso legítimo de `skipTenantScope`.** No corren dentro del pedido de
+  nadie: recorren todos los centros y abren el contexto de cada uno antes de tocar sus datos. Quedó
+  documentado en el plugin de tenancy, al lado del primero.
+- **Los avisos salen a las 10:00 y la expiración a las 03:00.** Un mail que llega de madrugada se
+  lee entre otros veinte; el proceso pesado va cuando no hay nadie entrenando.
+
+**Deuda declarada:** §2.1.9 pide que congelar cancele las reservas futuras y **devuelva esos
+créditos**. El pedido sale con su motivo a través del puerto `FutureBookingReleaser` y hay un test
+que lo verifica, pero hasta F1-14 nadie lo contesta. Anotado en esa tarea.
+
+**Verificación:** 1357 tests verdes (967 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido.
+
+---
+
+## 2026-09-02 — F1-08: módulo Contracts y el orden de consumo
+
+- **Módulo:** `contracts`
+- **Tipo:** feature
+- **Commit/PR:** `de10fbc` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/kfiwjNq6 (F1-08) — movida a **Completadas**
+- **Qué cambió:** el staff vende un producto a un socio y queda un contrato con su precio y sus
+  condiciones congeladas, su máquina de estados y sus créditos. El consumo elige el contrato según
+  §2.1.9 y lo descuenta en una sola operación atómica.
+- **Por qué:** es donde vive la regla más delicada del producto. Un consumo mal resuelto le cobra de
+  más al socio o le regala clases al centro, y en los dos casos se descubre tarde.
+- **Impacto:** colección `contracts` · seis rutas nuevas · dos eventos (`contract.sold`,
+  `contract.status_changed`) · **infraestructura de `AuditLog`** nueva en `src/audit/` · umbral de
+  cobertura propio para `src/modules/contracts/**` (95% de líneas, como auth y entitlements).
+- **Pendiente:** el congelamiento y el job de vencimiento son F1-09.
+
+**Decisiones:**
+
+- **El contrato copia las condiciones del producto, no solo el precio.** Tipo, categorías
+  habilitadas, franjas horarias y topes se guardan al vender. El centro puede editar el producto
+  mañana; lo vendido tiene que seguir valiendo por lo que se vendió. Es `priceSnapshotCents`
+  extendido al resto de los términos, y tiene su test: editar el producto después no cambia nada del
+  contrato.
+- **El vencimiento se calcula en el calendario del centro (§2.1.2).** Un pack de 30 días vendido el
+  1 de marzo vence el 31 a la misma hora local, no 720 horas después.
+- **El consumo es una sola operación.** `findOneAndUpdate` con `$expr` sobre
+  `creditsUsed < creditsTotal`: el filtro y el `$inc` suceden juntos. Hay un test que lanza cinco
+  consumos simultáneos sobre un pack de 1 crédito y verifica que gane exactamente uno. Con un read
+  y después un write, los cinco leerían `creditsUsed: 0` y el socio terminaría con 5 clases usadas
+  de un pack de 1.
+- **Si el elegido pierde la carrera, se intenta con el siguiente.** Descartar la reserva porque
+  justo se agotó el pack que el sistema eligió, teniendo otro disponible, sería un error nuestro.
+  Hay un test con dos packs de 1 crédito y dos consumos simultáneos: ganan los dos.
+- **El orden de consumo es explicable.** Vence primero → categoría más específica → más viejo. El
+  tercer criterio no aporta al negocio pero hace el orden determinista, que es lo que permite
+  decirle al socio de qué pack salió el crédito. La respuesta incluye esa explicación.
+- **Gastar primero el más específico es deliberado:** el pack que solo sirve para funcional se
+  pierde si no se usa en funcional; el general sirve para cualquier clase.
+- **Un producto gratis nace `active`.** Dejar la clase de prueba esperando un pago de $0 sería una
+  traba inventada justo en la puerta de entrada del socio.
+- **`expired`, `exhausted` y `cancelled` son terminales.** Un contrato agotado no revive: la
+  renovación crea uno nuevo, que es lo que mantiene legible el histórico de lo cobrado.
+- **El ajuste manual exige motivo y deja registro.** El `AuditLog` guarda antes, después, quién y
+  por qué. Seis meses después alguien pregunta por qué su pack tenía 10 clases, y el log de Pino ya
+  rotó: esto es un dato, no un log.
+
+**Deudas de F1-07 saldadas:** el trial único por persona ahora se dispara contra el historial real, y
+la venta incrementa `soldCount`, así que el cupo `maxSales` aplica. Las dos tienen test de
+integración.
+
+**Verificación:** 1328 tests verdes (938 en la API), `lint`, `typecheck`, `build` y `format:check`
+en verde, gate de cobertura por criticidad cumplido con el umbral nuevo de Contracts.
+
+---
+
 ## 2026-09-02 — F1-07: módulo Products, el catálogo vendible
 
 - **Módulo:** `products`

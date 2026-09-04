@@ -48,7 +48,8 @@ const MATRIX: Record<string, Record<string, OrgRoleName[]>> = {
   },
   venue: {
     create: ['owner'],
-    read: ['owner', 'manager_assistant', 'front_desk', 'head_coach', 'coach'],
+    // El socio tambien: elige en que sede entrena y ve la politica que lo rige.
+    read: ['owner', 'manager_assistant', 'front_desk', 'head_coach', 'coach', 'member'],
     update: ['owner', 'manager_assistant'],
     archive: ['owner'],
   },
@@ -88,8 +89,18 @@ const MATRIX: Record<string, Record<string, OrgRoleName[]>> = {
     checkIn: ['owner', 'manager_assistant', 'front_desk', 'head_coach', 'coach'],
   },
   waiver: {
-    read: ['owner', 'manager_assistant', 'front_desk', 'head_coach', 'coach'],
+    read: ['owner', 'manager_assistant', 'front_desk', 'head_coach', 'coach', 'member'],
     publish: ['owner', 'manager_assistant'],
+    // El socio es quien firma lo suyo; nadie firma por otro (§2.1.20). El
+    // owner tiene `accept` igual, heredado de `everything`: no tiene techo.
+    accept: ['owner', 'member'],
+  },
+  notification: {
+    // La campana y las preferencias son de cada uno: todos las tienen.
+    read: ['owner', 'manager_assistant', 'front_desk', 'head_coach', 'coach', 'member'],
+    manageTemplates: ['owner', 'manager_assistant'],
+    // Ver los avisos de todos: incluye montos de cuotas ajenas.
+    viewDeliveryLog: ['owner', 'manager_assistant'],
   },
   // El manager_assistant NO entra: §1.1 dice "todo salvo metricas de negocio
   // y facturacion". La facturacion es del owner y del mostrador.

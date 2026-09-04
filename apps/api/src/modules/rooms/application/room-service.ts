@@ -60,6 +60,14 @@ export class RoomService {
     });
   }
 
+  /**
+   * La capacidad de una sala, o `null` si no existe en este tenant. Es el puerto
+   * que consume Schedule: la clase hereda el cupo de la sala (§2.1.5.b).
+   */
+  async capacityOf(publicId: string): Promise<number | null> {
+    return (await this.rooms.findByPublicId(publicId))?.capacity ?? null;
+  }
+
   async getByPublicId(publicId: string): Promise<RoomDoc> {
     const room = await this.rooms.findByPublicId(publicId);
     if (!room) throw notFound(publicId);

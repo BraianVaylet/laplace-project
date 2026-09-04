@@ -4,13 +4,16 @@ import type { EntitlementsLoader } from '../../entitlements/middleware.js';
 import type { DomainEventBus } from '../../events/bus.js';
 import { toBsonDate } from '../../persistence/bson-date.js';
 import { runWithTenant } from '../../tenancy/context.js';
+import type { JobDefinition } from '../../jobs/runner.js';
 import {
   ContractService,
+  type FutureBookingReleaser,
   type ProductCatalog,
   type VenueClock,
 } from './application/contract-service.js';
 import type { ContractDoc } from './infrastructure/contract.model.js';
 import { ContractRepository } from './infrastructure/contract.repository.js';
+import { contractJobs } from './infrastructure/jobs.js';
 import { VICTIM_CONTRACT_PRODUCT, createContractRoutes } from './infrastructure/routes.js';
 
 /**
@@ -20,6 +23,8 @@ import { VICTIM_CONTRACT_PRODUCT, createContractRoutes } from './infrastructure/
 export interface ContractsModule {
   routes: ReturnType<typeof createContractRoutes>;
   service: ContractService;
+  /** Los procesos diarios de §10. Los registra el runner desde `index.ts`. */
+  jobs: JobDefinition[];
 }
 
 export interface ContractsModuleDeps {
@@ -28,6 +33,8 @@ export interface ContractsModuleDeps {
   audit: AuditWriter;
   products: ProductCatalog;
   venues: VenueClock;
+  /** Lo contesta Booking (F1-14) y Waitlist (F1-16). Hasta entonces no libera nada. */
+  bookings: FutureBookingReleaser;
   now?: (() => Temporal.Instant) | undefined;
 }
 
@@ -39,6 +46,7 @@ export function createContractsModule(deps: ContractsModuleDeps): ContractsModul
     venues: deps.venues,
     events: deps.events,
     audit: deps.audit,
+    bookings: deps.bookings,
     ...(deps.now ? { now: deps.now } : {}),
   });
 
@@ -72,11 +80,13 @@ export function createContractsModule(deps: ContractsModuleDeps): ContractsModul
   return {
     routes: createContractRoutes(service, deps.entitlements, seedVictimContract),
     service,
+    jobs: contractJobs(service),
   };
 }
 
 export type {
   ContractService,
+  FutureBookingReleaser,
   ProductCatalog,
   VenueClock,
 } from './application/contract-service.js';

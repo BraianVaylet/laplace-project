@@ -41,7 +41,9 @@ describe('home', () => {
   it('dice que la prueba es sin tarjeta (ADR-004, decision 5)', () => {
     render(<Home />);
 
-    expect(screen.getByText(/sin tarjeta/i)).toBeDefined();
+    // Lo dice mas de una vez a proposito: junto al CTA y junto al precio, que
+    // son los dos momentos en los que alguien se pregunta si le van a cobrar.
+    expect(screen.getAllByText(/sin tarjeta/i).length).toBeGreaterThan(0);
   });
 
   it('nombra las disciplinas de §1: no es solo para CrossFit', () => {

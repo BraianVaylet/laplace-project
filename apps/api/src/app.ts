@@ -8,8 +8,10 @@ import { createAuthRoutes } from './auth/routes.js';
 import type { MiddlewareHandler } from 'hono';
 import type { OrgEnv } from './auth/organization.js';
 import type { EntitlementsEnv } from './entitlements/middleware.js';
+import type { IdempotencyEnv } from './http/idempotency.js';
 import type { SessionEnv } from './auth/session.js';
 import { createErrorHandler } from './http/error-handler.js';
+import type { ErrorEventStore } from './observability/error-events.js';
 import { requestId } from './http/request-id.js';
 import { createOpenApiRoutes } from './openapi/routes.js';
 import { healthRoutes } from './routes/health.js';
@@ -22,7 +24,8 @@ import { healthRoutes } from './routes/health.js';
 export type AppEnv = {
   Variables: { requestId: string } & SessionEnv['Variables'] &
     OrgEnv['Variables'] &
-    EntitlementsEnv['Variables'];
+    EntitlementsEnv['Variables'] &
+    Partial<IdempotencyEnv['Variables']>;
 };
 
 export interface AppDeps {
@@ -32,6 +35,12 @@ export interface AppDeps {
   auth?: Auth;
   /** Rutas extra montadas en la raiz. Lo usan los tests para sondear middlewares. */
   extraRoutes?: Hono<AppEnv>;
+  /**
+   * Donde queda registrado cada error para el panel de soporte del DFSA
+   * (§11.3). Opcional: sin el, la app anda igual y el panel sale vacio — un
+   * registro de soporte no puede ser requisito para levantar.
+   */
+  errorEvents?: ErrorEventStore;
   /**
    * Las rutas de los modulos de negocio, ya compuestas (`createModuleRoutes`).
    * Van por dependencia y no por import directo para que un test pueda montar
@@ -56,6 +65,7 @@ export function createApp({
   modules,
   lockoutGuard,
   openapi,
+  errorEvents,
 }: AppDeps) {
   const app = new Hono<AppEnv>();
 
@@ -110,7 +120,7 @@ export function createApp({
     ),
   );
 
-  app.onError(createErrorHandler(logger));
+  app.onError(createErrorHandler(logger, errorEvents));
 
   return app;
 }

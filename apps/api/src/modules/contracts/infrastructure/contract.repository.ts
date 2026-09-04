@@ -85,7 +85,67 @@ export class ContractRepository extends TenantRepository<ContractDoc> {
       .exec();
   }
 
+  /**
+   * 🔴 Contratos vencidos de **todos los tenants**, para el job diario.
+   *
+   * Un job no corre dentro del pedido de nadie, asi que no hay tenant en el
+   * contexto: es el segundo uso legitimo de `skipTenantScope`, y por eso
+   * devuelve el `tenantId` — el servicio abre el contexto de cada centro antes
+   * de tocar nada.
+   */
+  async dueToExpireAcrossTenants(now: Temporal.Instant, limit = 500): Promise<ContractDoc[]> {
+    return ContractModel.find({
+      deletedAt: null,
+      status: { $in: ['active', 'frozen'] },
+      endsAt: { $ne: null, $lte: toBsonDate(now) },
+    })
+      .setOptions({ skipTenantScope: true })
+      .limit(limit)
+      .lean<ContractDoc[]>()
+      .exec();
+  }
+
+  /** Contratos activos que vencen dentro de la ventana de avisos, de todos los tenants. */
+  async expiringSoonAcrossTenants(
+    now: Temporal.Instant,
+    withinDays: number,
+    limit = 1000,
+  ): Promise<ContractDoc[]> {
+    return ContractModel.find({
+      deletedAt: null,
+      status: 'active',
+      endsAt: {
+        $ne: null,
+        $gt: toBsonDate(now),
+        $lte: toBsonDate(now.add({ hours: 24 * (withinDays + 1) })),
+      },
+    })
+      .setOptions({ skipTenantScope: true })
+      .limit(limit)
+      .lean<ContractDoc[]>()
+      .exec();
+  }
+
   /** Devuelve un credito consumido. Lo usa la cancelacion en plazo (ADR-001). */
+  /**
+   * Contratos activos que vencen antes de `until`, en una sede. Es la alerta de
+   * renovacion del panel (§2.1.12): siete dias es el plazo con el que se puede
+   * renovar sin cortarle las clases a nadie.
+   */
+  async expiringIn(venueId: string, until: Date, limit = 50): Promise<ContractDoc[]> {
+    return ContractModel.find(
+      this.scope({
+        venueId,
+        status: 'active',
+        endsAt: { $ne: null, $lte: until },
+      } as FilterQuery<ContractDoc>),
+    )
+      .sort({ endsAt: 1 })
+      .limit(limit)
+      .lean<ContractDoc[]>()
+      .exec();
+  }
+
   async refundCredit(publicId: string): Promise<ContractDoc | null> {
     const { tenantId } = requireTenant();
 

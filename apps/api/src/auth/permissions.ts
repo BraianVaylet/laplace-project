@@ -28,7 +28,14 @@ export const LAPLACE_STATEMENT = {
   classSession: ['create', 'read', 'update', 'cancel'],
   booking: ['create', 'read', 'cancel', 'createForOther'],
   attendance: ['read', 'checkIn'],
-  waiver: ['read', 'publish'],
+  waiver: ['read', 'publish', 'accept'],
+  /**
+   * `read` es la campana y las preferencias propias: siempre sobre el usuario
+   * de la sesion, nunca sobre otro. `manageTemplates` es editar los textos que
+   * salen a nombre del centro, y `viewDeliveryLog` es ver los avisos de TODOS
+   * — la respuesta a "no me llego", que incluye montos de cuotas ajenas.
+   */
+  notification: ['read', 'manageTemplates', 'viewDeliveryLog'],
   billing: ['read', 'charge', 'collect', 'refund'],
   /** Ingresos, morosidad, churn. El staff no accede (§2.1.12). */
   businessMetrics: ['read'],
@@ -63,6 +70,7 @@ const managerAssistant = ac.newRole({
   booking: ['create', 'read', 'cancel', 'createForOther'],
   attendance: ['read', 'checkIn'],
   waiver: ['read', 'publish'],
+  notification: ['read', 'manageTemplates', 'viewDeliveryLog'],
   planning: ['create', 'read', 'update', 'publish'],
   exercise: ['create', 'read', 'update'],
   result: ['create', 'read'],
@@ -80,6 +88,7 @@ const coach = ac.newRole({
   booking: ['create', 'read', 'cancel'],
   attendance: ['read', 'checkIn'],
   waiver: ['read'],
+  notification: ['read'],
   planning: ['read'],
   exercise: ['read'],
   result: ['create', 'read'],
@@ -98,6 +107,7 @@ const headCoach = ac.newRole({
   booking: ['create', 'read', 'cancel'],
   attendance: ['read', 'checkIn'],
   waiver: ['read'],
+  notification: ['read'],
   planning: ['create', 'read', 'update', 'publish'],
   exercise: ['create', 'read', 'update'],
   result: ['create', 'read'],
@@ -116,6 +126,7 @@ const frontDesk = ac.newRole({
   booking: ['create', 'read', 'cancel', 'createForOther'],
   attendance: ['read', 'checkIn'],
   waiver: ['read'],
+  notification: ['read'],
   /** Cobra y ve el estado de cuenta para poder cobrar. El reembolso es del owner. */
   billing: ['read', 'charge', 'collect'],
   exercise: ['read'],
@@ -123,9 +134,18 @@ const frontDesk = ac.newRole({
 
 /** El socio (MU): opera sobre lo suyo desde la WAFM. */
 const member = ac.newRole({
+  /*
+   * El socio ve las sedes de su centro: necesita su nombre y su direccion para
+   * elegir en cual entrena, y la politica de reserva es la regla a la que esta
+   * sujeto. No hay nada del negocio ahi (F1-28).
+   */
+  venue: ['read'],
   product: ['read'],
   classSession: ['read'],
   booking: ['create', 'read', 'cancel'],
+  /** Ve sus documentos pendientes y los firma. Nunca publica (§2.1.20). */
+  waiver: ['read', 'accept'],
+  notification: ['read'],
   planning: ['read'],
   exercise: ['read'],
   result: ['create', 'read'],

@@ -19,7 +19,9 @@ export const COLLECTIONS = {
   refund: 'refunds',
   classTemplate: 'classTemplates',
   classSession: 'classSessions',
+  venueClosure: 'venueClosures',
   booking: 'bookings',
+  checkInToken: 'checkInTokens',
   exercise: 'exercises',
   planning: 'plannings',
   result: 'results',
@@ -27,9 +29,17 @@ export const COLLECTIONS = {
   legalDocument: 'legalDocuments',
   consent: 'consents',
   notification: 'notifications',
+  notificationTemplate: 'notificationTemplates',
+  notificationPreference: 'notificationPreferences',
   lead: 'leads',
   auditLog: 'auditLogs',
   metricsDaily: 'metricsDaily',
+  // Plataforma: datos SOBRE los centros, no DE un centro (§2.1.3, §2.1.4).
+  subscription: 'subscriptions',
+  plan: 'plans',
+  contactRequest: 'contactRequests',
+  /** Solo el codigo del error, nunca su contenido (§11.3, ADR-004 decision 7). */
+  errorEvent: 'errorEvents',
   // Infraestructura
   loginAttempt: 'loginAttempt',
   jobLock: 'jobLock',

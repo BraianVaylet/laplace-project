@@ -7,13 +7,30 @@ import type {
 import { Temporal } from '@js-temporal/polyfill';
 import type { DomainEventBus } from '../../../events/bus.js';
 import { AppError } from '../../../http/errors.js';
-import { toBsonDate } from '../../../persistence/bson-date.js';
+import { fromBsonDate, toBsonDate } from '../../../persistence/bson-date.js';
 import { requireTenant } from '../../../tenancy/context.js';
 import { publicId } from '../../../tenancy/public-id.js';
 import type { Page } from '../../../tenancy/repository.js';
 import { canTransition, requiresGuardian } from '../domain/member.js';
 import type { MemberDoc, MemberNoteDoc } from '../infrastructure/member.model.js';
 import type { MemberRepository } from '../infrastructure/member.repository.js';
+
+/** Lo que el panel de alertas del DFSM necesita saber de un socio (F1-24). */
+export interface AlertMemberView {
+  memberId: string;
+  fullName: string;
+  balanceCents: number;
+  lastAttendanceAt: Temporal.Instant | null;
+}
+
+function toAlertMember(member: MemberDoc): AlertMemberView {
+  return {
+    memberId: String(member['publicId']),
+    fullName: `${member.firstName} ${member.lastName}`.trim(),
+    balanceCents: member.balanceCents,
+    lastAttendanceAt: member.lastAttendanceAt ? fromBsonDate(member.lastAttendanceAt) : null,
+  };
+}
 
 /** Hoy, en `YYYY-MM-DD`. Se inyecta para poder testear la mayoría de edad. */
 export type Today = () => string;
@@ -203,6 +220,178 @@ export class MemberService {
 
   async listNotes(id: string): Promise<MemberNoteDoc[]> {
     return (await this.getByPublicId(id)).notes;
+  }
+
+  /**
+   * Refresca el saldo cacheado del socio. Lo escribe Billing (F1-10).
+   *
+   * Es una **copia**: la fuente de verdad es el estado de cuenta, que se calcula
+   * sobre cargos y pagos. Esto existe para que la lista de socios y la ficha 360
+   * no tengan que recalcularlo por cada fila.
+   */
+  async setBalance(memberId: string, balanceCents: number): Promise<void> {
+    await this.members.updateByPublicId(memberId, {
+      $set: { balanceCents, 'flags.debtor': balanceCents < 0 },
+    });
+  }
+
+  /**
+   * La ficha de socio de una cuenta de la WAFM, o `null` si esa persona todavía
+   * no está asociada al centro. Es el puerto que consume Booking: el `userId` es
+   * de la sesión, el `memberId` es del centro.
+   */
+  /**
+   * Registra una falta y, si corresponde, bloquea las reservas hasta `until`
+   * (§2.1.5.d). Lo llama Booking por interfaz: quien sabe contar faltas es el
+   * modulo de las reservas, y quien guarda la ficha del socio es este.
+   */
+  async registerNoShow(memberId: string, until: Temporal.Instant | null): Promise<void> {
+    await this.members.updateByPublicId(memberId, {
+      $inc: { noShowCount: 1 },
+      ...(until === null ? {} : { $set: { bookingBlockedUntil: toBsonDate(until) } }),
+    } as never);
+  }
+
+  /** Hasta cuando el socio tiene las reservas bloqueadas, si lo esta. */
+  async bookingBlockedUntil(memberId: string): Promise<Temporal.Instant | null> {
+    const member = await this.members.findByPublicId(memberId);
+    const hasta = member?.bookingBlockedUntil;
+
+    return hasta ? fromBsonDate(hasta) : null;
+  }
+
+  /**
+   * Los datos que la lista de clase necesita de cada socio (§2.1.18). Es el
+   * puerto que consume Attendance: nombre, saldo y si debe.
+   */
+  async summariesOf(
+    memberIds: readonly string[],
+  ): Promise<
+    Array<{ publicId: string; fullName: string; balanceCents: number; hasDebt: boolean }>
+  > {
+    const socios = await this.members.byPublicIds(memberIds);
+
+    return socios.map((member) => ({
+      publicId: String(member['publicId']),
+      fullName: `${member.firstName} ${member.lastName}`.trim(),
+      balanceCents: member.balanceCents,
+      hasDebt: member.flags?.debtor === true || member.balanceCents < 0,
+    }));
+  }
+
+  /**
+   * Deja la ultima asistencia en la ficha. Es el mejor predictor individual de
+   * baja (§7), y sin esto habria que recorrer las reservas para saberlo.
+   */
+  async recordAttendance(memberId: string, at: Temporal.Instant): Promise<void> {
+    await this.members.updateByPublicId(memberId, { $set: { lastAttendanceAt: toBsonDate(at) } });
+  }
+
+  async findIdByUserId(userId: string): Promise<string | null> {
+    const member = await this.members.findOne({ userId } as never);
+
+    return member ? String(member['publicId']) : null;
+  }
+
+  /**
+   * Lo que Waivers necesita para decidir qué le corresponde a este socio: su
+   * cuenta vinculada (quién firma) y su fecha de nacimiento (si el
+   * consentimiento del tutor le aplica). Es el puerto que consume F1-20.
+   */
+  async waiverContextOf(
+    memberId: string,
+  ): Promise<{ userId: string | null; birthDate?: string } | null> {
+    const member = await this.members.findByPublicId(memberId);
+    if (!member) return null;
+
+    return {
+      userId: member.userId ?? null,
+      ...(member.birthDate === undefined ? {} : { birthDate: member.birthDate }),
+    };
+  }
+
+  /**
+   * Los contextos de waiver de varios socios, en una consulta. Lo consume el
+   * panel de alertas del DFSM (F1-24) a traves de Waivers.
+   */
+  async waiverContextsOf(
+    memberIds: readonly string[],
+  ): Promise<Array<{ memberId: string; userId: string | null; birthDate?: string }>> {
+    const socios = await this.members.byPublicIds(memberIds);
+
+    return socios.map((member) => ({
+      memberId: String(member['publicId']),
+      userId: member.userId ?? null,
+      ...(member.birthDate === undefined ? {} : { birthDate: member.birthDate }),
+    }));
+  }
+
+  /** La ficha a la que corresponde una cuenta. Lo consume el panel de cumplimiento de Waivers. */
+  async findByUserId(userId: string): Promise<{ memberId: string; fullName: string } | null> {
+    const member = await this.members.findOne({ userId } as never);
+    if (!member) return null;
+
+    return {
+      memberId: String(member['publicId']),
+      fullName: `${member.firstName} ${member.lastName}`.trim(),
+    };
+  }
+
+  /**
+   * A quien avisarle, como lo necesita Notifications (F1-21): la cuenta que
+   * recibe el aviso, el nombre para el "Hola {{nombre}}" y el mail al que sale.
+   *
+   * `null` cuando la ficha no tiene cuenta vinculada: un walk-in cargado en el
+   * mostrador no tiene donde recibir nada, y eso no es un error.
+   */
+  async notificationRecipientOf(
+    memberId: string,
+  ): Promise<{ userId: string; name: string; email: string | null } | null> {
+    const member = await this.members.findByPublicId(memberId);
+    if (!member?.userId) return null;
+
+    return {
+      userId: member.userId,
+      name: member.firstName.trim(),
+      email: member.email ?? null,
+    };
+  }
+
+  /**
+   * El buscador global del DFSM (F1-24): nombre, apellido, documento o
+   * telefono. Devuelve lo justo para la lista de resultados — quien es y como
+   * reconocerlo — y no la ficha entera.
+   */
+  async search(term: string): Promise<Array<{ memberId: string; fullName: string; hint: string }>> {
+    const encontrados = await this.members.search(term.trim());
+
+    return encontrados.map((member) => ({
+      memberId: String(member['publicId']),
+      fullName: `${member.firstName} ${member.lastName}`.trim(),
+      hint: member.docId ?? member.phone ?? member.email ?? '',
+    }));
+  }
+
+  /**
+   * Los tres listados que alimentan el panel de alertas del DFSM (F1-24).
+   * Devuelven lo justo para pintar la tarjeta: quien es, cuanto debe y cuando
+   * vino por ultima vez.
+   */
+  async inactiveSince(venueId: string, since: Temporal.Instant): Promise<AlertMemberView[]> {
+    return (await this.members.inactiveSince(venueId, toBsonDate(since))).map(toAlertMember);
+  }
+
+  async debtorsIn(venueId: string): Promise<AlertMemberView[]> {
+    return (await this.members.debtorsIn(venueId)).map(toAlertMember);
+  }
+
+  async activeMembersIn(venueId: string): Promise<AlertMemberView[]> {
+    return (await this.members.activeIn(venueId)).map(toAlertMember);
+  }
+
+  /** Socios activos de una sede. Es el puerto que consume Metrics (F1-23). */
+  async activeCountIn(venueId: string): Promise<number> {
+    return this.members.countActiveIn(venueId);
   }
 
   /** Lo consume el guard de entitlements. Cuenta los que ocupan cupo. */

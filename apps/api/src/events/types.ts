@@ -46,6 +46,43 @@ export interface DomainEvents {
     to: string;
   };
 
+  /** Clase publicada en la grilla. La escuchan Notifications y Metrics. */
+  'session.scheduled': {
+    sessionId: string;
+    venueId: string;
+    startAt: string;
+  };
+  'session.status_changed': {
+    sessionId: string;
+    from: string;
+    to: string;
+  };
+
+  /**
+   * Clase cancelada por el centro. Los inscriptos ya recuperaron su credito
+   * (§2.1.9); esto dispara el aviso.
+   */
+  'session.cancelled': {
+    sessionId: string;
+    venueId: string;
+    startAt: string;
+    reason: string;
+    releasedBookings: number;
+    /**
+     * A quienes se les libero la reserva. Va en el payload y no se consulta
+     * despues porque para cuando alguien reacciona **la clase ya no tiene
+     * inscriptos**: las reservas se cancelaron antes de emitir. Son IDs, no
+     * documentos: quien reacciona busca lo que necesita de cada uno.
+     */
+    releasedMemberIds: string[];
+  };
+  /** Cambio de coach. El socio eligio esa clase, y a veces eligio a esa persona. */
+  'session.coach_changed': {
+    sessionId: string;
+    from: string | null;
+    to: string;
+  };
+
   'booking.created': {
     bookingId: string;
     sessionId: string;
@@ -65,11 +102,51 @@ export interface DomainEvents {
     memberId: string;
     confirmBefore: string;
   };
+  /**
+   * El promovido no confirmo a tiempo y perdio el lugar (§2.1.5.b). Lo escucha
+   * Notifications para avisarle, y F1-23 para la tasa de conversion de la fila.
+   */
+  'booking.waitlist_hold_expired': {
+    bookingId: string;
+    sessionId: string;
+    memberId: string;
+  };
+  /** Reservo y no fue (§2.1.5.d). Lo escuchan Notifications y Metrics. */
+  'booking.no_show': {
+    bookingId: string;
+    sessionId: string;
+    memberId: string;
+    venueId: string;
+  };
+  /** Se paso del umbral de faltas y quedo sin reservar por un rato. */
+  'booking.blocked_by_no_shows': {
+    memberId: string;
+    until: string;
+    noShows: number;
+  };
   'attendance.checked_in': {
     bookingId: string;
     memberId: string;
     method: 'self' | 'staff' | 'kiosk';
   };
+  /**
+   * Se publicó una versión nueva de un documento legal (§2.1.20). Lo escucha
+   * Notifications para avisarle a quien tenga la vieja que hay que re-firmar.
+   */
+  'waiver.published': {
+    documentId: string;
+    type: string;
+    version: number;
+    required: boolean;
+  };
+  /** Un cargo entro en mora. Lo escucha Notifications para el aviso (§2.1.12). */
+  'charge.overdue': {
+    chargeId: string;
+    memberId: string;
+    /** Cuanto debe en total, no solo este cargo: es lo que va en el aviso. */
+    overdueCents: number;
+  };
+
   'payment.received': {
     paymentId: string;
     memberId: string;
@@ -84,6 +161,33 @@ export interface DomainEvents {
     contractId: string;
     memberId: string;
   };
+  /**
+   * El suscriptor cambio de estado (§2.1.3). Lo escuchan Metrics (churn del
+   * SaaS) y el panel de salud del DFSA.
+   */
+  'subscription.status_changed': {
+    organizationId: string;
+    from: string;
+    to: string;
+  };
+  'subscription.plan_changed': {
+    organizationId: string;
+    from: string;
+    to: string;
+    /** Lo que se cobro de mas por el resto del ciclo. Cero en un downgrade. */
+    proratedCents: number;
+  };
+  /**
+   * 🔴 El SAU entro a la cuenta de un suscriptor para dar soporte (§2.1.3). Lo
+   * escucha Notifications para avisarle al SMU: un acceso de soporte que el
+   * dueño de la cuenta no puede ver es indistinguible de una fuga.
+   */
+  'organization.impersonated': {
+    organizationId: string;
+    reason: string;
+    expiresAt: string;
+  };
+
   'pr.achieved': {
     resultId: string;
     memberId: string;

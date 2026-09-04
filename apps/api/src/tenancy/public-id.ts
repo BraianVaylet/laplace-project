@@ -19,13 +19,19 @@ export const ID_PREFIXES = {
   refund: 'ref',
   classTemplate: 'tpl',
   classSession: 'ses',
+  venueClosure: 'cls',
   booking: 'bkg',
+  checkInToken: 'qrt',
   exercise: 'exr',
   planning: 'pln',
   result: 'rsl',
   notification: 'ntf',
+  notificationTemplate: 'ntt',
+  notificationPreference: 'npf',
   lead: 'led',
   legalDocument: 'doc',
+  consent: 'cst',
+  metricsDaily: 'mtd',
 } as const;
 
 export type IdEntity = keyof typeof ID_PREFIXES;

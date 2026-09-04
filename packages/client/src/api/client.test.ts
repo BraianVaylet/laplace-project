@@ -294,6 +294,7 @@ describe('metodos', () => {
     ['get', 'GET'],
     ['post', 'POST'],
     ['patch', 'PATCH'],
+    ['put', 'PUT'],
     ['delete', 'DELETE'],
   ] as const)('%s usa %s', async (method, expected) => {
     const { api, calls } = client(() => json({}));
