@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `entitlements`
 - **Tipo:** fix
-- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `597b5ea` (rama `feat/phase-1-mvp`)
 - **Trello:** —
 - **Qué cambió:** `createOrganizationPlanReader` consultaba la organización de Better Auth por un
   campo `id` que el adaptador de Mongo **no guarda** — la guarda con `_id`, y además como
@@ -45,7 +45,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `susc` (nuevo) · `entitlements` · `notifications` · `events`
 - **Tipo:** feature
-- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `597b5ea` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/qhzF6UVa (F1-25) — movida a **Completadas**
 - **Qué cambió:** el dueño de un centro se registra desde la landing y en dos pedidos tiene su
   cuenta operativa, con trial de 14 días **sin tarjeta**. A los 14 días, si no eligió plan, la
