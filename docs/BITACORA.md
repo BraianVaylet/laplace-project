@@ -45,7 +45,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `landing` · `crm` (nuevo) · `schemas`
 - **Tipo:** feature
-- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `e068be8` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/vyoqqQsK (F1-26) — movida a **Completadas**
 - **Qué cambió:** la landing tiene las nueve secciones de §5.1.4 más la comparativa contra "Excel y
   WhatsApp" y la de seguridad y privacidad. Los precios se **prerenderizan**: están en el HTML que
