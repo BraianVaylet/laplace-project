@@ -23,6 +23,39 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-04 — Fix: el mismo agujero de F1-28 en otras cuatro rutas
+
+- **Módulo:** `booking` · `metrics`
+- **Tipo:** fix
+- **Commit/PR:** — (rama `claude/agitated-elion-6305d4`)
+- **Trello:** —
+- **Qué cambió:** auditoría de todas las rutas gateadas con un permiso que el rol `member` también
+  tiene, buscando el patrón de F1-28. Aparecieron cuatro:
+  - `GET /api/v1/bookings/:id`, `POST /api/v1/bookings/:id/cancel` y
+    `POST /api/v1/bookings/:id/confirm` no miraban de quién era la reserva. Con el id de la reserva
+    de un compañero del mismo centro se la podía leer, cancelársela — le vuelve el crédito y se le
+    suelta el lugar — o confirmarle la promoción, que le gasta un crédito. Ahora la reserva ajena
+    solo la toca quien puede mirar la ficha del socio (`athlete.read`), que es todo el staff y
+    ningún socio; al socio se le responde 404, no 403.
+  - `GET /api/v1/dashboard` estaba gateado con `classSession.read`, que el socio también tiene
+    porque lo necesita para ver la agenda desde la WAFM. Pidiendo `?venueId=` de su propia sede se
+    llevaba el panel de alertas entero: nombres de sus compañeros, quiénes dejaron de venir, a
+    quiénes les vence el pack y a quiénes les falta firmar. Pasa a `athlete.read`.
+- **Por qué:** era el pendiente que dejó anotado la entrada de F1-28. La suite de aislamiento de
+  F0-05 no ve nada de esto: prueba **entre tenants**, y acá atacante y víctima son socios del mismo
+  centro.
+- **Impacto:** ninguno sobre el modelo de datos ni sobre la API pública. Ningún front pierde nada:
+  la WAFM solo opera sobre las reservas propias y el tablero del DFSM lo abre staff, que conserva
+  `athlete.read` en los cinco roles. Se eligió `athlete.read` y no `booking.createForOther` — el
+  discriminador del listado — a propósito: `createForOther` no lo tiene el coach, que hoy abre y
+  cancela las reservas de sus clases. Seis tests nuevos, todos con dos personas del **mismo**
+  centro.
+- **Pendiente:** el resto de las rutas quedó limpio. `attendance`, `waivers` y `notifications` ya
+  resolvían la persona desde la sesión; `contracts`, `billing` y `members` aceptan un `memberId`
+  pero están detrás de permisos que el socio no tiene. Los recursos `planning`, `exercise` y
+  `result` están en la matriz de permisos pero todavía no tienen rutas: cuando se escriban, el
+  chequeo va desde el primer endpoint.
+
 ## 2026-09-04 — Fix: los entitlements leían la organización por un campo que no existe
 
 - **Módulo:** `entitlements`

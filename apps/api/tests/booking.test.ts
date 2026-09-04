@@ -328,6 +328,21 @@ async function atletaDe(centro: Centro, nombre: string) {
   return { cookie, memberId: canje.memberId };
 }
 
+/** Un usuario de staff del centro, con el rol que se le pida y sin ficha de socio. */
+async function staffDe(centro: Centro, role: 'coach' | 'front_desk') {
+  const cookie = await signUp(`${role}-bkg-${++creados}@laplace.test`);
+  const sesion = await auth.api.getSession({ headers: new Headers({ cookie }) });
+  await auth.api.addMember({
+    body: { userId: sesion?.user.id as string, organizationId: centro.organizationId, role },
+  });
+  await app.request(
+    '/api/v1/auth/organization/set-active',
+    req(cookie, 'POST', { organizationId: centro.organizationId }),
+  );
+
+  return cookie;
+}
+
 /** Un usuario del centro con rol `member` pero sin ficha: nunca canjeó nada. */
 async function usuarioSinFicha(centro: Centro, nombre: string) {
   const cookie = await signUp(`${nombre}-${++creados}@laplace.test`);
@@ -1599,5 +1614,126 @@ describe('las reservas de otro socio (F1-28)', () => {
 
     expect(body.items).toHaveLength(1);
     expect(body.items[0]?.memberId).toBe(micaela.memberId);
+  });
+});
+
+describe('la reserva de otro socio, por su id', () => {
+  /*
+   * El mismo agujero que el `?memberId=` del listado, pero por el id de la
+   * reserva. `booking.read`, `booking.cancel` y `booking.create` los tiene
+   * también el socio, así que sin chequear de quién es la reserva, cualquier
+   * compañero del mismo centro podía leerla, cancelársela o confirmársela. La
+   * suite de F0-05 no lo ve: atacante y víctima son del mismo tenant.
+   */
+  const reservaEnBase = async (bookingId: string) =>
+    mongoose.connection.db
+      ?.collection('bookings')
+      .findOne<{ status: string; holdExpiresAt: Date | null }>({ publicId: bookingId });
+
+  /** Dos socios con sesión propia en el mismo centro, y una reserva de la primera. */
+  async function dosSocios(nombre: string) {
+    const centro = await centroListo(nombre);
+    const micaela = await atletaDe(centro, 'Micaela');
+    await darPack(centro, micaela.memberId, 8);
+    const julian = await atletaDe(centro, 'Julian');
+    await darPack(centro, julian.memberId, 8);
+    const reserva = await reservarOk(centro, micaela.memberId);
+
+    return { centro, micaela, julian, bookingId: reserva.booking.publicId };
+  }
+
+  it('🔴 un socio NO puede leerla', async () => {
+    const { julian, bookingId } = await dosSocios('ajena-lee');
+
+    const res = await app.request(`/api/v1/bookings/${bookingId}`, req(julian.cookie, 'GET'));
+
+    // 404 y no 403: un 403 confirmaría que la reserva existe.
+    expect(res.status).toBe(404);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-BOOK-404-006');
+  });
+
+  it('🔴 un socio NO puede cancelársela: le devolvería el crédito y le soltaría el lugar', async () => {
+    const { centro, micaela, julian, bookingId } = await dosSocios('ajena-cancela');
+    const contrato = await contratoDe(micaela.memberId);
+
+    const res = await app.request(
+      `/api/v1/bookings/${bookingId}/cancel`,
+      req(julian.cookie, 'POST', {}),
+    );
+
+    expect(res.status).toBe(404);
+    // La reserva de Micaela sigue en pie y su crédito sigue gastado.
+    expect((await reservaEnBase(bookingId))?.status).toBe('booked');
+    expect((await contratoEnBase(contrato))?.creditsUsed).toBe(1);
+    expect((await claseEnBase(centro.sessionId))?.bookedCount).toBe(1);
+  });
+
+  it('🔴 un socio NO puede confirmarle la promoción: le gastaría un crédito', async () => {
+    const centro = await centroListo('ajena-confirma', { capacity: 1 });
+    const conLugar = await socioCon(centro, 'ConLugar', 8);
+    const micaela = await atletaDe(centro, 'Micaela');
+    await darPack(centro, micaela.memberId, 8);
+    const julian = await atletaDe(centro, 'Julian');
+    await darPack(centro, julian.memberId, 8);
+
+    const tomada = await reservarOk(centro, conLugar);
+    const enEspera = await reservarOk(centro, micaela.memberId);
+    // Al liberarse el lugar, Micaela queda promovida con la ventana abierta.
+    await app.request(
+      `/api/v1/bookings/${tomada.booking.publicId}/cancel`,
+      req(centro.cookie, 'POST', {}),
+    );
+    const contrato = await contratoDe(micaela.memberId);
+
+    const res = await app.request(
+      `/api/v1/bookings/${enEspera.booking.publicId}/confirm`,
+      req(julian.cookie, 'POST', {}),
+    );
+
+    expect(res.status).toBe(404);
+    // Sigue esperando y con el crédito sin tocar: confirma ella o nadie.
+    expect((await reservaEnBase(enEspera.booking.publicId))?.status).toBe('waitlisted');
+    expect((await contratoEnBase(contrato))?.creditsUsed).toBe(0);
+  });
+
+  it('la suya sí la lee y la cancela: es lo que hace la WAFM', async () => {
+    const centro = await centroListo('propia-opera');
+    const micaela = await atletaDe(centro, 'Micaela');
+    await darPack(centro, micaela.memberId, 8);
+    const reserva = await reservarOk(centro, micaela.memberId);
+
+    const lectura = await app.request(
+      `/api/v1/bookings/${reserva.booking.publicId}`,
+      req(micaela.cookie, 'GET'),
+    );
+    const cancelacion = await app.request(
+      `/api/v1/bookings/${reserva.booking.publicId}/cancel`,
+      req(micaela.cookie, 'POST', {}),
+    );
+
+    expect(lectura.status).toBe(200);
+    expect(cancelacion.status).toBe(200);
+  });
+
+  it('el staff sí las ve y las cancela: mira la ficha del socio', async () => {
+    const { centro, bookingId } = await dosSocios('staff-opera');
+
+    const lectura = await app.request(`/api/v1/bookings/${bookingId}`, req(centro.cookie, 'GET'));
+    const cancelacion = await app.request(
+      `/api/v1/bookings/${bookingId}/cancel`,
+      req(centro.cookie, 'POST', {}),
+    );
+
+    expect(lectura.status).toBe(200);
+    expect(cancelacion.status).toBe(200);
+  });
+
+  it('el coach también: abre y cancela las reservas de sus clases', async () => {
+    const { centro, bookingId } = await dosSocios('coach-opera');
+    const coach = await staffDe(centro, 'coach');
+
+    const lectura = await app.request(`/api/v1/bookings/${bookingId}`, req(coach, 'GET'));
+
+    expect(lectura.status).toBe(200);
   });
 });

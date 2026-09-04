@@ -1,4 +1,4 @@
-import { Hono } from 'hono';
+import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import {
   bookingPolicyViewSchema,
@@ -239,28 +239,72 @@ export function createBookingRoutes(
     }),
   );
 
-  routes.get('/api/v1/bookings/:id', requirePermission({ booking: ['read'] }), (c) =>
-    service.get(c.req.param('id')).then((booking) => c.json(booking)),
-  );
+  /**
+   * 🔴 La reserva de un compañero no se lee, no se cancela y no se confirma.
+   *
+   * Mismo agujero que el `?memberId=` del listado (F1-28), pero por el id de la
+   * reserva: `booking.read`, `booking.cancel` y `booking.create` los tiene
+   * también el socio —los necesita para lo suyo—, así que con el id de la
+   * reserva de otro se la podía leer, cancelársela —le vuelve el crédito y se
+   * le suelta el lugar— o confirmarle la promoción, que le gasta un crédito.
+   * El aislamiento por tenant no lo tapa: los dos son del mismo centro.
+   *
+   * El staff se distingue por `athlete.read`: quien puede mirar la ficha de un
+   * socio puede mirar sus reservas. No se usa `booking.createForOther` como en
+   * el listado porque al coach —que hoy abre y cancela las reservas de sus
+   * clases— le cerraría la puerta.
+   *
+   * Responde 404 y no 403 a propósito: decir "existe pero no es tuya" ya es
+   * filtrar que existe.
+   */
+  const assertOwnBooking = async (c: Context<AppEnv>, bookingId: string): Promise<void> => {
+    if (authorize(c.get('org')?.roles ?? [], { athlete: ['read'] })) return;
+
+    const propio = await resolveMember(c.get('userId'));
+    const reserva = await service.findOne(bookingId);
+    if (!propio || reserva?.memberId !== propio) {
+      throw new AppError({
+        code: 'LP-BOOK-404-006',
+        status: 404,
+        message: 'No encontramos esa reserva.',
+        meta: { bookingId },
+      });
+    }
+  };
+
+  routes.get('/api/v1/bookings/:id', requirePermission({ booking: ['read'] }), async (c) => {
+    const bookingId = c.req.param('id') as string;
+    await assertOwnBooking(c, bookingId);
+
+    return c.json(await service.get(bookingId));
+  });
 
   routes.post(
     '/api/v1/bookings/:id/cancel',
     requirePermission({ booking: ['cancel'] }),
-    validated<CancelBookingInput, AppEnv>(cancelBookingSchema, async (c, input) =>
-      c.json(
-        await service.cancel(c.req.param('id') as string, {
-          acceptsLateCancel: input.acceptsLateCancel,
-        }),
-      ),
-    ),
+    validated<CancelBookingInput, AppEnv>(cancelBookingSchema, async (c, input) => {
+      const bookingId = c.req.param('id') as string;
+      await assertOwnBooking(c, bookingId);
+
+      return c.json(
+        await service.cancel(bookingId, { acceptsLateCancel: input.acceptsLateCancel }),
+      );
+    }),
   );
 
   /*
    * §2.1.5.b: el promovido confirma y recién ahí se le descuenta el crédito.
    * Mientras esperaba no tenía nada que consumir.
    */
-  routes.post('/api/v1/bookings/:id/confirm', requirePermission({ booking: ['create'] }), (c) =>
-    service.confirmPromotion(c.req.param('id')).then((resultado) => c.json(resultado)),
+  routes.post(
+    '/api/v1/bookings/:id/confirm',
+    requirePermission({ booking: ['create'] }),
+    async (c) => {
+      const bookingId = c.req.param('id') as string;
+      await assertOwnBooking(c, bookingId);
+
+      return c.json(await service.confirmPromotion(bookingId));
+    },
   );
 
   /*
