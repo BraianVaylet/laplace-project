@@ -1,6 +1,7 @@
 import { Head } from 'vite-react-ssg';
 import { Outlet, useLocation } from 'react-router-dom';
 import { Button } from '@laplace/ui';
+import { BackToTop } from './BackToTop.js';
 import { Providers } from './providers.js';
 import { SITE_URL, seoFor } from './seo.js';
 
@@ -8,6 +9,7 @@ const SECTIONS = [
   { id: 'producto', label: 'Producto' },
   { id: 'funcionalidades', label: 'Funcionalidades' },
   { id: 'precios', label: 'Precios' },
+  { id: 'seguridad', label: 'Seguridad' },
   { id: 'faq', label: 'Preguntas' },
   { id: 'contacto', label: 'Contacto' },
 ] as const;
@@ -78,9 +80,17 @@ export function Layout() {
             <a href="/privacidad" className="hover:text-fg focus-visible:focus-ring rounded">
               Privacidad
             </a>
+            <a
+              href="/tratamiento-de-datos"
+              className="hover:text-fg focus-visible:focus-ring rounded"
+            >
+              Tratamiento de datos
+            </a>
           </nav>
           Laplace · Bahía Blanca, Argentina
         </footer>
+
+        <BackToTop />
       </div>
     </Providers>
   );

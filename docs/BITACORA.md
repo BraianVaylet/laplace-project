@@ -41,6 +41,28 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
   test de integración contra una organización real: un doble no puede probar la forma de lo real.
 - **Pendiente:** ninguno.
 
+## 2026-09-04 — F1-26: la landing completa y el formulario de contacto
+
+- **Módulo:** `landing` · `crm` (nuevo) · `schemas`
+- **Tipo:** feature
+- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/vyoqqQsK (F1-26) — movida a **Completadas**
+- **Qué cambió:** la landing tiene las nueve secciones de §5.1.4 más la comparativa contra "Excel y
+  WhatsApp" y la de seguridad y privacidad. Los precios se **prerenderizan**: están en el HTML que
+  lee el buscador, no detrás de un `fetch`. El formulario de contacto valida con el Zod compartido,
+  se defiende de bots con un campo trampa en vez de un captcha, y guarda la consulta. Hay página de
+  acuerdo de tratamiento de datos y botón de volver arriba que respeta `prefers-reduced-motion`.
+- **Por qué:** §5.1.4. La landing es el canal de adquisición: si el precio no está en el HTML, no lo
+  ve ni el buscador ni el visitante apurado.
+- **Impacto:** colección `contactRequests`, de plataforma (sin `tenantId`) · 1 endpoint público
+  nuevo (`POST /api/v1/contact`) con `LP-CRM-422-001` · página `/tratamiento-de-datos` · el catálogo
+  de precios de la landing vive en `@laplace/schemas` y un test lo compara contra lo que siembra la
+  migración: son dos representaciones en dos lenguajes que no pueden compartir código.
+- **Pendiente:** los testimonios reales (la sección está, inventarlos sería publicar reseñas
+  falsas), los textos legales vinculantes (necesitan abogado; están la estructura y los hechos), las
+  capturas de pantalla reales (hoy son maquetas de CSS que lo dicen) y Lighthouse CI, que va con el
+  pipeline de F1-31.
+
 ## 2026-09-04 — F1-25: alta self-service, trial de 14 días y planes
 
 - **Módulo:** `susc` (nuevo) · `entitlements` · `notifications` · `events`

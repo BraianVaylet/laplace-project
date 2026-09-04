@@ -34,6 +34,13 @@ export const PAGES: readonly PageSeo[] = [
       'Cómo tratamos los datos personales, en cumplimiento de la Ley 25.326 de Argentina.',
     inSitemap: false,
   },
+  {
+    path: '/tratamiento-de-datos',
+    title: 'Acuerdo de tratamiento de datos · Laplace',
+    description:
+      'El acuerdo entre Laplace y el centro sobre los datos de sus socios: qué se guarda, por cuánto tiempo y qué se puede pedir.',
+    inSitemap: false,
+  },
 ];
 
 export function seoFor(path: string): PageSeo {

@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     24 |
+| Fase 1 — MVP vendible   |       32 |          186 |     25 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1573,7 +1573,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   un cliente de Max operando como Basic. Se arregló y quedó cubierto con un test contra una
   organización real, no contra un doble de la base.
 
-## [ ] F1-26 · Landing completa
+## [x] F1-26 · Landing completa
 
 - **module:** landing
 - **description:** Las nueve secciones de §5.1.4 más lo que agrega el `[+]`: CTA de prueba gratis,
@@ -1602,7 +1602,24 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **test_plan:** Test del HTML generado por sección. Test del formulario con el schema compartido.
   Lighthouse CI (SEO ≥ 95, accesibilidad ≥ 95). Auditoría axe.
 - **error-codes:** `LP-CRM-422-001` (formulario inválido)
-- **data-model-impact:** `Lead` de §5.2.2 (solo la captura; el pipeline completo es Fase 4).
+- **data-model-impact:** colección `contactRequests`, **de plataforma**. 🔴 **No es el `Lead` de
+  §5.2.2**: aquel es el prospecto _de un centro_ — alguien que quiere anotarse en el gimnasio — y
+  por eso lleva `tenantId`. Esto es un prospecto _de Laplace_: quien escribe todavía no tiene
+  centro, así que por definición no puede tener `tenantId`. Dos cosas distintas con el mismo nombre
+  en castellano; el `Lead` con su pipeline llega en Fase 4.
+- **deuda declarada:**
+  - **Testimonios: la sección y el carousel están, el contenido no.** Inventar testimonios es
+    publicar reseñas falsas — quien las lee cree que un centro real dijo eso y decide con eso. El
+    componente recibe los reales cuando existan y haya permiso para usar el nombre.
+  - **Los textos legales necesitan un abogado.** Las tres páginas tienen su estructura y los hechos
+    técnicos que sí podemos afirmar (qué se guarda, los 90 días de retención de ADR-004, la Ley
+    25.326); las cláusulas vinculantes están marcadas como pendientes en vez de redactadas.
+  - **Las pantallas son maquetas de CSS, y lo dicen.** Una captura trucada le promete al visitante
+    algo que no va a encontrar. Se reemplazan por capturas reales sin tocar el texto.
+  - El `CLAUDE.md` de la landing pide servir los legales desde `LegalDocument`; **no aplica a los
+    de Laplace**, que no tienen tenant, y además romperían el prerender que §5.1.4 exige. Los del
+    centro sí salen de ahí (F1-20).
+  - Lighthouse CI (SEO ≥ 95, accesibilidad ≥ 95) queda para el pipeline de F1-31, junto con el E2E.
 
 ## [ ] F1-27 · DFSA mínimo
 

@@ -5,6 +5,7 @@ export * from './attendance/index.js';
 export * from './billing/index.js';
 export * from './booking/index.js';
 export * from './contracts/index.js';
+export * from './crm/index.js';
 export * from './invite-codes/index.js';
 export * from './members/index.js';
 export * from './metrics/index.js';

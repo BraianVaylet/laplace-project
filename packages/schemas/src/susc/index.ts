@@ -201,3 +201,63 @@ export const impersonationSchema = z.object({
 });
 
 export type Impersonation = z.infer<typeof impersonationSchema>;
+
+// ── Lo que la landing muestra de cada plan ──────────────────────────────────
+
+/**
+ * El catálogo tal como arranca, para poder **prerenderizarlo**.
+ *
+ * §5.1.4 pide que la landing rankee, y para eso los precios tienen que estar
+ * en el HTML servido, no aparecer después de un `fetch`. El precio vigente —
+ * el que el SAU puede cambiar — vive en la colección `plans`; esto es la copia
+ * que se hornea en el build.
+ *
+ * 🔴 Las dos tienen que decir lo mismo, y como una es TypeScript y la otra una
+ * migración `.cjs` no pueden compartir código: hay un test que compara las dos
+ * y falla si alguien cambia una sola.
+ */
+export interface LandingPlan {
+  planId: SubscriptionPlanId;
+  name: string;
+  priceCents: number;
+  description: string;
+  highlights: readonly string[];
+  /** El que la landing destaca: el piso real del producto (§2.2.1). */
+  featured?: boolean;
+}
+
+export const LANDING_PLANS: readonly LandingPlan[] = [
+  {
+    planId: 'basic',
+    name: 'Basic',
+    priceCents: 2_500_000,
+    description: 'Para el centro que arranca: una sede, hasta 60 socios.',
+    highlights: ['1 sede', 'Hasta 60 socios', '3 usuarios de staff', 'Cobranza manual'],
+  },
+  {
+    planId: 'pro',
+    name: 'Pro',
+    priceCents: 4_500_000,
+    description: 'El plan del box que ya funciona: QR, planificación y cobro online.',
+    highlights: [
+      'Hasta 3 sedes',
+      'Hasta 180 socios',
+      'Check-in con QR',
+      'Planificación y resultados',
+      'Cobro online',
+    ],
+    featured: true,
+  },
+  {
+    planId: 'max',
+    name: 'Max',
+    priceCents: 7_500_000,
+    description: 'Sin límites, con Health, CRM y marca propia en la app del socio.',
+    highlights: ['Sedes y socios sin límite', 'Health', 'CRM', 'Marca propia en la WAFM'],
+  },
+];
+
+/** "$45.000". Los precios viven en centavos enteros (§5.2.2). */
+export function formatArs(cents: number): string {
+  return `$${Math.round(cents / 100).toLocaleString('es-AR')}`;
+}

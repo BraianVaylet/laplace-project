@@ -18,6 +18,7 @@ import { createProductsModule } from './products/index.js';
 import { createScheduleModule, type SessionBookingReleaser } from './schedule/index.js';
 import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
 import { createVenuesModule } from './venues/index.js';
+import { createCrmModule } from './crm/index.js';
 import { createMetricsModule } from './metrics/index.js';
 import { createSuscModule, type OrganizationCreator } from './susc/index.js';
 import { createWaiverModule } from './waivers/index.js';
@@ -468,6 +469,14 @@ export function createModules(deps: ModuleDeps) {
 
   routes.route('/', susc.routes);
 
+  /*
+   * CRM en Fase 1 es solo el formulario de la landing: publico, sin sesion y
+   * sin tenant. El pipeline de leads de un centro es Fase 4.
+   */
+  const crm = createCrmModule({ now: deps.now ?? (() => Temporal.Now.instant()) });
+
+  routes.route('/', crm.routes);
+
   /** Todo lo que el runner tiene que programar (§10). */
   const jobs = [
     ...contracts.jobs,
@@ -495,6 +504,7 @@ export function createModules(deps: ModuleDeps) {
     notifications,
     metrics,
     susc,
+    crm,
   };
 }
 

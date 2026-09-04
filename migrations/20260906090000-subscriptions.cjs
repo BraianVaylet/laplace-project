@@ -14,12 +14,20 @@
 const COLLECTIONS = {
   subscription: 'subscriptions',
   plan: 'plans',
+  /**
+   * Lo que deja alguien en el formulario de la landing (F1-26). Tampoco lleva
+   * `tenantId`: quien escribe todavía no tiene centro. El `Lead` de §5.2.2 —
+   * el prospecto **de un centro** — es otra cosa y llega con el CRM de Fase 4.
+   */
+  contactRequest: 'contactRequests',
 };
 
 const INDEXES = [
   [COLLECTIONS.subscription, { organizationId: 1 }, { unique: true, name: 'organization_unique' }],
   [COLLECTIONS.subscription, { status: 1, trialEndsAt: 1 }, { name: 'status_trial_end' }],
   [COLLECTIONS.plan, { planId: 1 }, { unique: true, name: 'plan_unique' }],
+  // Por fecha: la bandeja se lee de lo más nuevo a lo más viejo.
+  [COLLECTIONS.contactRequest, { receivedAt: -1 }, { name: 'received_at' }],
 ];
 
 /**

@@ -37,6 +37,7 @@ export const COLLECTIONS = {
   // Plataforma: datos SOBRE los centros, no DE un centro (§2.1.3, §2.1.4).
   subscription: 'subscriptions',
   plan: 'plans',
+  contactRequest: 'contactRequests',
   // Infraestructura
   loginAttempt: 'loginAttempt',
   jobLock: 'jobLock',
