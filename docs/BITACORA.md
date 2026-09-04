@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `metrics` (nuevo) · `venues` · `schedule` · `booking` · `members` · `billing`
 - **Tipo:** feature
-- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `8c981df` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/HWDINRZV (F1-23) — movida a **Completadas**
 - **Qué cambió:** el job `computeMetricsDaily` corre a las 03:00 y deja precalculados, por sede y
   por día, los seis KPIs de Fase 1: socios activos, asistencias, utilización, tasa de no-show,
