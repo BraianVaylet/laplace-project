@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `susc`
 - **Tipo:** feature
-- **Commit/PR:** —
+- **Commit/PR:** `2801f3c` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/N3mXndHu (F1-30) — movida a **Completadas**
 - **Qué cambió:** el SMU que recién se registró abre el DFSM y encuentra el camino: crear la sede,
   cargar los horarios, publicar la primera clase, crear un producto e invitar socios, con barra de
