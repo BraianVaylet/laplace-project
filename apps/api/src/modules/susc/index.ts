@@ -8,6 +8,7 @@ import { SuscService } from './application/susc-service.js';
 import type { ErrorEventStore } from '../../observability/error-events.js';
 import { NULL_ERROR_EVENT_STORE } from '../../observability/error-events.js';
 import type {
+  CenterSetupLookup,
   JobRunLookup,
   OrganizationCreator,
   PlanLimitsLookup,
@@ -32,6 +33,8 @@ export interface SuscModule {
 export interface SuscModuleDeps {
   organizations: OrganizationCreator;
   usage: UsageLookup;
+  /** Lo que el centro ya cargó, para el asistente de onboarding (§2.1.3). */
+  setup: CenterSetupLookup;
   limits: PlanLimitsLookup;
   audit: AuditWriter;
   events: DomainEventBus;
@@ -51,6 +54,7 @@ export function createSuscModule(deps: SuscModuleDeps): SuscModule {
     plans: new PlanRepository(),
     organizations: deps.organizations,
     usage: deps.usage,
+    setup: deps.setup,
     limits: deps.limits,
     audit: deps.audit,
     events: deps.events,
@@ -100,6 +104,7 @@ export function createSuscModule(deps: SuscModuleDeps): SuscModule {
 
 export type { SuscService } from './application/susc-service.js';
 export type {
+  CenterSetupLookup,
   JobRunLookup,
   OrganizationCreator,
   PlanLimitsLookup,

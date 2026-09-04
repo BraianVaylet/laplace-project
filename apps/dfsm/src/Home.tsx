@@ -3,6 +3,7 @@ import { Link } from '@tanstack/react-router';
 import type { Alert, AlertType, Dashboard, DashboardSession } from '@laplace/schemas';
 import { ApiRequestError, useUiStore, type ApiClient } from '@laplace/client';
 import { Badge, Button, Card, EmptyState, ErrorState, Skeleton } from '@laplace/ui';
+import { Onboarding } from './Onboarding.js';
 import { api } from './api.js';
 
 /**
@@ -29,13 +30,24 @@ export function Home({ client = api }: HomeProps = {}) {
     enabled: Boolean(activeVenueId),
   });
 
+  /*
+   * 🔴 El asistente va **antes** del "elegí un centro", no después.
+   *
+   * El que acaba de registrarse no tiene ninguna sede, así que el tablero le
+   * muestra un estado vacío sin salida: la pantalla que se ve el primer día es
+   * justamente la que no explica qué hacer. Acá el asistente ocupa ese lugar
+   * hasta que el centro esté armado, y después desaparece solo.
+   */
   if (!activeVenueId) {
     return (
-      <EmptyState
-        title="Elegí un centro"
-        description="El tablero muestra el día de una sede a la vez."
-        action={<Button disabled>Sin centro activo</Button>}
-      />
+      <div className="flex flex-col gap-6">
+        <Onboarding client={client} />
+        <EmptyState
+          title="Elegí un centro"
+          description="El tablero muestra el día de una sede a la vez."
+          action={<Button disabled>Sin centro activo</Button>}
+        />
+      </div>
     );
   }
 
@@ -63,6 +75,8 @@ export function Home({ client = api }: HomeProps = {}) {
 
   return (
     <div className="flex flex-col gap-6">
+      <Onboarding client={client} />
+
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <h1 className="text-fg text-xl font-semibold">Hoy</h1>
         <p className="text-fg-muted text-sm">{tablero.data.date}</p>

@@ -12,6 +12,8 @@ import {
   type Subscription,
   type SubscriptionPlanId,
   type HealthPanel,
+  type OnboardingProgress,
+  type OnboardingStepId,
   type SubscriberUsage,
   type SupportHit,
   type SupportQuery,
@@ -22,6 +24,7 @@ import type { AuditWriter } from '../../../audit/audit-log.js';
 import type { DomainEventBus } from '../../../events/bus.js';
 import { AppError } from '../../../http/errors.js';
 import { fromBsonDate, toBsonDate } from '../../../persistence/bson-date.js';
+import { buildOnboarding, isOnboardingComplete } from '../domain/onboarding.js';
 import { runWithTenant } from '../../../tenancy/context.js';
 import {
   assertFitsInPlan,
@@ -35,13 +38,21 @@ import {
 import type { PlanDoc, SubscriptionDoc } from '../infrastructure/susc.model.js';
 import type { PlanRepository, SubscriptionRepository } from '../infrastructure/susc.repository.js';
 import type { ErrorEventStore } from '../../../observability/error-events.js';
-import type { JobRunLookup, OrganizationCreator, PlanLimitsLookup, UsageLookup } from './ports.js';
+import type {
+  CenterSetupLookup,
+  JobRunLookup,
+  OrganizationCreator,
+  PlanLimitsLookup,
+  UsageLookup,
+} from './ports.js';
 
 export interface SuscServiceDeps {
   subscriptions: SubscriptionRepository;
   plans: PlanRepository;
   organizations: OrganizationCreator;
   usage: UsageLookup;
+  /** Lo que el centro ya cargó, para el asistente de onboarding (§2.1.3). */
+  setup: CenterSetupLookup;
   limits: PlanLimitsLookup;
   audit: AuditWriter;
   events: DomainEventBus;
@@ -89,6 +100,7 @@ export class SuscService {
       timeZone: input.timeZone,
       trialEndsAt: trialEndsAt(ahora, input.timeZone),
       currentPeriodEndsAt: periodEndsAt(ahora, input.timeZone),
+      signedUpAt: ahora,
     });
 
     if (!creada) {
@@ -280,6 +292,86 @@ export class SuscService {
     }
 
     return aplicados;
+  }
+
+  // ── Onboarding (§2.1.3) ───────────────────────────────────────────────────
+
+  /**
+   * El asistente guiado. La métrica de §2.0 es **time-to-first-class < 30 min**:
+   * es donde se pierde el SaaS.
+   *
+   * 🔴 El progreso se **cuenta**, no se declara: cada paso mira si la cosa
+   * existe de verdad. Lo único que el usuario declara es qué salteó, y saltear
+   * deja el paso pendiente, no hecho.
+   *
+   * Leerlo tiene dos efectos de escritura, y los dos son sobre hechos que no se
+   * pueden recalcular después: la fecha de la primera clase publicada —de ahí
+   * sale la métrica— y la de terminado.
+   */
+  async onboarding(organizationId: string): Promise<OnboardingProgress> {
+    const suscripcion = await this.orFail(organizationId);
+    const setup = await this.deps.setup.of(organizationId);
+    const ahora = this.deps.now();
+    const estado = suscripcion.onboarding ?? SIN_ONBOARDING;
+
+    // Se sella la primera vez que se lo ve, no cuando se publica: el módulo de
+    // agenda no conoce al de suscripciones, y atarlos por un evento para una
+    // métrica sería acoplar dos módulos por un número.
+    const primeraClase =
+      estado.firstClassPublishedAt ?? (setup.classTemplates > 0 ? toBsonDate(ahora) : null);
+
+    const terminado =
+      estado.completedAt ?? (isOnboardingComplete(setup) ? toBsonDate(ahora) : null);
+
+    if (primeraClase !== estado.firstClassPublishedAt || terminado !== estado.completedAt) {
+      await this.deps.subscriptions.update(organizationId, {
+        onboarding: {
+          skippedSteps: estado.skippedSteps,
+          completedAt: terminado,
+          firstClassPublishedAt: primeraClase,
+        },
+      });
+    }
+
+    return buildOnboarding({
+      setup,
+      skipped: estado.skippedSteps,
+      completedAt: terminado ? fromBsonDate(terminado).toString() : null,
+      signedUpAt: suscripcion.signedUpAt ? fromBsonDate(suscripcion.signedUpAt).toString() : null,
+      firstClassPublishedAt: primeraClase ? fromBsonDate(primeraClase).toString() : null,
+      now: ahora.toString(),
+    });
+  }
+
+  /**
+   * "Lo dejo para después" (§2.1.3). No marca el paso hecho: lo saca del camino
+   * del asistente y lo deja pendiente, que es lo que realmente está.
+   */
+  async skipStep(organizationId: string, stepId: OnboardingStepId): Promise<OnboardingProgress> {
+    return this.setSkipped(organizationId, (actuales) =>
+      actuales.includes(stepId) ? actuales : [...actuales, stepId],
+    );
+  }
+
+  /** Volver a un paso salteado: el criterio dice "y volver después". */
+  async resumeStep(organizationId: string, stepId: OnboardingStepId): Promise<OnboardingProgress> {
+    return this.setSkipped(organizationId, (actuales) =>
+      actuales.filter((paso) => paso !== stepId),
+    );
+  }
+
+  private async setSkipped(
+    organizationId: string,
+    cambio: (actuales: string[]) => string[],
+  ): Promise<OnboardingProgress> {
+    const suscripcion = await this.orFail(organizationId);
+    const estado = suscripcion.onboarding ?? SIN_ONBOARDING;
+
+    await this.deps.subscriptions.update(organizationId, {
+      onboarding: { ...estado, skippedSteps: cambio(estado.skippedSteps) },
+    });
+
+    return this.onboarding(organizationId);
   }
 
   // ── Datos fiscales ────────────────────────────────────────────────────────
@@ -496,6 +588,13 @@ export class SuscService {
     );
   }
 }
+
+/** El default de las suscripciones creadas antes de que existiera el asistente. */
+const SIN_ONBOARDING = {
+  skippedSteps: [] as string[],
+  completedAt: null,
+  firstClassPublishedAt: null,
+};
 
 /** ¿Algo ya pasó el tope de su plan? Es la señal de upsell del panel. */
 function excedeAlgo(

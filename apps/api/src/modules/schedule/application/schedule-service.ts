@@ -103,6 +103,11 @@ export class ScheduleService {
     return this.templates.create({ ...input, active: true } as Partial<ClassTemplateDoc>);
   }
 
+  /** Cuantas plantillas activas hay. La consulta el asistente de onboarding. */
+  countTemplates(): Promise<number> {
+    return this.templates.countActive();
+  }
+
   async listTemplates(
     venueId?: string,
     cursor?: string,

@@ -473,6 +473,24 @@ export function createModules(deps: ModuleDeps) {
           }),
         ),
     },
+    /*
+     * El progreso del asistente se **cuenta**, no se declara: cada paso mira si
+     * la cosa existe de verdad. Un checklist auto-declarado dice "clase
+     * publicada" sin que exista una clase.
+     */
+    setup: {
+      of: async (organizationId) =>
+        runWithTenant(
+          { tenantId: organizationId, userId: 'system:onboarding', requestId: 'onboarding-check' },
+          async () => ({
+            venues: await venues.service.countActive(),
+            venuesWithHours: await venues.service.countWithBusinessHours(),
+            classTemplates: await schedule.service.countTemplates(),
+            products: await products.service.countActive(),
+            inviteCodes: await members.inviteCodes.countLive(),
+          }),
+        ),
+    },
     limits: {
       of: (planId) => {
         const { limits } = planFor(planId as PlanId);

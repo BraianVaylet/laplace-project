@@ -17,6 +17,11 @@ export class ClassTemplateRepository extends TenantRepository<ClassTemplateDoc> 
     super(ClassTemplateModel, 'classTemplate');
   }
 
+  /** Cuantas plantillas activas hay. La consulta el asistente de onboarding. */
+  async countActive(): Promise<number> {
+    return this.count({ active: true } as FilterQuery<ClassTemplateDoc>);
+  }
+
   /**
    * 🔴 Plantillas activas de **todos los tenants**, para el job que materializa.
    *

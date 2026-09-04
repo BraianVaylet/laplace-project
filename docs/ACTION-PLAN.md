@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     28 |
+| Fase 1 — MVP vendible   |       32 |          186 |     29 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1745,7 +1745,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   preferencias de notificación del criterio quedan en la pantalla de F1-21, que es donde vive el
   motor. El QR ya estaba a 1 tap desde F1-19.
 
-## [ ] F1-30 · Onboarding guiado del SMU
+## [x] F1-30 · Onboarding guiado del SMU
 
 - **module:** susc
 - **description:** El asistente de §2.1.3. La métrica de éxito de §2.0 es
@@ -1769,6 +1769,31 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   Test de que cada paso se puede saltear.
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** `Organization.onboarding { step, completedSteps[], completedAt }`.
+- **cómo se cerró, y en qué se desvió del impacto que decía la tarjeta:** el progreso **se cuenta,
+  no se declara**. Cada paso mira si la cosa existe de verdad —hay sede, hay horario, hay plantilla
+  de clase, hay producto, hay código de invitación—, así que `step` y `completedSteps[]` no se
+  guardan: un checklist auto-declarado marca "clase publicada" sin que exista una clase, y el SMU
+  se entera cuando un socio abre la app y no encuentra nada. Lo único que se persiste es lo que el
+  usuario declara (qué salteó) y los dos hechos que no se pueden recalcular: cuándo terminó y
+  cuándo publicó su primera clase. **Saltear no marca hecho:** saca el paso del camino y lo deja
+  pendiente, que es lo que realmente está — una barra en 100% con el centro vacío es peor que no
+  tener barra. Vive en `Subscription`, no en la `Organization` de Better Auth: ese documento es de
+  la librería, y meterle campos propios es cómo se rompe la próxima migración de identidad.
+- **el time-to-first-class quedó medido, no estimado:** §2.0 pide menos de 30 minutos, y sin el
+  número nadie lo verifica. Se sella la primera vez que se ve una plantilla publicada y no se
+  recalcula: si se leyera con el reloj de cada consulta, la métrica diría lo que tardó en abrir la
+  pantalla. El alta guarda su propio `signedUpAt` con el reloj inyectable — `createdAt` lo escribe
+  Mongoose con el reloj de pared y ningún test puede moverlo (es el tropiezo de F1-23).
+- **el asistente va arriba del tablero, y antes del "elegí un centro":** el que recién se registra
+  no tiene ninguna sede, así que el home le mostraba un estado vacío sin salida. La pantalla del
+  primer día era justo la que no explicaba qué hacer. Cuando el onboarding termina, el bloque
+  desaparece solo: dejarlo para siempre le roba el lugar al tablero, que es lo que se mira todas
+  las mañanas.
+- **deuda declarada:** los pasos llevan a `/sedes`, `/horario`, `/productos` y `/miembros`, que son
+  las rutas del menú del DFSM y **todavía no tienen pantalla** — igual que los ítems del `AppShell`
+  desde F0-13. El asistente dice qué falta y lo mide bien; llevar de la mano hasta el formulario
+  necesita esas altas, que son de F1-06 y de lo que quede de Fase 1. La prueba real de los 30
+  minutos es del E2E de F1-31.
 
 ## [ ] F1-31 · E2E de los tres caminos críticos
 

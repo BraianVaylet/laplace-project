@@ -23,6 +23,28 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-04 — F1-30: el asistente de primeros pasos
+
+- **Módulo:** `susc`
+- **Tipo:** feature
+- **Commit/PR:** —
+- **Trello:** https://trello.com/c/N3mXndHu (F1-30) — movida a **Completadas**
+- **Qué cambió:** el SMU que recién se registró abre el DFSM y encuentra el camino: crear la sede,
+  cargar los horarios, publicar la primera clase, crear un producto e invitar socios, con barra de
+  progreso, la opción de dejar cualquier paso para después y la de retomarlo. Tres rutas nuevas bajo
+  `/api/v1/subscription/onboarding`.
+- **Por qué:** la métrica de §2.0 es time-to-first-class menor a 30 minutos, y el home del primer
+  día era un "elegí un centro" sin salida: el que acaba de registrarse no tiene ninguna sede.
+- **Impacto:** `Subscription` suma `signedUpAt` y `onboarding { skippedSteps, completedAt,
+firstClassPublishedAt }`. **No** guarda `step` ni `completedSteps[]` como decía la tarjeta: el
+  progreso se cuenta del estado real del centro en cada consulta, porque un checklist
+  auto-declarado marca "clase publicada" sin que exista una clase. Saltear un paso lo deja
+  pendiente, nunca hecho. Ningún código de error nuevo: el paso inventado en la URL contesta
+  `LP-SYS-422-006`, que ya es el de validación en el borde.
+- **Pendiente:** las pantallas de alta de sede, clase, producto y códigos del DFSM no existen
+  todavía, así que el asistente marca el camino pero no lleva hasta el formulario. La prueba real
+  de los 30 minutos es del E2E de F1-31.
+
 ## 2026-09-04 — F1-29: lo del socio sobre lo suyo
 
 - **Módulo:** `account`

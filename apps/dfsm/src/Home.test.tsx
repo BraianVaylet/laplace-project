@@ -167,11 +167,16 @@ describe('los estados de la pantalla', () => {
     expect(screen.getByRole('button', { name: 'Reintentar' })).toBeDefined();
   });
 
-  it('sin centro activo, pide elegir uno y no pega a la API', async () => {
+  it('sin centro activo, pide elegir uno y no pide el tablero', async () => {
+    /*
+     * El tablero es de una sede: sin sede elegida no hay nada que pedir. El
+     * asistente de primeros pasos sí consulta, y es justamente el caso donde
+     * tiene que aparecer — el que recién se registró no tiene ninguna sede.
+     */
     useUiStore.setState({ activeVenueId: null });
     montar();
 
     expect(await screen.findByText('Elegí un centro')).toBeDefined();
-    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls.some(([url]) => String(url).includes('/dashboard'))).toBe(false);
   });
 });
