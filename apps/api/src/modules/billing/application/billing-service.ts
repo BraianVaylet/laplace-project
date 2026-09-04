@@ -343,6 +343,36 @@ export class BillingService {
 
   /** Anula un cargo. Tampoco se borra: queda en `void` y deja de contar. */
   /**
+   * La plata de un dia, en el calendario del centro. Es el puerto que consume
+   * Metrics (F1-23).
+   *
+   * El ingreso sale del arqueo, que ya sabe descontar reembolsos: dos formas de
+   * calcular "lo que entro hoy" serian dos numeros distintos en dos pantallas
+   * del mismo producto.
+   */
+  async dailyTotalsOf(
+    venueId: string,
+    date: string,
+    timeZone: string,
+  ): Promise<{ incomeCents: number; chargedCents: number; overdueCents: number }> {
+    const desde = Temporal.PlainDate.from(date).toZonedDateTime({ timeZone });
+    const hasta = desde.add({ days: 1 });
+
+    const caja = await this.till(venueId, date, timeZone);
+
+    return {
+      incomeCents: caja.totalCents,
+      chargedCents: await this.charges.chargedBetween(
+        venueId,
+        toBsonDate(desde.toInstant()),
+        toBsonDate(hasta.toInstant()),
+      ),
+      // Al cierre del dia, no al principio: la deuda que vencio hoy cuenta hoy.
+      overdueCents: await this.charges.overdueAt(venueId, toBsonDate(hasta.toInstant())),
+    };
+  }
+
+  /**
    * El cargo y el pago, como los necesita un aviso: de que sede son y de que
    * fecha. Son los puertos que consume Notifications (F1-22), y devuelven
    * `null` en vez de tirar: un aviso que no encuentra su cargo no sale, no

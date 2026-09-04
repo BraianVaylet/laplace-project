@@ -489,6 +489,30 @@ export class ScheduleService {
     }));
   }
 
+  /**
+   * Las clases de una ventana con su cupo. Es el puerto que consume Metrics
+   * (F1-23): el numerador de la utilizacion lo cuenta Booking, el denominador
+   * sale de aca.
+   *
+   * Las canceladas quedan afuera: una clase que no se dio no tiene cupo que
+   * llenar, y contarla hundiria la utilizacion del dia sin que nadie hiciera
+   * nada mal.
+   */
+  async sessionsOfWindow(
+    venueId: string,
+    from: Temporal.Instant,
+    to: Temporal.Instant,
+  ): Promise<Array<{ sessionId: string; capacity: number }>> {
+    const clases = await this.sessions.between(venueId, from, to, {
+      status: { $ne: 'cancelled' },
+    } as never);
+
+    return clases.map((clase) => ({
+      sessionId: String(clase['publicId']),
+      capacity: clase.capacity,
+    }));
+  }
+
   /** Cuántas clases futuras tiene una sala. Es el puerto que consume Rooms (F1-02). */
   async countFutureSessions(roomId: string): Promise<number> {
     return this.sessions.countFutureOfRoom(roomId, this.now());

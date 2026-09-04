@@ -23,6 +23,27 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-04 — F1-23: MetricsDaily y los KPIs del centro
+
+- **Módulo:** `metrics` (nuevo) · `venues` · `schedule` · `booking` · `members` · `billing`
+- **Tipo:** feature
+- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/HWDINRZV (F1-23) — movida a **Completadas**
+- **Qué cambió:** el job `computeMetricsDaily` corre a las 03:00 y deja precalculados, por sede y
+  por día, los seis KPIs de Fase 1: socios activos, asistencias, utilización, tasa de no-show,
+  ingresos y deuda vencida. El panel del DFSM los lee ya calculados. Un día pasado se puede
+  reprocesar a mano cuando aparecen datos tarde.
+- **Por qué:** §2.1.12. Calcular KPIs con agregaciones en vivo sobre colecciones que crecen es la
+  causa número uno de dashboards lentos, y el dashboard lento es el que nadie abre.
+- **Impacto:** colección `metricsDaily` estrena dueño (el único `{ tenantId, venueId, date }` ya
+  venía de F0-10, sin migración nueva) · 2 endpoints nuevos bajo `/api/v1/metrics`, los dos con
+  permiso `businessMetrics.read` — el staff no ve métricas de negocio (§2.1.12) · job
+  `computeMetricsDaily` · cinco puertos de lectura nuevos en Venues, Schedule, Booking, Members y
+  Billing, todos de conteo · ningún código de error nuevo.
+- **Pendiente:** MRR, churn, ARPM, LTV, retención a 90 días, conversión de waitlist, utilización de
+  coach y cohortes son Fase 2: necesitan Suscriptions (F1-25) o series más largas que las que hay.
+  El panel visual del DFSM y las alertas accionables son F1-24.
+
 ## 2026-09-03 — F1-22: los avisos transaccionales del MVP
 
 - **Módulo:** `notifications` · `booking` · `schedule` · `contracts` · `billing`

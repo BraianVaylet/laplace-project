@@ -18,4 +18,20 @@ export class VenueRepository extends TenantRepository<VenueDoc> {
   async countActive(): Promise<number> {
     return this.count({ status: 'active' } as FilterQuery<VenueDoc>);
   }
+
+  /**
+   * 🔴 Todas las sedes activas de **todos los tenants**, para el job de
+   * metricas.
+   *
+   * Un job no corre dentro del pedido de nadie: es el mismo uso legitimo de
+   * `skipTenantScope` que documenta el plugin. Devuelve el `tenantId` para que
+   * el servicio abra el contexto de cada centro antes de tocar nada.
+   */
+  async allAcrossTenants(limit = 2000): Promise<VenueDoc[]> {
+    return VenueModel.find({ deletedAt: null, status: 'active' })
+      .setOptions({ skipTenantScope: true })
+      .limit(limit)
+      .lean<VenueDoc[]>()
+      .exec();
+  }
 }

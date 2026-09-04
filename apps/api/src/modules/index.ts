@@ -15,6 +15,7 @@ import { createProductsModule } from './products/index.js';
 import { createScheduleModule, type SessionBookingReleaser } from './schedule/index.js';
 import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
 import { createVenuesModule } from './venues/index.js';
+import { createMetricsModule } from './metrics/index.js';
 import { createWaiverModule } from './waivers/index.js';
 import {
   createLoggingMailer,
@@ -341,6 +342,30 @@ export function createModules(deps: ModuleDeps) {
 
   routes.route('/', notifications.routes);
 
+  /*
+   * Metrics tambien va al final y tampoco lo conoce nadie: solo lee y cuenta
+   * (ADR-003). Ningun puerto suyo escribe, a proposito — un modulo de metricas
+   * que puede tocar datos es un modulo de metricas que algun dia los va a tocar.
+   */
+  const metrics = createMetricsModule({
+    entitlements: deps.entitlements,
+    now: deps.now ?? (() => Temporal.Now.instant()),
+    venues: {
+      allAcrossTenants: () => venues.service.allAcrossTenants(),
+      timeZoneOf: (venueId) => venues.service.timeZoneOf(venueId),
+    },
+    sessions: {
+      ofWindow: (venueId, from, to) => schedule.service.sessionsOfWindow(venueId, from, to),
+    },
+    bookings: { byStatusOf: (sessionIds) => booking.service.countByStatusOf(sessionIds) },
+    members: { activeIn: (venueId) => members.service.activeCountIn(venueId) },
+    billing: {
+      ofDay: (venueId, date, timeZone) => billing.service.dailyTotalsOf(venueId, date, timeZone),
+    },
+  });
+
+  routes.route('/', metrics.routes);
+
   /** Todo lo que el runner tiene que programar (§10). */
   const jobs = [
     ...contracts.jobs,
@@ -348,6 +373,7 @@ export function createModules(deps: ModuleDeps) {
     ...schedule.jobs,
     ...booking.jobs,
     ...notifications.jobs,
+    ...metrics.jobs,
   ];
 
   return {
@@ -364,6 +390,7 @@ export function createModules(deps: ModuleDeps) {
     waivers,
     attendance,
     notifications,
+    metrics,
   };
 }
 

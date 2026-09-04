@@ -28,6 +28,16 @@ export class MemberRepository extends TenantRepository<MemberDoc> {
     return this.count({ status: { $ne: 'archived' } } as FilterQuery<MemberDoc>);
   }
 
+  /**
+   * Socios activos de una sede. `active` de verdad, no "todo lo que no esta
+   * archivado": es el denominador de las asistencias por socio y de la
+   * morosidad (§2.1.12), y meter ahi a los `lead` y a los `inactive` haria que
+   * los dos KPI mientan hacia abajo.
+   */
+  async countActiveIn(venueId: string): Promise<number> {
+    return this.count({ status: 'active', venueIds: venueId } as FilterQuery<MemberDoc>);
+  }
+
   async findByDocId(docId: string): Promise<MemberDoc | null> {
     return this.findOne({ docId } as FilterQuery<MemberDoc>);
   }

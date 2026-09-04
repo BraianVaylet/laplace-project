@@ -116,6 +116,23 @@ export class VenueService {
   }
 
   /**
+   * Todas las sedes activas de todos los centros, con su zona horaria. Es el
+   * puerto que consume el job de metricas (F1-23): recorre centro por centro y
+   * abre el contexto de cada uno antes de tocar nada.
+   */
+  async allAcrossTenants(): Promise<
+    Array<{ tenantId: string; venueId: string; timeZone: string }>
+  > {
+    const sedes = await this.venues.allAcrossTenants();
+
+    return sedes.map((venue) => ({
+      tenantId: String(venue['tenantId']),
+      venueId: String(venue['publicId']),
+      timeZone: venue.timeZone,
+    }));
+  }
+
+  /**
    * El nombre y la zona de una sede, sin romper si no existe. Es el puerto que
    * consume Notifications: un aviso al que le falta el nombre de la sede sale
    * igual, y hacerlo fallar seria peor que decir "el centro".

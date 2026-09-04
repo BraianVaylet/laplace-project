@@ -31,6 +31,7 @@ export const ID_PREFIXES = {
   lead: 'led',
   legalDocument: 'doc',
   consent: 'cst',
+  metricsDaily: 'mtd',
 } as const;
 
 export type IdEntity = keyof typeof ID_PREFIXES;

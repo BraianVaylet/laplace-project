@@ -41,6 +41,53 @@ export class ChargeRepository extends TenantRepository<ChargeDoc> {
   }
 
   /**
+   * Lo que se facturo en una ventana, en una sede. Lo consume Metrics (F1-23).
+   *
+   * La ventana corre sobre `dueAt` y no sobre `createdAt`: un cargo pertenece
+   * al periodo en el que vence, que es como un centro piensa su facturacion
+   * mensual. `createdAt` ademas lo pone Mongoose con el reloj de pared, asi que
+   * no se puede ni testear con un reloj fijo.
+   */
+  async chargedBetween(venueId: string, from: Date, to: Date): Promise<number> {
+    const filas = await ChargeModel.aggregate<{ total: number }>([
+      {
+        $match: {
+          venueId,
+          deletedAt: null,
+          // Un cargo anulado no se facturo: contarlo inflaria el denominador
+          // de la morosidad y la haria parecer mas baja de lo que es.
+          status: { $ne: 'void' },
+          dueAt: { $gte: from, $lt: to },
+        },
+      },
+      { $group: { _id: null, total: { $sum: '$amountCents' } } },
+    ]).exec();
+
+    return filas[0]?.total ?? 0;
+  }
+
+  /**
+   * Deuda vencida al cierre de un dia: lo que ya vencio y no se pago. Es una
+   * foto, no un flujo — por eso se pregunta por un instante y no por un rango.
+   */
+  async overdueAt(venueId: string, at: Date): Promise<number> {
+    const filas = await ChargeModel.aggregate<{ total: number }>([
+      {
+        $match: {
+          venueId,
+          deletedAt: null,
+          status: { $in: ['pending', 'overdue'] },
+          dueAt: { $lte: at },
+          $expr: { $lt: ['$paidCents', '$amountCents'] },
+        },
+      },
+      { $group: { _id: null, total: { $sum: { $subtract: ['$amountCents', '$paidCents'] } } } },
+    ]).exec();
+
+    return filas[0]?.total ?? 0;
+  }
+
+  /**
    * 🔴 Cargos vencidos e impagos de **todos los tenants**, para el job de mora.
    *
    * Un job no corre dentro del pedido de nadie: es el mismo uso legitimo de

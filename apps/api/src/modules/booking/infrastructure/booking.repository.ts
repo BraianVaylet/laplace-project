@@ -34,6 +34,26 @@ export class BookingRepository extends TenantRepository<BookingDoc> {
   }
 
   /**
+   * Cuantas reservas hay de cada estado, para un puñado de clases. Es lo que
+   * consume Metrics (F1-23): contarlas una por una serian tantas consultas como
+   * clases tiene el dia.
+   *
+   * El plugin de tenant antepone su `$match` a la agregacion (ADR-000 regla 3),
+   * asi que esto no puede leer las clases de otro centro aunque le pasen sus
+   * IDs.
+   */
+  async countByStatusOfSessions(sessionIds: readonly string[]): Promise<Record<string, number>> {
+    if (sessionIds.length === 0) return {};
+
+    const filas = await BookingModel.aggregate<{ _id: string; total: number }>([
+      { $match: { sessionId: { $in: [...sessionIds] }, deletedAt: null } },
+      { $group: { _id: '$status', total: { $sum: 1 } } },
+    ]).exec();
+
+    return Object.fromEntries(filas.map((fila) => [fila._id, fila.total]));
+  }
+
+  /**
    * Las reservas vivas de un contrato. Cuales son futuras lo decide quien llama,
    * que es el que sabe leer la agenda.
    */

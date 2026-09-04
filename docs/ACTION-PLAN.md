@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     21 |
+| Fase 1 — MVP vendible   |       32 |          186 |     22 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1461,7 +1461,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   quién: resolver un nombre de staff necesita un directorio que hoy no existe (los usuarios del
   staff los guarda Better Auth, no Members).
 
-## [ ] F1-23 · MetricsDaily y KPIs básicos
+## [x] F1-23 · MetricsDaily y KPIs básicos
 
 - **module:** metrics
 - **description:** Los agregados diarios precalculados de §2.1.12. Calcular KPIs con agregaciones en
@@ -1484,7 +1484,13 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **test_plan:** Test de cada KPI con datos sembrados y resultado esperado calculado a mano. Test
   de idempotencia del job. Test de que el panel no ejecuta agregaciones en vivo. Aislamiento.
 - **error-codes:** ninguno nuevo
-- **data-model-impact:** `MetricsDaily` de §5.2.2. Índice único `{ tenantId, venueId, date }`.
+- **data-model-impact:** `MetricsDaily` de §5.2.2. Índice único `{ tenantId, venueId, date }` — ya
+  venía en la migración base (F0-10), sin migración nueva.
+- **deuda declarada:** los KPIs de Fase 1 son los seis de la tarjeta. MRR, churn, ARPM, LTV,
+  retención a 90 días, conversión de waitlist, utilización de coach y cohortes son Fase 2: necesitan
+  Suscriptions (F1-25) o series más largas que las que hay. "Lo facturado" corre sobre `dueAt` y no
+  sobre `createdAt`: un cargo pertenece al período en el que vence, que es como un centro piensa su
+  facturación mensual.
 
 ## [ ] F1-24 · DFSM Home: tablero operativo del día
 

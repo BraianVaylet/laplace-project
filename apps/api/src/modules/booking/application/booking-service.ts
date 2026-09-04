@@ -813,6 +813,15 @@ export class BookingService {
     return this.bookings.awaitingCheckInOfMember(memberId);
   }
 
+  /**
+   * Cuantas reservas de cada estado tienen estas clases. Es el puerto que
+   * consume Metrics (F1-23), y el unico que devuelve conteos en vez de
+   * documentos: el panel no necesita saber quien reservo, necesita cuantos.
+   */
+  async countByStatusOf(sessionIds: readonly string[]): Promise<Record<string, number>> {
+    return this.bookings.countByStatusOfSessions(sessionIds);
+  }
+
   /** Todas las reservas vivas de una clase. La consume la lista del coach. */
   async ofSession(sessionId: string): Promise<BookingDoc[]> {
     return this.bookings.liveOfSession(sessionId);

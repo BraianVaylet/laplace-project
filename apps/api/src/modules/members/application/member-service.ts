@@ -324,6 +324,11 @@ export class MemberService {
     };
   }
 
+  /** Socios activos de una sede. Es el puerto que consume Metrics (F1-23). */
+  async activeCountIn(venueId: string): Promise<number> {
+    return this.members.countActiveIn(venueId);
+  }
+
   /** Lo consume el guard de entitlements. Cuenta los que ocupan cupo. */
   countActive(): Promise<number> {
     return this.members.countActive();
