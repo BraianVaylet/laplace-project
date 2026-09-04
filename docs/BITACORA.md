@@ -45,7 +45,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `booking`
 - **Tipo:** fix
-- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `5a8ca45` (rama `feat/phase-1-mvp`)
 - **Trello:** —
 - **Qué cambió:** `GET /api/v1/bookings` aceptaba `?memberId=` sin chequear permiso. Como
   `booking.read` lo tiene también el socio — lo necesita para ver las suyas —, cualquiera podía
@@ -64,7 +64,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `wafm` · `booking` · `auth`
 - **Tipo:** feature
-- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `5a8ca45` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/Vfq9bsed (F1-28) — movida a **Completadas**
 - **Qué cambió:** el socio abre la WAFM, ve el horario de la semana con el cupo de cada clase,
   reserva y cancela. El botón responde **al instante** y se revierte con el mensaje del error si la
