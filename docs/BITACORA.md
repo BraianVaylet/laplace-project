@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `ci`
 - **Tipo:** infra
-- **Commit/PR:** —
+- **Commit/PR:** `62c7b8d` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/3aLdhhHu (F1-31) — movida a **Completadas**
 - **Qué cambió:** `pnpm test:e2e` recorre los tres caminos que §Testing.7 no negocia —alta y primera
   clase publicada, reservar/cancelar/recuperar el crédito, y asistencia con el no-show que marca el
