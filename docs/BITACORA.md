@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `members`
 - **Tipo:** feature
-- **Commit/PR:** —
+- **Commit/PR:** `442d7f3` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/gWV6GOZC (F1-06) — movida a **Completadas**
 - **Qué cambió:** el DFSM tiene la pantalla que más se usa: abrís un socio desde el buscador y ves
   sus datos, su estado de cuenta, sus packs con lo que le queda, lo que tiene reservado, su
