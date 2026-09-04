@@ -19,6 +19,7 @@
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
 | Fase 1 — MVP vendible   |       32 |          186 |     32 |
+| Fase 1 — deuda de UI    |        5 |           31 |      1 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1912,6 +1913,157 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **deuda declarada:** la prueba de "clonar en una máquina limpia y que levante" es manual y queda
   pendiente de una máquina limpia de verdad. Lo que sí se verificó es que cada comando, puerto y
   ruta del documento técnico existe tal como está escrito.
+
+---
+
+# Fase 1 — deuda declarada
+
+> **No es Fase 2.** Son las pantallas del DFSM que las tarjetas de Fase 1 dejaron anotadas como
+> deuda: la API está completa y probada, pero esas operaciones hoy **no tienen pantalla**, así que
+> el centro no se puede operar sin `curl`. Están dentro del alcance del DFSM que define §5.1.2.
+>
+> Se descubrió al cerrar F1-30 (el asistente lleva a rutas que no existen), F1-06 (el botón
+> "Venderle un pack" no va a ningún lado) y F1-31 (el E2E tiene que armar el centro por API).
+>
+> El orden es de dependencia: sin sede no hay dónde poner nada.
+
+## [x] F1-33 · DFSM: sedes y salas
+
+- **module:** venues
+- **description:** El alta y la edición de la sede —con su horario, su zona y su política de
+  reserva— y sus salas. Es el primer paso del asistente y el que destraba todo lo demás.
+- **acceptance-criteria:**
+  - Dado un centro nuevo, cuando entra a Sedes, entonces puede crear la primera con nombre,
+    dirección, zona horaria y moneda.
+  - Dada una sede, cuando edita sus horarios, entonces define apertura y cierre por día de la
+    semana, y el asistente marca el paso como hecho.
+  - Dada la política de reserva, cuando la edita, entonces cambia las ventanas de reserva,
+    cancelación y check-in, con el valor por defecto explicado al lado de cada campo.
+  - Dada una sede, cuando se archiva, entonces deja de ofrecerse pero su histórico queda.
+  - Dadas las salas, cuando abre una sede, entonces ve las suyas y puede crear más con su capacidad.
+  - Dado el listado, cuando el plan ya llegó a su tope de sedes, entonces el alta lo dice con el
+    límite y el plan que lo levanta.
+- **example:** El dueño de un box entra por primera vez, crea "Box Toro Centro" con su dirección y
+  su zona, carga que abre de 6 a 22 de lunes a viernes, y el asistente le tacha dos pasos.
+- **story-points:** 5
+- **depends_on:** F1-01, F1-02, F1-30
+- **risk:** low
+- **test_plan:** Componentes: alta, edición, estados vacío/carga/error, el aviso de límite de plan.
+  Test de que la política muestra sus defaults. Auditoría axe.
+- **error-codes:** ninguno nuevo
+- **data-model-impact:** ninguno nuevo
+- **cómo se cerró:** dos pantallas, `/sedes` y `/sedes/:venueId`, más la entrada en el menú, que
+  hasta ahora apuntaba a una ruta inexistente. La configuración de la sede junta horarios, política
+  de reserva y salas: son tres cosas que se tocan juntas cuando se arma el centro.
+- **el default se explica al lado de cada regla:** la política son siete números en minutos, y sin
+  eso el SMU los deja como están sin saber qué eligió — después descubre la regla el día que un
+  socio reclama. Las ventanas se eligen de una lista ("2 horas antes"), no se escriben en minutos:
+  nadie piensa en 10.080 minutos, aunque sea lo que la API guarda.
+- **el día en blanco no abre:** un horario vacío no se manda como `00:00`. Mandarlo dejaría publicar
+  clases un día que el centro está cerrado.
+- **el tope del plan lo decide el servidor:** la pantalla muestra el error tipado tal cual, con su
+  límite y su plan. Adivinarlo en el front sería una segunda fuente de verdad que un día dice otra
+  cosa que el backend. El error va **inline en el formulario**, no en un toast: es la respuesta a lo
+  que la persona acaba de intentar, y un toast se va justo cuando lo está leyendo.
+- **la deuda del E2E se paga sola:** el camino 1 ya no crea la sede por API — la crea **por
+  pantalla**, y el resto del test no se tocó. Es exactamente lo que decía la nota de F1-31.
+
+## [ ] F1-34 · DFSM: catálogo de productos
+
+- **module:** products
+- **description:** El alta y la edición de lo que el centro vende. Sin producto no hay contrato, y
+  sin contrato nadie puede reservar.
+- **acceptance-criteria:**
+  - Dado el catálogo, cuando crea un producto, entonces elige entre los siete tipos y el formulario
+    muestra solo los campos que ese tipo usa.
+  - Dado el precio, cuando lo carga, entonces lo escribe en pesos y se guarda en centavos enteros.
+  - Dado un producto, cuando lo archiva, entonces deja de venderse y los contratos vivos siguen.
+  - Dado un producto con ventas, cuando edita su precio, entonces la pantalla aclara que los
+    contratos ya vendidos conservan el suyo.
+  - Dado el listado, cuando está vacío, entonces ofrece crear el primero.
+- **example:** Publica "Pack 8 clases · 30 días · $60.000", "Libre mensual · $85.000" y "Clase
+  suelta · $9.000".
+- **story-points:** 5
+- **depends_on:** F1-07, F1-33
+- **risk:** low
+- **test_plan:** Componentes: un test por tipo de producto mostrando los campos correctos. Test de
+  que el dinero nunca se convierte en float. Auditoría axe.
+- **error-codes:** ninguno nuevo
+- **data-model-impact:** ninguno nuevo
+
+## [ ] F1-35 · DFSM: agenda y clases
+
+- **module:** schedule
+- **description:** La grilla semanal del centro, el alta de plantillas y la edición y cancelación de
+  clases. Es donde el SMU pasa el tiempo cuando arma la semana.
+- **acceptance-criteria:**
+  - Dada la agenda, cuando se abre, entonces muestra la semana por sede con cada clase, su cupo y
+    su coach.
+  - Dada una plantilla, cuando la crea, entonces define días, hora, duración, sala, categoría y
+    cupo, y la grilla se publica sola.
+  - Dada una clase, cuando la edita, entonces elige **solo esta** o **esta y las que siguen**.
+  - Dada una cancelación, cuando la confirma, entonces la pantalla dice cuántas reservas se
+    cancelan y cuántos créditos se devuelven **antes** de confirmar.
+  - Dada una clase pasada, cuando se abre, entonces no se puede editar: es el histórico.
+- **example:** Arma "Funcional lunes, miércoles y viernes 19:00, cupo 16" y la semana queda
+  publicada. El viernes cancela la de las 19:00 y a los 14 inscriptos les vuelve el crédito.
+- **story-points:** 8
+- **depends_on:** F1-12, F1-13, F1-33
+- **risk:** med
+- **test_plan:** Componentes: la grilla, el alta, el diálogo de alcance de edición y el de
+  cancelación con su conteo. Auditoría axe, prueba a 360 px.
+- **error-codes:** ninguno nuevo
+- **data-model-impact:** ninguno nuevo
+
+## [ ] F1-36 · DFSM: socios y códigos de invitación
+
+- **module:** members
+- **description:** El listado de socios, el alta desde el mostrador y los códigos de invitación. Es
+  el último paso del asistente y la entrada a la ficha 360.
+- **acceptance-criteria:**
+  - Dado el listado, cuando se abre, entonces filtra por estado, sede y etiqueta, y pagina por
+    cursor.
+  - Dado un socio nuevo, cuando lo carga el mostrador, entonces valida sus datos y exige tutor si
+    es menor.
+  - Dado un código de invitación, cuando lo genera, entonces define vencimiento y límite de usos, y
+    lo puede copiar para mandar al grupo.
+  - Dado un código, cuando lo revoca, entonces deja de funcionar de inmediato sin afectar a quienes
+    ya lo usaron.
+  - Dado el listado, cuando quien mira no puede ver plata, entonces no hay ninguna columna de saldo.
+- **example:** Genera un código con 50 usos que vence el 31/03, lo copia y lo manda al grupo de
+  WhatsApp. Al rato ve entrar a los socios solos.
+- **story-points:** 5
+- **depends_on:** F1-03, F1-04, F1-06
+- **risk:** low
+- **test_plan:** Componentes: listado con filtros, alta con validaciones, generación y revocación de
+  códigos. Test de que la columna de saldo no aparece sin permiso. Auditoría axe.
+- **error-codes:** ninguno nuevo
+- **data-model-impact:** ninguno nuevo
+
+## [ ] F1-37 · DFSM: vender y cobrar desde el mostrador
+
+- **module:** billing
+- **description:** Vender un producto a un socio y registrar el cobro, desde la ficha. Es el CTA que
+  hoy no lleva a ningún lado y el circuito que cierra la caja del día.
+- **acceptance-criteria:**
+  - Dada la ficha de un socio, cuando toca "Venderle un pack", entonces elige el producto, ve el
+    precio y crea el contrato sin salir de la pantalla.
+  - Dada la venta, cuando se confirma, entonces queda el cargo y el saldo del socio se actualiza.
+  - Dado un cargo, cuando registra el pago, entonces elige el medio y el monto, y la caja del día
+    lo refleja.
+  - Dado quien no puede cobrar, cuando abre la ficha, entonces no ve ninguna de estas acciones —ni
+    la pantalla ni la API se las ofrecen.
+  - Dada la venta, cuando se repite el envío, entonces la clave de idempotencia evita el contrato
+    duplicado.
+- **example:** Micaela llega al mostrador, compra el pack de 8 y paga en efectivo. En la misma
+  pantalla queda el contrato activo, el cargo saldado y la caja del día actualizada.
+- **story-points:** 8
+- **depends_on:** F1-08, F1-10, F1-06, F1-34
+- **risk:** med
+- **test_plan:** Componentes: el flujo completo de venta y cobro, el caso sin permiso y el de doble
+  envío. Test de que el monto viaja en centavos enteros. Auditoría axe.
+- **error-codes:** ninguno nuevo
+- **data-model-impact:** ninguno nuevo
 
 ---
 

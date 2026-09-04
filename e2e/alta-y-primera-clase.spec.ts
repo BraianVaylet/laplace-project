@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { autenticar, centroConSede } from './support/centro.js';
+import { autenticar, suscriptorSinSede } from './support/centro.js';
 
 /**
  * Camino crítico 1 (§Testing.7): **alta del suscriptor → onboarding → primera
@@ -11,23 +11,39 @@ import { autenticar, centroConSede } from './support/centro.js';
  * deja al centro creyendo que abrió.
  *
  * 🔴 Lo que va por API acá es lo que **todavía no tiene pantalla**: el alta de
- * la cuenta, la de la sede, la de la clase y la del producto. Son deuda
- * declarada de F1-06 y F1-30. Lo que sí tiene pantalla —el asistente— se
- * recorre por pantalla.
+ * la cuenta, la de la clase y la del producto. La sede ya se crea por pantalla
+ * desde F1-33, que es como se paga esta deuda: la llamada se reemplaza por sus
+ * clics y el resto del test no se toca.
  */
 test.describe('camino 1: del alta a la primera clase', () => {
   test('el asistente marca hecho lo que existe, y nada más', async ({ page, context }) => {
     test.setTimeout(120_000);
 
-    const centro = await centroConSede('camino1');
-    await autenticar(context, centro.smu);
+    const smu = await suscriptorSinSede('camino1');
+    await autenticar(context, smu);
 
     await page.goto('http://localhost:5174/');
 
-    // La sede ya está: es el único paso hecho, y destraba los demás.
+    // Recién registrado: sin sede, el asistente arranca en cero.
     await expect(page.getByText('Primeros pasos')).toBeVisible();
+    await expect(page.getByText('0 de 5 pasos')).toBeVisible();
+    await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '0');
+
+    // La sede se crea por pantalla, que es lo que el asistente promete.
+    await page.goto('http://localhost:5174/sedes');
+    await page.getByRole('button', { name: 'Crear la primera' }).click();
+    await page.getByLabel(/Nombre/).fill('Box Toro Centro');
+    await page.getByLabel(/Dirección/).fill('Alsina 123, Bahía Blanca');
+    // `exact`: sin esto también engancharía "Crear la primera".
+    await page.getByRole('button', { name: 'Crear', exact: true }).click();
+    await expect(page.getByText('Box Toro Centro')).toBeVisible();
+
+    await page.goto('http://localhost:5174/');
     await expect(page.getByText('1 de 5 pasos')).toBeVisible();
-    await expect(page.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '20');
+
+    const venueId = (await (await smu.api.get('venues')).json()).items[0].publicId as string;
+    const roomId = (await (await smu.api.get(`rooms?venueId=${venueId}`)).json()).items[0]
+      .publicId as string;
 
     // 🔴 Saltear no completa: el paso queda pendiente, no hecho.
     await page.getByRole('button', { name: 'Dejar para después Cargá los horarios' }).click();
@@ -38,10 +54,10 @@ test.describe('camino 1: del alta a la primera clase', () => {
     await page.getByRole('button', { name: 'Retomar Cargá los horarios' }).click();
     await expect(page.getByText('Lo dejaste para después')).toBeHidden();
 
-    await centro.smu.api.post('class-templates', {
+    await smu.api.post('class-templates', {
       data: {
-        venueId: centro.venueId,
-        roomId: centro.roomId,
+        venueId,
+        roomId,
         name: 'Funcional',
         categoryId: 'funcional',
         durationMin: 60,
@@ -59,14 +75,14 @@ test.describe('camino 1: del alta a la primera clase', () => {
     await page.reload();
     await expect(page.getByText('2 de 5 pasos')).toBeVisible();
 
-    await centro.smu.api.post('products', {
+    await smu.api.post('products', {
       data: {
         name: 'Pack 8 clases',
         type: 'class_pack',
         priceCents: 6_000_000,
         credits: 8,
         durationDays: 60,
-        venueIds: [centro.venueId],
+        venueIds: [venueId],
       },
     });
 

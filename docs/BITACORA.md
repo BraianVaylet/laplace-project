@@ -23,6 +23,24 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-04 — F1-33: las sedes ya se cargan por pantalla
+
+- **Módulo:** `venues`
+- **Tipo:** feature
+- **Commit/PR:** —
+- **Trello:** https://trello.com/c/fsFloQOI (F1-33) — movida a **Completadas**
+- **Qué cambió:** el DFSM tiene `/sedes` y `/sedes/:venueId`: crear la sede, cargar sus horarios,
+  configurar su política de reserva, agregar salas y archivarla. La entrada del menú ya existía
+  desde F0-13 y no llevaba a ningún lado.
+- **Por qué:** es la primera de las cinco tarjetas de deuda de UI que dejó la Fase 1. Sin esta
+  pantalla, el centro no se puede armar sin `curl`, y el asistente de primeros pasos mandaba a una
+  ruta inexistente.
+- **Impacto:** ninguno sobre la API ni sobre el modelo de datos: todo el backend ya estaba. El E2E
+  del camino 1 ahora crea la sede **por pantalla** en vez de por API, que era la deuda que F1-31
+  había anotado.
+- **Pendiente:** las otras cuatro pantallas — productos, agenda, socios y la venta desde el
+  mostrador (F1-34 a F1-37).
+
 ## 2026-09-04 — F1-32: la documentación del producto, y con eso la Fase 1 cerrada
 
 - **Módulo:** `docs`

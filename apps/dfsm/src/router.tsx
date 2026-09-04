@@ -8,6 +8,8 @@ import {
 } from '@tanstack/react-router';
 import { ClassRoster } from './ClassRoster.js';
 import { MemberFile } from './MemberFile.js';
+import { VenueDetail } from './VenueDetail.js';
+import { Venues } from './Venues.js';
 import { Home } from './Home.js';
 import { Kiosk } from './Kiosk.js';
 import { Shell } from './Shell.js';
@@ -69,13 +71,36 @@ const memberRoute = createRoute({
   },
 });
 
+const venuesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sedes',
+  component: Venues,
+});
+
+const venueDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sedes/$venueId',
+  component: function VenueDetailRoute() {
+    const { venueId } = useParams({ from: '/sedes/$venueId' });
+
+    return <VenueDetail venueId={venueId} />;
+  },
+});
+
 const kioskRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/kiosko',
   component: Kiosk,
 });
 
-export const routeTree = rootRoute.addChildren([homeRoute, rosterRoute, memberRoute, kioskRoute]);
+export const routeTree = rootRoute.addChildren([
+  homeRoute,
+  rosterRoute,
+  memberRoute,
+  venuesRoute,
+  venueDetailRoute,
+  kioskRoute,
+]);
 
 export const router = createRouter({ routeTree });
 

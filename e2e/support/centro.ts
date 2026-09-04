@@ -91,6 +91,25 @@ export interface Centro {
   roomId: string;
 }
 
+/**
+ * Un suscriptor recién dado de alta, **sin ninguna sede**. Es el estado en el
+ * que queda quien se registra desde la landing.
+ */
+export async function suscriptorSinSede(
+  nombre: string,
+): Promise<Sesion & { organizationId: string }> {
+  const slug = unico(nombre);
+  const smu = await nuevaSesion(`${slug}@laplace.test`);
+
+  const suscripcion = await json<{ organizationId: string }>(smu.api, 'post', 'subscribers', {
+    centerName: `Box ${slug}`,
+    slug,
+  });
+  await activar(smu, suscripcion.organizationId);
+
+  return { ...smu, organizationId: suscripcion.organizationId };
+}
+
 /** Un centro con su suscripción y su sede. Es el punto de partida de todo. */
 export async function centroConSede(
   nombre: string,
