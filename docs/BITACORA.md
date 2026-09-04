@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `venues`
 - **Tipo:** feature
-- **Commit/PR:** —
+- **Commit/PR:** `3a57eeb` (rama `feat/phase-1-ui-debt`)
 - **Trello:** https://trello.com/c/fsFloQOI (F1-33) — movida a **Completadas**
 - **Qué cambió:** el DFSM tiene `/sedes` y `/sedes/:venueId`: crear la sede, cargar sus horarios,
   configurar su política de reserva, agregar salas y archivarla. La entrada del menú ya existía
