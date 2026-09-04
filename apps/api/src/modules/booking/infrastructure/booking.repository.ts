@@ -54,6 +54,40 @@ export class BookingRepository extends TenantRepository<BookingDoc> {
   }
 
   /**
+   * Cuantos reservaron y cuantos entraron, clase por clase. Lo consume el
+   * tablero del DFSM (F1-24): la ocupacion de cada clase de hoy es un numero
+   * por clase, no un total.
+   */
+  async countBySession(
+    sessionIds: readonly string[],
+  ): Promise<Record<string, { booked: number; checkedIn: number }>> {
+    if (sessionIds.length === 0) return {};
+
+    const filas = await BookingModel.aggregate<{
+      _id: { sessionId: string; status: string };
+      total: number;
+    }>([
+      { $match: { sessionId: { $in: [...sessionIds] }, deletedAt: null } },
+      { $group: { _id: { sessionId: '$sessionId', status: '$status' }, total: { $sum: 1 } } },
+    ]).exec();
+
+    const porClase: Record<string, { booked: number; checkedIn: number }> = {};
+    for (const fila of filas) {
+      const actual = (porClase[fila._id.sessionId] ??= { booked: 0, checkedIn: 0 });
+
+      // El que entro tambien ocupaba un lugar: cuenta en las dos columnas.
+      if (fila._id.status === 'checked_in') {
+        actual.checkedIn += fila.total;
+        actual.booked += fila.total;
+      } else if (fila._id.status === 'booked' || fila._id.status === 'no_show') {
+        actual.booked += fila.total;
+      }
+    }
+
+    return porClase;
+  }
+
+  /**
    * Las reservas vivas de un contrato. Cuales son futuras lo decide quien llama,
    * que es el que sabe leer la agenda.
    */

@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     22 |
+| Fase 1 — MVP vendible   |       32 |          186 |     23 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1492,7 +1492,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   sobre `createdAt`: un cargo pertenece al período en el que vence, que es como un centro piensa su
   facturación mensual.
 
-## [ ] F1-24 · DFSM Home: tablero operativo del día
+## [x] F1-24 · DFSM Home: tablero operativo del día
 
 - **module:** metrics
 - **description:** El home del DFSM es un tablero, no un menú (§5.1.2). Y el panel de alertas
@@ -1522,6 +1522,11 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   light.
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** ninguno nuevo.
+- **deuda declarada:** las acciones rápidas (cobrar, vender pack, agregar miembro) necesitan los
+  formularios de las pantallas que todavía no existen — Cobranza, Productos y Miembros del DFSM —,
+  así que entran con ellas. Los ítems de alerta llevan al socio o a la clase; los que apuntan a
+  pantallas sin construir todavía no son enlaces. La búsqueda usa una regular expression anclada
+  sobre el tenant: con los volúmenes de Fase 1 alcanza, y un índice de texto es Fase 2.
 
 ## [ ] F1-25 · Suscriptors y Suscriptions: signup self-service y planes
 

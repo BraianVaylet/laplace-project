@@ -41,3 +41,59 @@ export interface BillingTotals {
     timeZone: string,
   ): Promise<{ incomeCents: number; chargedCents: number; overdueCents: number }>;
 }
+
+// ── Lo que necesita el tablero del día (F1-24) ──────────────────────────────
+
+/** Las clases de una ventana, con lo que el tablero muestra de cada una. */
+export interface DashboardSessionLookup {
+  ofWindow(
+    venueId: string,
+    from: Temporal.Instant,
+    to: Temporal.Instant,
+  ): Promise<
+    Array<{
+      sessionId: string;
+      name: string;
+      capacity: number;
+      startAt: Temporal.Instant;
+      status: string;
+    }>
+  >;
+}
+
+/** Cuántos reservaron y cuántos entraron, clase por clase. */
+export interface SessionOccupancy {
+  bySession(
+    sessionIds: readonly string[],
+  ): Promise<Record<string, { booked: number; checkedIn: number }>>;
+}
+
+export interface AlertMember {
+  memberId: string;
+  fullName: string;
+  balanceCents: number;
+  lastAttendanceAt: Temporal.Instant | null;
+}
+
+export interface AlertMemberLookup {
+  /** Socios activos que no vienen desde antes de ese instante. */
+  inactiveSince(venueId: string, since: Temporal.Instant): Promise<AlertMember[]>;
+  /** Los que deben plata, del que más debe al que menos. */
+  debtors(venueId: string): Promise<AlertMember[]>;
+  /** Los activos de la sede, para chequear waivers en bloque. */
+  activeIn(venueId: string): Promise<AlertMember[]>;
+}
+
+export interface ContractAlertLookup {
+  expiringIn(
+    venueId: string,
+    until: Temporal.Instant,
+  ): Promise<
+    Array<{ memberId: string; memberName: string; productName: string; endsAt: Temporal.Instant }>
+  >;
+}
+
+export interface WaiverAlertLookup {
+  /** De estos socios, a cuáles les falta firmar algo obligatorio. */
+  missingAmong(memberIds: readonly string[]): Promise<string[]>;
+}

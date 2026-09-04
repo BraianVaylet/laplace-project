@@ -822,6 +822,16 @@ export class BookingService {
     return this.bookings.countByStatusOfSessions(sessionIds);
   }
 
+  /**
+   * Cuantos reservaron y cuantos entraron, clase por clase. Es el puerto que
+   * consume el tablero del DFSM (F1-24).
+   */
+  async occupancyBySession(
+    sessionIds: readonly string[],
+  ): Promise<Record<string, { booked: number; checkedIn: number }>> {
+    return this.bookings.countBySession(sessionIds);
+  }
+
   /** Todas las reservas vivas de una clase. La consume la lista del coach. */
   async ofSession(sessionId: string): Promise<BookingDoc[]> {
     return this.bookings.liveOfSession(sessionId);

@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import { AppShell, type NavItem } from '@laplace/ui';
 import { useUiStore } from '@laplace/client';
+import { MemberSearch } from './MemberSearch.js';
 import { Providers } from './providers.js';
 import { VenueSelector, type Venue } from './VenueSelector.js';
 
@@ -31,7 +32,17 @@ export function Shell({ children }: { children: ReactNode }) {
         activeNavId="home"
         collapsed={sidebarCollapsed}
         onToggleCollapsed={toggleSidebar}
-        headerExtra={<VenueSelector venues={venues} />}
+        headerExtra={
+          <div className="flex items-center gap-2">
+            {/*
+             * El buscador vive en el header y no en la pantalla de miembros: se
+             * busca a alguien desde donde sea que uno esté, y casi siempre con
+             * la persona esperando del otro lado del mostrador.
+             */}
+            <MemberSearch />
+            <VenueSelector venues={venues} />
+          </div>
+        }
       >
         {children}
       </AppShell>

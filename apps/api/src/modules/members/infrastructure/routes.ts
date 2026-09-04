@@ -5,6 +5,8 @@ import {
   memberNoteResponseSchema,
   memberNoteSchema,
   memberResponseSchema,
+  memberSearchHitSchema,
+  memberSearchQuerySchema,
   memberStatusSchema,
   paginatedSchema,
   paginationQuerySchema,
@@ -20,7 +22,7 @@ import {
   type EntitlementsLoader,
 } from '../../../entitlements/middleware.js';
 import { registerRoutes, type IsolationFixture } from '../../../http/route-registry.js';
-import { validated } from '../../../http/validate.js';
+import { parseQuery, validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import type { MemberService } from '../application/member-service.js';
 import { toMemberResponse, toNoteResponse } from './member-response.js';
@@ -67,6 +69,24 @@ export function createMemberRoutes(
       request: { query: listQuery },
       response: { status: 200, schema: paginatedSchema(memberResponseSchema) },
       errorCodes: ['LP-AUTH-403-002', 'LP-ENTL-403-002'],
+    },
+    {
+      method: 'GET',
+      path: '/api/v1/members/search',
+      tenantScoped: true,
+      isolationFixture: async (context) => {
+        await seedAndList(context);
+
+        // Busca por el nombre del socio sembrado en el otro centro: si el
+        // aislamiento fallara, el atacante lo encontraria por nombre.
+        return { path: `/api/v1/members/search?q=${VICTIM_MEMBER_NAME}` };
+      },
+      summary: 'Buscador global de socios',
+      tags: ['members'],
+      permission: { athlete: ['read'] },
+      request: { query: memberSearchQuerySchema },
+      response: { status: 200, schema: z.array(memberSearchHitSchema) },
+      errorCodes: ['LP-AUTH-403-002', 'LP-SYS-422-006'],
     },
     {
       method: 'POST',
@@ -209,6 +229,16 @@ export function createMemberRoutes(
     const page = await service.list(query, query.cursor, query.limit);
 
     return c.json({ items: page.items.map(toMemberResponse), nextCursor: page.nextCursor });
+  });
+
+  /*
+   * Va antes que `/:id`: Hono resuelve por orden de registro, y con `/:id`
+   * primero "search" se leeria como el publicId de un socio.
+   */
+  routes.get('/api/v1/members/search', requirePermission({ athlete: ['read'] }), async (c) => {
+    const { q } = parseQuery(memberSearchQuerySchema, c.req.query());
+
+    return c.json(await service.search(q));
   });
 
   routes.post(

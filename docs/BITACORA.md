@@ -23,6 +23,27 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-04 — F1-24: el home del DFSM es un tablero
+
+- **Módulo:** `metrics` · `members` · `waivers` · `dfsm` · `ui` · `http`
+- **Tipo:** feature
+- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/h0C4rOia (F1-24) — movida a **Completadas**
+- **Qué cambió:** el DFSM abre en un tablero y no en un menú: las clases de hoy con su ocupación,
+  cuánta gente entró, la caja del día y el panel de alertas de §2.1.12 — quién no viene hace dos
+  semanas, qué packs vencen esta semana, quién debe, qué clases están flojas y a quién le falta
+  firmar. Cada alerta trae los ítems con los que se resuelve, no solo un número. Y hay buscador
+  global de socios, con Ctrl+K, por nombre, documento o teléfono.
+- **Por qué:** §5.1.2 y §2.1.12. El panel de alertas accionables vale más que cualquier gráfico, y
+  el motivo es concreto: un gráfico se mira, una alerta se toca.
+- **Impacto:** 2 endpoints nuevos (`GET /api/v1/dashboard`, `GET /api/v1/members/search`) · ninguna
+  colección ni código de error nuevos · ninguna migración · el `Input` de `@laplace/ui` acepta
+  `ref`, que en React 19 es una prop normal · helper `parseQuery` en `http/validate.ts`.
+- **Pendiente:** las acciones rápidas (cobrar, vender pack, agregar miembro) entran con las
+  pantallas que las van a contener — Cobranza, Productos y Miembros. Encontrado de paso y **no
+  arreglado acá**: las rutas que validan la query con `schema.parse()` devuelven 500 en vez de 422;
+  el helper que lo arregla ya existe y falta aplicarlo al resto de los módulos.
+
 ## 2026-09-04 — F1-23: MetricsDaily y los KPIs del centro
 
 - **Módulo:** `metrics` (nuevo) · `venues` · `schedule` · `booking` · `members` · `billing`

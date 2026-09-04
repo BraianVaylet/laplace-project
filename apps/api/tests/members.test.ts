@@ -620,7 +620,7 @@ describe('aislamiento de tenant', () => {
 });
 
 describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
-  it('las diez rutas de members traen su fixture de ataque', () => {
+  it('las once rutas de members traen su fixture de ataque', () => {
     // Las de `/import` son de F1-05 y el estado de cuenta es de Billing (F1-10):
     // cada una tiene su propia suite.
     const members = allRegisteredRoutes().filter(
@@ -630,7 +630,7 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
         !route.path.endsWith('/statement'),
     );
 
-    expect(members).toHaveLength(10);
+    expect(members).toHaveLength(11);
     for (const route of members) {
       expect(route.tenantScoped, `${route.method} ${route.path}`).toBe(true);
       expect(route.isolationFixture, `${route.method} ${route.path}`).toBeDefined();
@@ -675,5 +675,66 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
 
   it('los seis estados de §14 están cubiertos por la máquina', () => {
     expect([...MEMBER_STATES]).toHaveLength(6);
+  });
+});
+
+describe('el buscador global (F1-24)', () => {
+  const buscar = async (centro: { cookie: string }, q: string) => {
+    const res = await app.request(
+      `/api/v1/members/search?q=${encodeURIComponent(q)}`,
+      req(centro.cookie, 'GET'),
+    );
+
+    return {
+      res,
+      body: (await res.json()) as Array<{ memberId: string; fullName: string; hint: string }>,
+    };
+  };
+
+  it('encuentra por nombre, por apellido y por documento', async () => {
+    const centro = await nuevoCentro('buscador');
+    await altaOk(centro.cookie, { firstName: 'Micaela', lastName: 'Sosa', docId: '30123456' });
+
+    expect((await buscar(centro, 'Mica')).body[0]?.fullName).toBe('Micaela Sosa');
+    expect((await buscar(centro, 'Sosa')).body[0]?.fullName).toBe('Micaela Sosa');
+    expect((await buscar(centro, '30123')).body[0]?.hint).toBe('30123456');
+  });
+
+  it('encuentra por teléfono', async () => {
+    const centro = await nuevoCentro('buscador-tel');
+    await altaOk(centro.cookie, {
+      firstName: 'Julián',
+      lastName: 'Pérez',
+      phone: '+542914567890',
+    });
+
+    expect((await buscar(centro, '542914')).body).toHaveLength(1);
+  });
+
+  it('🔴 un término con metacaracteres no rompe ni barre la colección', async () => {
+    const centro = await nuevoCentro('buscador-regex');
+    await altaOk(centro.cookie, { firstName: 'Micaela', lastName: 'Sosa' });
+
+    // Sin escapar, `(` tira un error de sintaxis y `.*` devuelve a todos.
+    const parentesis = await buscar(centro, '(((');
+    const comodin = await buscar(centro, '.*');
+
+    expect(parentesis.res.status).toBe(200);
+    expect(parentesis.body).toEqual([]);
+    expect(comodin.body).toEqual([]);
+  });
+
+  it('con una sola letra no busca: pide al menos dos', async () => {
+    const centro = await nuevoCentro('buscador-corto');
+
+    expect((await buscar(centro, 'a')).res.status).toBe(422);
+  });
+
+  it('🔴 no encuentra a los socios del otro centro', async () => {
+    const victima = await nuevoCentro('buscador-victima');
+    await altaOk(victima.cookie, { firstName: 'Secreta', lastName: 'Ajena' });
+    const atacante = await nuevoCentro('buscador-atacante');
+
+    expect((await buscar(atacante, 'Secreta')).body).toEqual([]);
   });
 });

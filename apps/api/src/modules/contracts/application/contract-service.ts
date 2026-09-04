@@ -481,6 +481,33 @@ export class ContractService {
   }
 
   /**
+   * Los contratos que vencen antes de esa fecha, en una sede. Es el puerto que
+   * consume el panel de alertas del DFSM (F1-24). El nombre del socio lo pone
+   * quien llama: Contracts no conoce el modelo de Members (ADR-003).
+   */
+  async expiringIn(
+    venueId: string,
+    until: Temporal.Instant,
+  ): Promise<
+    Array<{ contractId: string; memberId: string; productName: string; endsAt: Temporal.Instant }>
+  > {
+    const contratos = await this.contracts.expiringIn(venueId, toBsonDate(until));
+
+    return contratos.flatMap((contract) =>
+      contract.endsAt
+        ? [
+            {
+              contractId: String(contract['publicId']),
+              memberId: contract.memberId,
+              productName: contract.productName,
+              endsAt: fromBsonDate(contract.endsAt),
+            },
+          ]
+        : [],
+    );
+  }
+
+  /**
    * El pack, como lo necesita un aviso: que producto es, de que sede y cuando
    * vence. Es el puerto que consume Notifications (F1-22).
    *

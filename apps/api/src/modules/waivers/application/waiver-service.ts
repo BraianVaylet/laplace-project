@@ -28,6 +28,13 @@ export interface WaiverMemberLookup {
   contextOf(memberId: string): Promise<{ userId: string | null; birthDate?: string } | null>;
   /** Para el panel de cumplimiento: a qué socio corresponde cada `userId`. */
   memberOf(userId: string): Promise<{ memberId: string; fullName: string } | null>;
+  /**
+   * Los contextos de varios socios de una vez. Lo usa el panel de alertas del
+   * DFSM (F1-24): preguntar de a uno sobre 200 socios serían 200 consultas.
+   */
+  contextsOf(
+    memberIds: readonly string[],
+  ): Promise<Array<{ memberId: string; userId: string | null; birthDate?: string }>>;
 }
 
 export interface RequestContext {
@@ -134,6 +141,45 @@ export class WaiverService {
     const firmados = await this.firmadosDe(contexto.userId);
 
     return requeridos.some((doc) => !firmados.has(doc.publicId));
+  }
+
+  /**
+   * 🔴 De estos socios, ¿a cuáles les falta firmar algo obligatorio?
+   *
+   * Es `missingFor` en bloque, para el panel de alertas del DFSM (F1-24): los
+   * documentos vigentes se leen **una vez** y las firmas de todos en una sola
+   * consulta. Preguntar socio por socio sobre 200 socios serían 400 consultas
+   * para pintar una tarjeta.
+   */
+  async missingAmong(memberIds: readonly string[]): Promise<string[]> {
+    if (memberIds.length === 0) return [];
+
+    const vigentes = (await this.documents.currentByType()).map(toDocumentResponse);
+    const hoy = todayOf(this.now());
+    const contextos = await this.members.contextsOf(memberIds);
+
+    const conCuenta = contextos.filter((contexto) => contexto.userId !== null);
+    const firmasPorUsuario = new Map<string, Set<string>>();
+    for (const consent of await this.consents.liveOfUsers(
+      conCuenta.map((contexto) => contexto.userId as string),
+    )) {
+      const propias = firmasPorUsuario.get(consent.userId) ?? new Set<string>();
+      propias.add(consent.documentId);
+      firmasPorUsuario.set(consent.userId, propias);
+    }
+
+    return contextos
+      .filter((contexto) => {
+        const requeridos = vigentes.filter((doc) => appliesTo(toRequirement(doc), contexto, hoy));
+        if (requeridos.length === 0) return false;
+        // Sin cuenta vinculada no hay ningún consentimiento digital en pie.
+        if (!contexto.userId) return true;
+
+        const firmados = firmasPorUsuario.get(contexto.userId) ?? new Set<string>();
+
+        return requeridos.some((doc) => !firmados.has(doc.publicId));
+      })
+      .map((contexto) => contexto.memberId);
   }
 
   /**

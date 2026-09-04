@@ -12,6 +12,7 @@ import { createEntitlementsLoader } from '../src/entitlements/middleware.js';
 import { createEventBus } from '../src/events/bus.js';
 import { allRegisteredRoutes, resetRouteRegistry } from '../src/http/route-registry.js';
 import { createModules } from '../src/modules/index.js';
+import { runWithTenant } from '../src/tenancy/context.js';
 import { VICTIM_DOCUMENT_TITLE } from '../src/modules/waivers/infrastructure/routes.js';
 import { createLogger } from '../src/observability/logger.js';
 
@@ -572,5 +573,63 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
         VICTIM_DOCUMENT_TITLE,
       );
     }
+  });
+});
+
+describe('el chequeo en bloque que consume el panel de alertas (F1-24)', () => {
+  const enContexto = <T>(organizationId: string, fn: () => Promise<T>) =>
+    runWithTenant({ tenantId: organizationId, userId: 'usr_test', requestId: 'req-alertas' }, fn);
+
+  it('🔴 devuelve solo a los que les falta firmar', async () => {
+    const centro = await centroListo('bloque');
+    const doc = await publicar(centro);
+    const firmante = await atletaDe(centro, 'Firmante');
+    const remolon = await atletaDe(centro, 'Remolon');
+    await aceptar(firmante.cookie, doc.publicId);
+
+    const faltantes = await enContexto(centro.organizationId, () =>
+      modules.waivers.service.missingAmong([firmante.memberId, remolon.memberId]),
+    );
+
+    expect(faltantes).toEqual([remolon.memberId]);
+  });
+
+  it('sin documentos publicados, no le falta nada a nadie', async () => {
+    const centro = await centroListo('bloque-sin-docs');
+    const socio = await atletaDe(centro, 'Socio');
+
+    const faltantes = await enContexto(centro.organizationId, () =>
+      modules.waivers.service.missingAmong([socio.memberId]),
+    );
+
+    expect(faltantes).toEqual([]);
+  });
+
+  it('sin socios que revisar, no se consulta nada', async () => {
+    const centro = await centroListo('bloque-vacio');
+
+    const faltantes = await enContexto(centro.organizationId, () =>
+      modules.waivers.service.missingAmong([]),
+    );
+
+    expect(faltantes).toEqual([]);
+  });
+
+  it('🔴 el socio sin cuenta vinculada cuenta como faltante', async () => {
+    // No hay ningún consentimiento digital en pie: es el mismo criterio que
+    // usa el check-in (§2.1.20).
+    const centro = await centroListo('bloque-sin-cuenta');
+    await publicar(centro);
+    const sinCuenta = await post<{ publicId: string }>(centro.cookie, '/api/v1/members', {
+      firstName: 'Walk',
+      lastName: 'In',
+      venueIds: [centro.venueId],
+    });
+
+    const faltantes = await enContexto(centro.organizationId, () =>
+      modules.waivers.service.missingAmong([sinCuenta.publicId]),
+    );
+
+    expect(faltantes).toEqual([sinCuenta.publicId]);
   });
 });

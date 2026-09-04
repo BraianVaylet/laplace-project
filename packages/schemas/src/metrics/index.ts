@@ -94,3 +94,92 @@ export const recomputeResultSchema = z.object({
 });
 
 export type RecomputeResult = z.infer<typeof recomputeResultSchema>;
+
+// ── El tablero del día (§5.1.2, §2.1.12) ────────────────────────────────────
+
+/**
+ * El home del DFSM es un tablero, no un menú. Lo que se ve al abrirlo tiene que
+ * ser lo que hay que hacer hoy, no una lista de secciones para navegar.
+ */
+export const dashboardSessionSchema = z.object({
+  sessionId: z.string(),
+  name: z.string(),
+  startAt: z.string(),
+  /** Hora local del centro, `HH:mm`: es la que el staff lee de un vistazo. */
+  startsAtLocal: z.string(),
+  capacity: z.number().int(),
+  booked: z.number().int(),
+  checkedIn: z.number().int(),
+  occupancy: z.number(),
+  status: z.string(),
+});
+
+export type DashboardSession = z.infer<typeof dashboardSessionSchema>;
+
+/**
+ * Los cinco tipos de alerta de §2.1.12. Cada una lleva su acción: una alerta
+ * que no se puede tocar es un dato, y los datos ya están en las métricas.
+ */
+export const ALERT_TYPES = [
+  'inactive_members',
+  'expiring_contracts',
+  'debtors',
+  'low_occupancy',
+  'missing_waivers',
+] as const;
+
+export const alertTypeSchema = z.enum(ALERT_TYPES);
+export type AlertType = z.infer<typeof alertTypeSchema>;
+
+export const alertItemSchema = z.object({
+  /** A qué lleva el toque: la ficha del socio o la clase. */
+  id: z.string(),
+  label: z.string(),
+  /** El dato que explica por qué está en la lista. */
+  detail: z.string(),
+});
+
+export type AlertItem = z.infer<typeof alertItemSchema>;
+
+export const alertSchema = z.object({
+  type: alertTypeSchema,
+  count: z.number().int(),
+  /** Los primeros, para mostrar sin abrir. El resto está en su pantalla. */
+  items: z.array(alertItemSchema),
+});
+
+export type Alert = z.infer<typeof alertSchema>;
+
+/** La plata del día. Ausente para quien no ve facturación (§2.1.12). */
+export const dashboardMoneySchema = z.object({
+  incomeCents: z.number().int(),
+  overdueCents: z.number().int(),
+  debtors: z.number().int(),
+});
+
+export type DashboardMoney = z.infer<typeof dashboardMoneySchema>;
+
+export const dashboardSchema = z.object({
+  venueId: z.string(),
+  /** El día del centro, `YYYY-MM-DD`. */
+  date: z.string(),
+  sessions: z.array(dashboardSessionSchema),
+  /** Cuántos entraron hoy, en toda la sede. */
+  checkedIn: z.number().int(),
+  booked: z.number().int(),
+  /**
+   * Presente solo si quien pregunta ve facturación. No es un `0` cuando no
+   * corresponde: un cero se lee como "no entró plata", y lo que pasa es que
+   * esa persona no tiene por qué saberlo.
+   */
+  money: dashboardMoneySchema.optional(),
+  alerts: z.array(alertSchema),
+});
+
+export type Dashboard = z.infer<typeof dashboardSchema>;
+
+export const dashboardQuerySchema = z.object({
+  venueId: z.string().min(1, 'Elegí la sede.'),
+});
+
+export type DashboardQuery = z.infer<typeof dashboardQuerySchema>;

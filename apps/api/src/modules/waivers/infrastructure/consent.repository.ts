@@ -23,6 +23,25 @@ export class ConsentRepository extends TenantRepository<ConsentDoc> {
   }
 
   /**
+   * Las firmas vivas de varios usuarios, en una sola consulta. Lo consume el
+   * panel de alertas del DFSM (F1-24): preguntar socio por socio sobre 200
+   * socios serian 200 consultas para pintar una tarjeta.
+   */
+  async liveOfUsers(userIds: readonly string[]): Promise<ConsentDoc[]> {
+    if (userIds.length === 0) return [];
+
+    return ConsentModel.find(
+      this.scope({
+        userId: { $in: [...userIds] },
+        revokedAt: null,
+      } as FilterQuery<ConsentDoc>),
+    )
+      .setOptions(sessionOption())
+      .lean<ConsentDoc[]>()
+      .exec();
+  }
+
+  /**
    * 🔴 Registra la aceptación, o devuelve la que ya existía.
    *
    * Aceptar el mismo documento dos veces (doble click) no es un error: es la

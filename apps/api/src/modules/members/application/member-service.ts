@@ -15,6 +15,23 @@ import { canTransition, requiresGuardian } from '../domain/member.js';
 import type { MemberDoc, MemberNoteDoc } from '../infrastructure/member.model.js';
 import type { MemberRepository } from '../infrastructure/member.repository.js';
 
+/** Lo que el panel de alertas del DFSM necesita saber de un socio (F1-24). */
+export interface AlertMemberView {
+  memberId: string;
+  fullName: string;
+  balanceCents: number;
+  lastAttendanceAt: Temporal.Instant | null;
+}
+
+function toAlertMember(member: MemberDoc): AlertMemberView {
+  return {
+    memberId: String(member['publicId']),
+    fullName: `${member.firstName} ${member.lastName}`.trim(),
+    balanceCents: member.balanceCents,
+    lastAttendanceAt: member.lastAttendanceAt ? fromBsonDate(member.lastAttendanceAt) : null,
+  };
+}
+
 /** Hoy, en `YYYY-MM-DD`. Se inyecta para poder testear la mayoría de edad. */
 export type Today = () => string;
 
@@ -293,6 +310,22 @@ export class MemberService {
     };
   }
 
+  /**
+   * Los contextos de waiver de varios socios, en una consulta. Lo consume el
+   * panel de alertas del DFSM (F1-24) a traves de Waivers.
+   */
+  async waiverContextsOf(
+    memberIds: readonly string[],
+  ): Promise<Array<{ memberId: string; userId: string | null; birthDate?: string }>> {
+    const socios = await this.members.byPublicIds(memberIds);
+
+    return socios.map((member) => ({
+      memberId: String(member['publicId']),
+      userId: member.userId ?? null,
+      ...(member.birthDate === undefined ? {} : { birthDate: member.birthDate }),
+    }));
+  }
+
   /** La ficha a la que corresponde una cuenta. Lo consume el panel de cumplimiento de Waivers. */
   async findByUserId(userId: string): Promise<{ memberId: string; fullName: string } | null> {
     const member = await this.members.findOne({ userId } as never);
@@ -322,6 +355,38 @@ export class MemberService {
       name: member.firstName.trim(),
       email: member.email ?? null,
     };
+  }
+
+  /**
+   * El buscador global del DFSM (F1-24): nombre, apellido, documento o
+   * telefono. Devuelve lo justo para la lista de resultados — quien es y como
+   * reconocerlo — y no la ficha entera.
+   */
+  async search(term: string): Promise<Array<{ memberId: string; fullName: string; hint: string }>> {
+    const encontrados = await this.members.search(term.trim());
+
+    return encontrados.map((member) => ({
+      memberId: String(member['publicId']),
+      fullName: `${member.firstName} ${member.lastName}`.trim(),
+      hint: member.docId ?? member.phone ?? member.email ?? '',
+    }));
+  }
+
+  /**
+   * Los tres listados que alimentan el panel de alertas del DFSM (F1-24).
+   * Devuelven lo justo para pintar la tarjeta: quien es, cuanto debe y cuando
+   * vino por ultima vez.
+   */
+  async inactiveSince(venueId: string, since: Temporal.Instant): Promise<AlertMemberView[]> {
+    return (await this.members.inactiveSince(venueId, toBsonDate(since))).map(toAlertMember);
+  }
+
+  async debtorsIn(venueId: string): Promise<AlertMemberView[]> {
+    return (await this.members.debtorsIn(venueId)).map(toAlertMember);
+  }
+
+  async activeMembersIn(venueId: string): Promise<AlertMemberView[]> {
+    return (await this.members.activeIn(venueId)).map(toAlertMember);
   }
 
   /** Socios activos de una sede. Es el puerto que consume Metrics (F1-23). */

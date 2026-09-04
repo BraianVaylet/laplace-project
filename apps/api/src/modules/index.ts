@@ -229,6 +229,7 @@ export function createModules(deps: ModuleDeps) {
     members: {
       contextOf: (memberId) => members.service.waiverContextOf(memberId),
       memberOf: (userId) => members.service.findByUserId(userId),
+      contextsOf: (memberIds) => members.service.waiverContextsOf(memberIds),
     },
     resolveMember: (userId) => members.service.findIdByUserId(userId),
   });
@@ -362,6 +363,38 @@ export function createModules(deps: ModuleDeps) {
     billing: {
       ofDay: (venueId, date, timeZone) => billing.service.dailyTotalsOf(venueId, date, timeZone),
     },
+    dashboardSessions: {
+      ofWindow: (venueId, from, to) => schedule.service.sessionsOfWindow(venueId, from, to),
+    },
+    occupancy: {
+      bySession: (sessionIds) => booking.service.occupancyBySession(sessionIds),
+    },
+    alertMembers: {
+      inactiveSince: (venueId, since) => members.service.inactiveSince(venueId, since),
+      debtors: (venueId) => members.service.debtorsIn(venueId),
+      activeIn: (venueId) => members.service.activeMembersIn(venueId),
+    },
+    /*
+     * El nombre del socio lo junta aca: Contracts no conoce el modelo de
+     * Members, y una alerta que dice "ctr_3f8k vence el 11" no le sirve a nadie.
+     */
+    alertContracts: {
+      expiringIn: async (venueId, until) => {
+        const contratos = await contracts.service.expiringIn(venueId, until);
+        const socios = await members.service.summariesOf(
+          contratos.map((contrato) => contrato.memberId),
+        );
+        const nombres = new Map(socios.map((socio) => [socio.publicId, socio.fullName]));
+
+        return contratos.map((contrato) => ({
+          memberId: contrato.memberId,
+          memberName: nombres.get(contrato.memberId) ?? 'Socio',
+          productName: contrato.productName,
+          endsAt: contrato.endsAt,
+        }));
+      },
+    },
+    waivers: { missingAmong: (memberIds) => waivers.service.missingAmong(memberIds) },
   });
 
   routes.route('/', metrics.routes);

@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Home } from './Home.js';
 import { Shell } from './Shell.js';
 
 /** Shell del DFSM: §5.1.2 pide header, panel lateral colapsable y footer. */
@@ -9,7 +8,7 @@ describe('shell del DFSM', () => {
   it('tiene header, navegacion principal y footer', () => {
     render(
       <Shell>
-        <Home />
+        <p>contenido</p>
       </Shell>,
     );
 
@@ -21,7 +20,7 @@ describe('shell del DFSM', () => {
   it('el panel lateral se puede comprimir para ganar espacio', async () => {
     render(
       <Shell>
-        <Home />
+        <p>contenido</p>
       </Shell>,
     );
     const toggle = screen.getByRole('button', { name: /panel lateral/i });
@@ -34,7 +33,7 @@ describe('shell del DFSM', () => {
   it('los modulos del centro estan en la navegacion', () => {
     render(
       <Shell>
-        <Home />
+        <p>contenido</p>
       </Shell>,
     );
 
@@ -46,7 +45,7 @@ describe('shell del DFSM', () => {
   it('el selector de Venue NO aparece con un solo centro: seria ruido', () => {
     render(
       <Shell>
-        <Home />
+        <p>contenido</p>
       </Shell>,
     );
 
@@ -56,17 +55,19 @@ describe('shell del DFSM', () => {
   it('se puede cambiar el tema desde el header', () => {
     render(
       <Shell>
-        <Home />
+        <p>contenido</p>
       </Shell>,
     );
 
     expect(screen.getByRole('button', { name: /tema/i })).toBeDefined();
   });
 
-  it('la pantalla vacia trae la accion que la resuelve', () => {
+  it('el contenido de la pantalla se renderiza adentro del shell', () => {
+    // El estado vacio del tablero lo prueba `Home.test`, que es de quien es:
+    // el shell solo tiene que no comerse lo que le ponen adentro.
     render(
       <Shell>
-        <Home />
+        <button type="button">Crear la primera</button>
       </Shell>,
     );
 

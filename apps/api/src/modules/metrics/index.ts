@@ -1,13 +1,19 @@
 import type { Temporal } from '@js-temporal/polyfill';
 import type { EntitlementsLoader } from '../../entitlements/middleware.js';
 import type { JobDefinition } from '../../jobs/runner.js';
+import { DashboardService } from './application/dashboard-service.js';
 import { MetricsService } from './application/metrics-service.js';
 import type {
+  AlertMemberLookup,
   BillingTotals,
   BookingCounts,
+  ContractAlertLookup,
+  DashboardSessionLookup,
   MemberCounts,
   SessionCounts,
+  SessionOccupancy,
   VenueDirectory,
+  WaiverAlertLookup,
 } from './application/ports.js';
 import { EMPTY_COUNTS, dayKpisOf } from './domain/kpis.js';
 import { metricsJobs } from './infrastructure/jobs.js';
@@ -26,6 +32,7 @@ import { runWithTenant } from '../../tenancy/context.js';
 export interface MetricsModule {
   routes: ReturnType<typeof createMetricsRoutes>;
   service: MetricsService;
+  dashboard: DashboardService;
   jobs: JobDefinition[];
 }
 
@@ -36,6 +43,12 @@ export interface MetricsModuleDeps {
   bookings: BookingCounts;
   members: MemberCounts;
   billing: BillingTotals;
+  /** Lo que suma el tablero del dia (F1-24) sobre lo que ya usa el job. */
+  dashboardSessions: DashboardSessionLookup;
+  occupancy: SessionOccupancy;
+  alertMembers: AlertMemberLookup;
+  alertContracts: ContractAlertLookup;
+  waivers: WaiverAlertLookup;
   now: () => Temporal.Instant;
 }
 
@@ -46,6 +59,17 @@ export function createMetricsModule(deps: MetricsModuleDeps): MetricsModule {
     sessions: deps.sessions,
     bookings: deps.bookings,
     members: deps.members,
+    billing: deps.billing,
+    now: deps.now,
+  });
+
+  const dashboard = new DashboardService({
+    venues: deps.venues,
+    sessions: deps.dashboardSessions,
+    occupancy: deps.occupancy,
+    members: deps.alertMembers,
+    contracts: deps.alertContracts,
+    waivers: deps.waivers,
     billing: deps.billing,
     now: deps.now,
   });
@@ -70,12 +94,14 @@ export function createMetricsModule(deps: MetricsModuleDeps): MetricsModule {
   };
 
   return {
-    routes: createMetricsRoutes(service, deps.entitlements, seedVictim),
+    routes: createMetricsRoutes(service, dashboard, deps.entitlements, seedVictim),
     service,
+    dashboard,
     jobs: metricsJobs(service),
   };
 }
 
+export type { DashboardService } from './application/dashboard-service.js';
 export type { MetricsService } from './application/metrics-service.js';
 export type {
   BillingTotals,

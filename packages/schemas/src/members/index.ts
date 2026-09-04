@@ -205,3 +205,22 @@ export const memberNoteResponseSchema = z.object({
 });
 
 export type MemberNoteResponse = z.infer<typeof memberNoteResponseSchema>;
+
+/**
+ * El buscador global del DFSM (§5.1.2). Devuelve lo justo para la lista de
+ * resultados: quién es y cómo reconocerlo. La ficha entera se abre después.
+ */
+export const memberSearchQuerySchema = z.object({
+  q: z.string().trim().min(2, 'Escribí al menos dos letras.').max(80),
+});
+
+export type MemberSearchQuery = z.infer<typeof memberSearchQuerySchema>;
+
+export const memberSearchHitSchema = z.object({
+  memberId: z.string(),
+  fullName: z.string(),
+  /** Documento, teléfono o mail: lo que sirva para distinguir dos homónimos. */
+  hint: z.string(),
+});
+
+export type MemberSearchHit = z.infer<typeof memberSearchHitSchema>;

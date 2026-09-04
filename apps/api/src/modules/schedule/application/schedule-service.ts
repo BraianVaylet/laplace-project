@@ -502,14 +502,25 @@ export class ScheduleService {
     venueId: string,
     from: Temporal.Instant,
     to: Temporal.Instant,
-  ): Promise<Array<{ sessionId: string; capacity: number }>> {
+  ): Promise<
+    Array<{
+      sessionId: string;
+      name: string;
+      capacity: number;
+      startAt: Temporal.Instant;
+      status: string;
+    }>
+  > {
     const clases = await this.sessions.between(venueId, from, to, {
       status: { $ne: 'cancelled' },
     } as never);
 
     return clases.map((clase) => ({
       sessionId: String(clase['publicId']),
+      name: clase.name,
       capacity: clase.capacity,
+      startAt: fromBsonDate(clase.startAt),
+      status: clase.status,
     }));
   }
 

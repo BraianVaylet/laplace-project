@@ -127,6 +127,25 @@ export class ContractRepository extends TenantRepository<ContractDoc> {
   }
 
   /** Devuelve un credito consumido. Lo usa la cancelacion en plazo (ADR-001). */
+  /**
+   * Contratos activos que vencen antes de `until`, en una sede. Es la alerta de
+   * renovacion del panel (§2.1.12): siete dias es el plazo con el que se puede
+   * renovar sin cortarle las clases a nadie.
+   */
+  async expiringIn(venueId: string, until: Date, limit = 50): Promise<ContractDoc[]> {
+    return ContractModel.find(
+      this.scope({
+        venueId,
+        status: 'active',
+        endsAt: { $ne: null, $lte: until },
+      } as FilterQuery<ContractDoc>),
+    )
+      .sort({ endsAt: 1 })
+      .limit(limit)
+      .lean<ContractDoc[]>()
+      .exec();
+  }
+
   async refundCredit(publicId: string): Promise<ContractDoc | null> {
     const { tenantId } = requireTenant();
 
