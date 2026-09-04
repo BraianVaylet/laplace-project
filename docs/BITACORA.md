@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `notifications` · `booking` · `schedule` · `contracts` · `billing`
 - **Tipo:** feature
-- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `909b156` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/4aS5u66G (F1-22) — movida a **Completadas**
 - **Qué cambió:** los ocho avisos automáticos de §2.1.14 ya salen solos. Cancelar una reserva,
   entrar desde la lista de espera, que se caiga la clase o cambie el coach, que el pack esté por
