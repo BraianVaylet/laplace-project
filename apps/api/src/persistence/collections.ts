@@ -34,6 +34,9 @@ export const COLLECTIONS = {
   lead: 'leads',
   auditLog: 'auditLogs',
   metricsDaily: 'metricsDaily',
+  // Plataforma: datos SOBRE los centros, no DE un centro (§2.1.3, §2.1.4).
+  subscription: 'subscriptions',
+  plan: 'plans',
   // Infraestructura
   loginAttempt: 'loginAttempt',
   jobLock: 'jobLock',

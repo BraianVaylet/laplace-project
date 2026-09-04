@@ -35,6 +35,11 @@ export interface NotificationRecipient {
 export interface RecipientLookup {
   /** `null` cuando el socio no tiene cuenta: no hay a quién avisarle todavía. */
   byMemberId(memberId: string): Promise<NotificationRecipient | null>;
+  /**
+   * El dueño de la cuenta del centro. Es a quien le llega el aviso de que
+   * soporte entró (§2.1.3): no es un socio, es el SMU.
+   */
+  ownerOf(organizationId: string): Promise<NotificationRecipient | null>;
 }
 
 /** La sede, como la necesita un aviso: su nombre y su zona horaria. */

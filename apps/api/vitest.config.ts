@@ -52,6 +52,10 @@ export default defineConfig({
         // 🔴 Waivers es riesgo legal, no una funcionalidad opcional (§2.1.20):
         // hay que poder probar en un juicio qué firmó cada socio.
         'src/modules/waivers/**': { lines: 95, statements: 90, branches: 85, functions: 90 },
+        // 🔴 Suscriptions decide quién puede usar el producto y cuánto paga.
+        // Un bug acá se cobra de más, se cobra de menos o deja a un centro
+        // afuera: las tres cosas se enteran los clientes antes que nosotros.
+        'src/modules/susc/**': { lines: 95, statements: 90, branches: 85, functions: 90 },
 
         // Infraestructura de soporte.
         'src/jobs/**': { lines: 85, statements: 85, branches: 70, functions: 75 },

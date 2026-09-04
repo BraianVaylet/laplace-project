@@ -4,8 +4,11 @@ import { createAuditWriter } from '../audit/audit-log.js';
 import { Temporal } from '@js-temporal/polyfill';
 import type { Logger } from 'pino';
 import type { AppEnv } from '../app.js';
+import { planFor, type PlanId } from '../entitlements/catalog.js';
 import type { EntitlementsLoader } from '../entitlements/middleware.js';
 import type { DomainEventBus } from '../events/bus.js';
+import { AppError } from '../http/errors.js';
+import { runWithTenant } from '../tenancy/context.js';
 import { createMembersModule, type OrganizationMembershipPort } from './members/index.js';
 import { createBillingModule } from './billing/index.js';
 import { createAttendanceModule, type AttendanceBooking } from './attendance/index.js';
@@ -16,6 +19,7 @@ import { createScheduleModule, type SessionBookingReleaser } from './schedule/in
 import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
 import { createVenuesModule } from './venues/index.js';
 import { createMetricsModule } from './metrics/index.js';
+import { createSuscModule, type OrganizationCreator } from './susc/index.js';
 import { createWaiverModule } from './waivers/index.js';
 import {
   createLoggingMailer,
@@ -41,6 +45,23 @@ export interface ModuleDeps {
    * desde `index.ts`: los modulos no conocen la libreria de identidad.
    */
   memberships: OrganizationMembershipPort;
+  /**
+   * Crea la organizacion del suscriptor en el alta self-service (F1-25). Lo
+   * implementa Better Auth desde `index.ts`: los modulos no conocen la
+   * libreria de identidad.
+   */
+  organizations?: OrganizationCreator | undefined;
+  /** Cuantos usuarios de staff tiene el centro. Lo contesta Better Auth. */
+  staffCount?: ((organizationId: string) => Promise<number>) | undefined;
+  /**
+   * El dueño de la cuenta del centro. Lo contesta Better Auth, y es a quien le
+   * llega el aviso de que soporte entro (§2.1.3).
+   */
+  owner?:
+    | ((
+        organizationId: string,
+      ) => Promise<{ userId: string; name: string; email: string | null } | null>)
+    | undefined;
   /**
    * Libera las reservas futuras de un contrato al congelarlo o vencerlo. Lo va a
    * contestar Booking (F1-14); hasta entonces no hay reservas que liberar.
@@ -312,6 +333,7 @@ export function createModules(deps: ModuleDeps) {
     mailer: deps.mailer ?? createLoggingMailer((msg, meta) => deps.logger.info(meta, msg)),
     recipients: {
       byMemberId: (memberId) => members.service.notificationRecipientOf(memberId),
+      ownerOf: (organizationId) => deps.owner?.(organizationId) ?? Promise.resolve(null),
     },
     sessions: {
       find: async (sessionId) => {
@@ -399,6 +421,53 @@ export function createModules(deps: ModuleDeps) {
 
   routes.route('/', metrics.routes);
 
+  /*
+   * Suscriptions es el unico modulo que NO es de un centro: sus datos son
+   * sobre los centros. Va al final y nadie lo consume — el resto del producto
+   * lo ve a traves de los entitlements, no de este modulo.
+   */
+  const susc = createSuscModule({
+    audit,
+    events: deps.events,
+    now: deps.now ?? (() => Temporal.Now.instant()),
+    organizations: deps.organizations ?? {
+      // Sin Better Auth cableado no se puede dar de alta: fallar es mejor que
+      // crear una suscripcion huerfana de organizacion.
+      create: () =>
+        Promise.reject(
+          new AppError({
+            code: 'LP-SUSC-422-001',
+            status: 422,
+            message: 'El alta self-service no está disponible en este entorno.',
+          }),
+        ),
+    },
+    usage: {
+      of: async (organizationId) =>
+        runWithTenant(
+          { tenantId: organizationId, userId: 'system:usage', requestId: 'usage-check' },
+          async () => ({
+            venues: await venues.service.countActive(),
+            activeMembers: await members.service.countActive(),
+            staffUsers: (await deps.staffCount?.(organizationId)) ?? 0,
+          }),
+        ),
+    },
+    limits: {
+      of: (planId) => {
+        const { limits } = planFor(planId as PlanId);
+
+        return {
+          venues: limits.venues,
+          activeMembers: limits.activeMembers,
+          staffUsers: limits.staffUsers,
+        };
+      },
+    },
+  });
+
+  routes.route('/', susc.routes);
+
   /** Todo lo que el runner tiene que programar (§10). */
   const jobs = [
     ...contracts.jobs,
@@ -407,6 +476,7 @@ export function createModules(deps: ModuleDeps) {
     ...booking.jobs,
     ...notifications.jobs,
     ...metrics.jobs,
+    ...susc.jobs,
   ];
 
   return {
@@ -424,6 +494,7 @@ export function createModules(deps: ModuleDeps) {
     attendance,
     notifications,
     metrics,
+    susc,
   };
 }
 

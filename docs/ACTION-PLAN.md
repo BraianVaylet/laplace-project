@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     23 |
+| Fase 1 — MVP vendible   |       32 |          186 |     24 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1528,7 +1528,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   pantallas sin construir todavía no son enlaces. La búsqueda usa una regular expression anclada
   sobre el tenant: con los volúmenes de Fase 1 alcanza, y un índice de texto es Fase 2.
 
-## [ ] F1-25 · Suscriptors y Suscriptions: signup self-service y planes
+## [x] F1-25 · Suscriptors y Suscriptions: signup self-service y planes
 
 - **module:** susc
 - **description:** El alta del suscriptor desde la landing con trial de 14 días sin tarjeta
@@ -1561,7 +1561,17 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **error-codes:** `LP-SUSC-422-001`, `LP-SUSC-409-002`, `LP-SUBS-422-001` (cambio de plan
   inválido), `LP-SUSC-403-003` (impersonación sin motivo)
 - **data-model-impact:** `Organization` completa de §5.2.2, `Plan`, `Subscription` con
-  `priceSnapshotCents`.
+  `priceSnapshotCents`. `subscriptions` y `plans` son colecciones **de plataforma**: no llevan
+  `tenantId` porque no son datos de un centro sino sobre los centros, y el SAU las consulta
+  cruzando todos. Se acotan por `organizationId`, que sale de la sesión.
+- **deuda declarada:** el cobro recurrente con Mercado Pago, los webhooks idempotentes, el dunning
+  y los cupones son Fase 2 (§2.1.4): acá está el ciclo de vida, no el cobro. Los precios que siembra
+  la migración son **valores iniciales** — el SAU los cambia desde su panel. La autorización de las
+  rutas `/api/v1/admin` la cierra F1-27, que trae el rol de SAU: hoy exigen sesión.
+- **encontrado de paso:** el lector del plan consultaba la organización por un campo `id` que Better
+  Auth **no guarda** — la fila nunca aparecía y cada centro caía al plan del trial en silencio, con
+  un cliente de Max operando como Basic. Se arregló y quedó cubierto con un test contra una
+  organización real, no contra un doble de la base.
 
 ## [ ] F1-26 · Landing completa
 

@@ -161,6 +161,33 @@ export interface DomainEvents {
     contractId: string;
     memberId: string;
   };
+  /**
+   * El suscriptor cambio de estado (§2.1.3). Lo escuchan Metrics (churn del
+   * SaaS) y el panel de salud del DFSA.
+   */
+  'subscription.status_changed': {
+    organizationId: string;
+    from: string;
+    to: string;
+  };
+  'subscription.plan_changed': {
+    organizationId: string;
+    from: string;
+    to: string;
+    /** Lo que se cobro de mas por el resto del ciclo. Cero en un downgrade. */
+    proratedCents: number;
+  };
+  /**
+   * 🔴 El SAU entro a la cuenta de un suscriptor para dar soporte (§2.1.3). Lo
+   * escucha Notifications para avisarle al SMU: un acceso de soporte que el
+   * dueño de la cuenta no puede ver es indistinguible de una fuga.
+   */
+  'organization.impersonated': {
+    organizationId: string;
+    reason: string;
+    expiresAt: string;
+  };
+
   'pr.achieved': {
     resultId: string;
     memberId: string;

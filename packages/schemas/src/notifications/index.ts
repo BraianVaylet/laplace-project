@@ -55,6 +55,7 @@ export const NOTIFICATION_EVENT_TYPES = [
   'contract.expired',
   'charge.overdue',
   'payment.received',
+  'organization.impersonated',
 ] as const;
 
 export const notificationEventTypeSchema = z.enum(NOTIFICATION_EVENT_TYPES);
@@ -79,6 +80,7 @@ export const NOTIFICATION_VARIABLES: Record<NotificationEventType, readonly stri
   'contract.expired': ['nombre', 'pack'],
   'charge.overdue': ['nombre', 'monto', 'vencimiento'],
   'payment.received': ['nombre', 'monto', 'fecha'],
+  'organization.impersonated': ['motivo'],
 };
 
 /**
@@ -86,7 +88,15 @@ export const NOTIFICATION_VARIABLES: Record<NotificationEventType, readonly stri
  * Son los de plata: que alguien no quiera recordatorios de clase no puede
  * significar que el centro no pueda avisarle que debe una cuota.
  */
-export const CRITICAL_EVENT_TYPES = ['charge.overdue', 'payment.received'] as const;
+export const CRITICAL_EVENT_TYPES = [
+  'charge.overdue',
+  'payment.received',
+  /**
+   * El acceso de soporte del SAU **no se puede apagar** (§2.1.3): un acceso
+   * que el dueño de la cuenta no puede ver es indistinguible de una fuga.
+   */
+  'organization.impersonated',
+] as const;
 
 export function isCriticalEventType(eventType: string): boolean {
   return (CRITICAL_EVENT_TYPES as readonly string[]).includes(eventType);

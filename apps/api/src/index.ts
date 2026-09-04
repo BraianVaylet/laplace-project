@@ -56,6 +56,55 @@ async function main() {
         await auth.api.addMember({ body: { userId, organizationId, role: 'member' } });
       },
     },
+    /*
+     * El alta self-service de la landing (F1-25). La organizacion la crea
+     * Better Auth: el modulo de suscripciones no conoce la libreria de
+     * identidad, solo pide que exista una y le cuelga su suscripcion.
+     */
+    organizations: {
+      create: async ({ name, slug, ownerUserId }) => {
+        const org = await auth.api.createOrganization({
+          body: { name, slug, userId: ownerUserId },
+        });
+
+        return { organizationId: (org as { id: string }).id };
+      },
+    },
+    /*
+     * El dueño de la cuenta: el `owner` de la organizacion de Better Auth. Es a
+     * quien le llega el aviso de que soporte entro (§2.1.3). Se lee de la
+     * coleccion y no por la API porque esto corre sin sesion del dueño.
+     */
+    owner: async (organizationId) => {
+      const membresia = await (db as Db)
+        .collection('member')
+        .findOne<{ userId: string }>({ organizationId, role: 'owner' });
+      if (!membresia) return null;
+
+      const user = await (db as Db)
+        .collection('user')
+        .findOne<{ name?: string; email?: string }>({ id: membresia.userId });
+
+      return {
+        userId: membresia.userId,
+        name: user?.name ?? 'Titular de la cuenta',
+        email: user?.email ?? null,
+      };
+    },
+
+    /*
+     * Los usuarios de staff que ocupan cupo del plan (§2.2.1). Se cuenta sobre
+     * la coleccion de Better Auth y no por su API porque esto corre sin sesion
+     * — lo consulta el chequeo de limites antes de bajar de plan.
+     *
+     * El rol `member` no cuenta: son los socios del centro, que tienen su
+     * propio limite.
+     */
+    staffCount: async (organizationId) =>
+      (db as Db).collection('member').countDocuments({
+        organizationId,
+        role: { $ne: 'member' },
+      }),
   });
 
   const app = createApp({

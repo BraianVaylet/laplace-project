@@ -20,6 +20,12 @@ const tokens = require('../../../migrations/20260903120000-check-in-tokens.cjs')
   up(db: Db): Promise<void>;
   INDEXES: Array<[string, Record<string, number>, Record<string, unknown>]>;
 };
+const subscriptions = require('../../../migrations/20260906090000-subscriptions.cjs') as {
+  COLLECTIONS: Record<string, string>;
+  up(db: Db): Promise<void>;
+  INDEXES: Array<[string, Record<string, number>, Record<string, unknown>]>;
+  PLANS: Array<{ planId: string; priceCents: number }>;
+};
 const notifications = require('../../../migrations/20260905090000-notifications.cjs') as {
   COLLECTIONS: Record<string, string>;
   up(db: Db): Promise<void>;
@@ -66,9 +72,41 @@ describe('las migraciones y el codigo hablan de las mismas colecciones', () => {
       ...closures.COLLECTIONS,
       ...tokens.COLLECTIONS,
       ...notifications.COLLECTIONS,
+      ...subscriptions.COLLECTIONS,
     };
 
     expect(declaradas).toEqual(COLLECTIONS);
+  });
+});
+
+describe('las suscripciones son de plataforma, no de un tenant (F1-25)', () => {
+  it('🔴 una organizacion no puede tener dos suscripciones', async () => {
+    await subscriptions.up(db);
+    const indices = await indexesOf('subscriptions');
+    const unico = indices.find((indice) => indice.name === 'organization_unique');
+
+    // Dos suscripciones serian dos planes, dos precios y ninguna forma de
+    // saber cual vale.
+    expect(unico?.unique).toBe(true);
+    expect(unico?.key).toEqual({ organizationId: 1 });
+  });
+
+  it('los indices NO llevan tenantId: son datos sobre los centros, no de uno', () => {
+    for (const [, keys] of subscriptions.INDEXES) {
+      expect(Object.keys(keys)).not.toContain('tenantId');
+    }
+  });
+
+  it('siembra el catalogo de planes y correrla dos veces no lo pisa', async () => {
+    await subscriptions.up(db);
+    await db.collection('plans').updateOne({ planId: 'pro' }, { $set: { priceCents: 1 } });
+    await subscriptions.up(db);
+
+    const pro = await db.collection('plans').findOne<{ priceCents: number }>({ planId: 'pro' });
+
+    // El precio que ya edito el SAU no se pisa con el inicial.
+    expect(pro?.priceCents).toBe(1);
+    expect(await db.collection('plans').countDocuments({})).toBe(subscriptions.PLANS.length);
   });
 });
 

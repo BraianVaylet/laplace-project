@@ -23,6 +23,46 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-04 — Fix: los entitlements leían la organización por un campo que no existe
+
+- **Módulo:** `entitlements`
+- **Tipo:** fix
+- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Trello:** —
+- **Qué cambió:** `createOrganizationPlanReader` consultaba la organización de Better Auth por un
+  campo `id` que el adaptador de Mongo **no guarda** — la guarda con `_id`, y además como
+  `ObjectId`. La consulta no encontraba nunca la fila, así que todo centro caía al plan del trial:
+  un cliente de Max operando como Basic, sin que nada fallara ni se logueara.
+- **Por qué:** apareció escribiendo F1-25, cuando un test contra la colección real devolvió `null`
+  donde tenía que haber una organización. El test unitario del lector no lo veía porque su doble de
+  la base tenía la forma equivocada — el mismo error, copiado a los dos lados.
+- **Impacto:** ninguno sobre el modelo de datos. El lector ahora consulta por `_id`, aceptando el
+  `ObjectId` y el texto. Se corrigió también el doble de la base del test unitario, y se agregó un
+  test de integración contra una organización real: un doble no puede probar la forma de lo real.
+- **Pendiente:** ninguno.
+
+## 2026-09-04 — F1-25: alta self-service, trial de 14 días y planes
+
+- **Módulo:** `susc` (nuevo) · `entitlements` · `notifications` · `events`
+- **Tipo:** feature
+- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/qhzF6UVa (F1-25) — movida a **Completadas**
+- **Qué cambió:** el dueño de un centro se registra desde la landing y en dos pedidos tiene su
+  cuenta operativa, con trial de 14 días **sin tarjeta**. A los 14 días, si no eligió plan, la
+  cuenta se suspende y **no se borra nada**: sus socios y su agenda siguen ahí. Subir de plan es
+  inmediato con prorrateo, bajar es al fin del ciclo y valida antes que lo que ya tiene entre.
+  Cambiar el precio de un plan no cambia lo que paga quien ya estaba. El SAU puede entrar a una
+  cuenta para dar soporte con motivo obligatorio, y al dueño le llega el aviso.
+- **Por qué:** §2.1.3, §2.1.4 y ADR-004. Es el módulo del que depende que el producto cobre.
+- **Impacto:** colecciones `subscriptions` y `plans`, **de plataforma** (sin `tenantId`: son datos
+  sobre los centros, no de uno) · **migración** (`20260906090000`) con sus únicos y el catálogo de
+  planes sembrado · 8 endpoints nuevos, 2 de ellos públicos (`GET /api/v1/plans` y el alta) ·
+  3 eventos de dominio nuevos · aviso `organization.impersonated`, crítico y no apagable · 2 jobs
+  (`expireTrials`, `applyPendingPlanChanges`) · umbral de cobertura del módulo al 95%.
+- **Pendiente:** el cobro recurrente con Mercado Pago, los webhooks, el dunning y los cupones son
+  Fase 2. Los precios sembrados son valores iniciales que el SAU cambia desde su panel. La
+  autorización de `/api/v1/admin` la cierra F1-27, que trae el rol de SAU.
+
 ## 2026-09-04 — F1-24: el home del DFSM es un tablero
 
 - **Módulo:** `metrics` · `members` · `waivers` · `dfsm` · `ui` · `http`

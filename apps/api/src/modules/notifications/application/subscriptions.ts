@@ -296,6 +296,35 @@ export function subscribeNotifications(
       },
     });
   });
+
+  subscribeImpersonation(service, events, lookups);
+}
+
+/**
+ * 🔴 Soporte entró a la cuenta (§2.1.3). Le llega al dueño, sí o sí: es un
+ * aviso crítico, y el opt-out no lo alcanza. Un acceso que el dueño de la
+ * cuenta no puede ver es indistinguible de una fuga.
+ */
+function subscribeImpersonation(
+  service: NotificationService,
+  events: DomainEventBus,
+  lookups: SubscriptionLookups,
+): void {
+  events.on('organization.impersonated', async ({ organizationId, reason, expiresAt }) => {
+    const dueño = await lookups.recipients.ownerOf(organizationId);
+    if (!dueño) return;
+
+    await service.queue({
+      eventType: 'organization.impersonated',
+      userId: dueño.userId,
+      email: dueño.email,
+      // Cada acceso es un aviso: dos accesos con el mismo motivo son dos cosas
+      // que pasaron, y esconder el segundo sería esconder un acceso.
+      subjectId: expiresAt,
+      timeZone: DEFAULT_TIME_ZONE,
+      values: { motivo: reason },
+    });
+  });
 }
 
 /** `confirmBefore` viaja como texto en el evento. Un valor roto no rompe el aviso. */

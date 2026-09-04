@@ -72,6 +72,15 @@ const DEFAULTS: Record<NotificationEventType, TemplateContent> = {
     subject: 'Recibimos tu pago',
     body: 'Hola {{nombre}}, registramos tu pago de {{monto}} del {{fecha}}. ¡Gracias!',
   },
+  /*
+   * No lleva `{{nombre}}` a proposito: le llega al dueño de la cuenta y lo que
+   * importa no es saludarlo, es que vea el motivo. Es el aviso que hace que un
+   * acceso de soporte no sea indistinguible de una fuga (§2.1.3).
+   */
+  'organization.impersonated': {
+    subject: 'Soporte accedió a tu cuenta',
+    body: 'Un integrante del equipo de Laplace accedió a tu cuenta para dar soporte. Motivo: {{motivo}}. El acceso es temporal y queda registrado.',
+  },
 };
 
 export function defaultTemplate(eventType: NotificationEventType): TemplateContent {
@@ -102,9 +111,21 @@ const SAMPLES: Record<string, string> = {
   vencimiento: '1 de marzo',
 };
 
+/**
+ * Cuando la misma variable significa cosas distintas segun el aviso. `motivo`
+ * es "corte de luz" en una clase cancelada y otra cosa muy distinta en un
+ * acceso de soporte: una vista previa que dice cualquiera de las dos en el
+ * lugar equivocado no sirve para decidir si el texto esta bien.
+ */
+const SAMPLES_POR_EVENTO: Partial<Record<NotificationEventType, Record<string, string>>> = {
+  'organization.impersonated': { motivo: 'revisar un problema con la facturación' },
+};
+
 export function sampleValues(eventType: NotificationEventType): Record<string, string> {
+  const propios = SAMPLES_POR_EVENTO[eventType] ?? {};
+
   return Object.fromEntries(
-    variablesFor(eventType).map((nombre) => [nombre, SAMPLES[nombre] ?? nombre]),
+    variablesFor(eventType).map((nombre) => [nombre, propios[nombre] ?? SAMPLES[nombre] ?? nombre]),
   );
 }
 
