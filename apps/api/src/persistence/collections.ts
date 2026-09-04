@@ -38,6 +38,8 @@ export const COLLECTIONS = {
   subscription: 'subscriptions',
   plan: 'plans',
   contactRequest: 'contactRequests',
+  /** Solo el codigo del error, nunca su contenido (§11.3, ADR-004 decision 7). */
+  errorEvent: 'errorEvents',
   // Infraestructura
   loginAttempt: 'loginAttempt',
   jobLock: 'jobLock',

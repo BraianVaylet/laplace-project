@@ -1,3 +1,5 @@
+import type { Temporal } from '@js-temporal/polyfill';
+
 /**
  * Puertos de Suscriptors. Lo que necesita de afuera lo pide por interfaz: no
  * importa el modelo de nadie (ADR-003), y la organización la crea Better Auth,
@@ -35,4 +37,12 @@ export interface PlanLimitsLookup {
     activeMembers: number | null;
     staffUsers: number | null;
   };
+}
+
+/**
+ * Las corridas de job que fallaron. Las consulta el panel de salud (§11.3): un
+ * job que falla en silencio es peor que un job que no existe.
+ */
+export interface JobRunLookup {
+  failedSince(since: Temporal.Instant): Promise<Array<{ name: string; at: string; error: string }>>;
 }

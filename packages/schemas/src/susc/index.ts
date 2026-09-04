@@ -261,3 +261,107 @@ export const LANDING_PLANS: readonly LandingPlan[] = [
 export function formatArs(cents: number): string {
   return `$${Math.round(cents / 100).toLocaleString('es-AR')}`;
 }
+
+// ── El panel del SAU (§5.1.1, §11.3) ────────────────────────────────────────
+
+/**
+ * Un suscriptor como lo ve el super admin: su plan, su estado y **cuánto usa
+ * contra lo que su plan permite**.
+ *
+ * 🔴 No lleva ni un dato de los socios del centro (ADR-004, decisión 7). Son
+ * conteos: cuántos hay, no quiénes son.
+ */
+export const subscriberUsageSchema = z.object({
+  organizationId: z.string(),
+  centerName: z.string(),
+  status: subscriberStatusSchema,
+  planId: planIdSchema,
+  priceSnapshotCents: z.number().int(),
+  trialEndsAt: z.string().nullable(),
+  usage: z.object({
+    venues: z.number().int(),
+    activeMembers: z.number().int(),
+    staffUsers: z.number().int(),
+  }),
+  limits: z.object({
+    venues: z.number().int().nullable(),
+    activeMembers: z.number().int().nullable(),
+    staffUsers: z.number().int().nullable(),
+  }),
+  /** `true` cuando algo ya pasó el tope: es la oportunidad de upsell. */
+  overLimit: z.boolean(),
+});
+
+export type SubscriberUsage = z.infer<typeof subscriberUsageSchema>;
+
+/** Editar un plan entero, no solo el precio (§2.1.4). */
+export const updatePlanSchema = z.object({
+  name: z.string().trim().min(2).max(40),
+  priceCents: z.number().int().min(0, 'El precio no puede ser negativo.'),
+  description: z.string().trim().max(300),
+  highlights: z.array(z.string().trim().min(2).max(80)).max(10),
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'La fecha va en formato YYYY-MM-DD'),
+});
+
+export type UpdatePlanInput = z.infer<typeof updatePlanSchema>;
+
+/** La salud técnica del SaaS (§11.3). */
+export const healthPanelSchema = z.object({
+  /** Los códigos que más se repitieron en la ventana, de mayor a menor. */
+  errorsByCode: z.array(z.object({ code: z.string(), total: z.number().int() })),
+  failedJobs: z.array(
+    z.object({
+      name: z.string(),
+      at: z.string(),
+      error: z.string(),
+    }),
+  ),
+  /** Webhooks sin procesar. En Fase 1 siempre cero: los webhooks son Fase 2. */
+  pendingWebhooks: z.number().int(),
+  subscribers: z.object({
+    total: z.number().int(),
+    trial: z.number().int(),
+    active: z.number().int(),
+    suspended: z.number().int(),
+  }),
+});
+
+export type HealthPanel = z.infer<typeof healthPanelSchema>;
+
+/**
+ * El buscador de soporte (§11.3, §5). Es lo que hace verdadera la frase
+ * "compartí el código con soporte": del otro lado hay dónde pegarlo.
+ */
+export const supportQuerySchema = z
+  .object({
+    requestId: z.string().trim().max(64).optional(),
+    errorCode: z
+      .string()
+      .trim()
+      .regex(/^LP-[A-Z]{2,4}-\d{3}-\d{3}$/, 'El código tiene la forma LP-MOD-500-001.')
+      .optional(),
+  })
+  .refine(
+    (query) => query.requestId !== undefined || query.errorCode !== undefined,
+    'Buscá por requestId o por código de error.',
+  );
+
+export type SupportQuery = z.infer<typeof supportQuerySchema>;
+
+/**
+ * Lo que el panel de soporte muestra de un error.
+ *
+ * 🔴 Sin mensaje y sin `meta`: el super admin ve **qué** pasó y **dónde**, no
+ * los datos de quién lo sufrió (ADR-004, decisión 7).
+ */
+export const supportHitSchema = z.object({
+  requestId: z.string(),
+  code: z.string(),
+  status: z.number().int(),
+  method: z.string(),
+  path: z.string(),
+  organizationId: z.string().nullable(),
+  at: z.string(),
+});
+
+export type SupportHit = z.infer<typeof supportHitSchema>;

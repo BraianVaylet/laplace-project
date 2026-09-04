@@ -5,7 +5,14 @@ import type { AuditWriter } from '../../audit/audit-log.js';
 import type { DomainEventBus } from '../../events/bus.js';
 import type { JobDefinition } from '../../jobs/runner.js';
 import { SuscService } from './application/susc-service.js';
-import type { OrganizationCreator, PlanLimitsLookup, UsageLookup } from './application/ports.js';
+import type { ErrorEventStore } from '../../observability/error-events.js';
+import { NULL_ERROR_EVENT_STORE } from '../../observability/error-events.js';
+import type {
+  JobRunLookup,
+  OrganizationCreator,
+  PlanLimitsLookup,
+  UsageLookup,
+} from './application/ports.js';
 import { PlanRepository, SubscriptionRepository } from './infrastructure/susc.repository.js';
 import { createSauRoutes, createSuscRoutes } from './infrastructure/routes.js';
 
@@ -28,6 +35,13 @@ export interface SuscModuleDeps {
   limits: PlanLimitsLookup;
   audit: AuditWriter;
   events: DomainEventBus;
+  /**
+   * De donde sale el panel de soporte (§11.3). Sin el, el panel abre vacio: un
+   * registro de errores no puede ser requisito para que la app levante.
+   */
+  errorEvents?: ErrorEventStore | undefined;
+  /** Las corridas de job fallidas. Sin el, el panel las muestra vacias. */
+  jobRuns?: JobRunLookup | undefined;
   now: () => Temporal.Instant;
 }
 
@@ -40,6 +54,8 @@ export function createSuscModule(deps: SuscModuleDeps): SuscModule {
     limits: deps.limits,
     audit: deps.audit,
     events: deps.events,
+    errorEvents: deps.errorEvents ?? NULL_ERROR_EVENT_STORE,
+    jobRuns: deps.jobRuns ?? { failedSince: () => Promise.resolve([]) },
     now: deps.now,
   });
 
@@ -83,5 +99,10 @@ export function createSuscModule(deps: SuscModuleDeps): SuscModule {
 }
 
 export type { SuscService } from './application/susc-service.js';
-export type { OrganizationCreator, PlanLimitsLookup, UsageLookup } from './application/ports.js';
+export type {
+  JobRunLookup,
+  OrganizationCreator,
+  PlanLimitsLookup,
+  UsageLookup,
+} from './application/ports.js';
 export { PlanRepository, SubscriptionRepository } from './infrastructure/susc.repository.js';

@@ -20,7 +20,16 @@ const COLLECTIONS = {
    * el prospecto **de un centro** — es otra cosa y llega con el CRM de Fase 4.
    */
   contactRequest: 'contactRequests',
+  /**
+   * El registro que consulta el panel de soporte (§11.3). Guarda el **código**
+   * del error, nunca su contenido: el SAU no ve datos de miembros (ADR-004,
+   * decisión 7).
+   */
+  errorEvent: 'errorEvents',
 };
+
+/** Treinta días. Un error de hace un mes ya no lo consulta nadie. */
+const ERROR_RETENTION_SECONDS = 30 * 24 * 60 * 60;
 
 const INDEXES = [
   [COLLECTIONS.subscription, { organizationId: 1 }, { unique: true, name: 'organization_unique' }],
@@ -28,6 +37,19 @@ const INDEXES = [
   [COLLECTIONS.plan, { planId: 1 }, { unique: true, name: 'plan_unique' }],
   // Por fecha: la bandeja se lee de lo más nuevo a lo más viejo.
   [COLLECTIONS.contactRequest, { receivedAt: -1 }, { name: 'received_at' }],
+
+  // Las dos consultas del panel de soporte: por pedido y por código (§11.3).
+  [COLLECTIONS.errorEvent, { requestId: 1 }, { name: 'request_id' }],
+  [COLLECTIONS.errorEvent, { code: 1, at: -1 }, { name: 'code_at' }],
+  /*
+   * TTL: se borra solo. Sin esto la colección crece para siempre, y lo que
+   * guarda no vale una purga manual.
+   */
+  [
+    COLLECTIONS.errorEvent,
+    { at: 1 },
+    { expireAfterSeconds: ERROR_RETENTION_SECONDS, name: 'at_ttl' },
+  ],
 ];
 
 /**

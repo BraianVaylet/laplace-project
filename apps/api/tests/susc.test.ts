@@ -99,6 +99,23 @@ async function altaDeCentro(nombre: string, overrides: Record<string, unknown> =
   return { cookie, suscripcion };
 }
 
+/**
+ * El SAU. Las rutas de `/api/v1/admin` exigen super admin y segundo factor
+ * (F1-27): `isSuperAdmin` no es escribible desde el registro, se marca en la
+ * base como se da de alta de verdad.
+ */
+async function superAdmin() {
+  const n = ++creados;
+  const email = `sau-susc-${n}@laplace.test`;
+  const cookie = await signUp(email);
+
+  await mongoose.connection.db
+    ?.collection('user')
+    .updateOne({ email }, { $set: { isSuperAdmin: true, twoFactorEnabled: true } });
+
+  return cookie;
+}
+
 const correrJob = async (name: string) => {
   const job = modules.jobs.find((candidate) => candidate.name === name);
   if (!job) throw new Error(`no existe el job ${name}`);
@@ -317,7 +334,7 @@ describe('el grandfathering (§2.1.4)', () => {
     // El SAU sube Pro un 50%.
     const res = await app.request(
       '/api/v1/admin/plans/pro/price',
-      req(cookie, 'PUT', { priceCents: 6_750_000, effectiveFrom: '2026-04-01' }),
+      req(await superAdmin(), 'PUT', { priceCents: 6_750_000, effectiveFrom: '2026-04-01' }),
     );
     expect(res.status).toBe(200);
 
@@ -329,10 +346,10 @@ describe('el grandfathering (§2.1.4)', () => {
   });
 
   it('quien se da de alta después paga el precio nuevo', async () => {
-    const { cookie } = await altaDeCentro('precio-viejo');
+    await altaDeCentro('precio-viejo');
     await app.request(
       '/api/v1/admin/plans/pro/price',
-      req(cookie, 'PUT', { priceCents: 6_750_000, effectiveFrom: '2026-04-01' }),
+      req(await superAdmin(), 'PUT', { priceCents: 6_750_000, effectiveFrom: '2026-04-01' }),
     );
 
     const { suscripcion } = await altaDeCentro('precio-nuevo');
@@ -464,11 +481,14 @@ describe('los datos fiscales (§2.1.3)', () => {
 
 describe('la impersonación del SAU (§2.1.3, ADR-004)', () => {
   it('🔴 sin motivo no se entra', async () => {
-    const { cookie, suscripcion } = await altaDeCentro('impersonacion-sin-motivo');
+    const { suscripcion } = await altaDeCentro('impersonacion-sin-motivo');
 
     const res = await app.request(
       '/api/v1/admin/impersonate',
-      req(cookie, 'POST', { organizationId: suscripcion.organizationId, reason: 'ver' }),
+      req(await superAdmin(), 'POST', {
+        organizationId: suscripcion.organizationId,
+        reason: 'ver',
+      }),
     );
     const body = (await res.json()) as ErrorBody;
 
@@ -477,11 +497,11 @@ describe('la impersonación del SAU (§2.1.3, ADR-004)', () => {
   });
 
   it('🔴 con motivo entra, dura poco y queda en el audit log del centro', async () => {
-    const { cookie, suscripcion } = await altaDeCentro('impersonacion');
+    const { suscripcion } = await altaDeCentro('impersonacion');
 
     const res = await app.request(
       '/api/v1/admin/impersonate',
-      req(cookie, 'POST', {
+      req(await superAdmin(), 'POST', {
         organizationId: suscripcion.organizationId,
         reason: 'El SMU reportó que no le salen los cobros del martes.',
       }),
@@ -501,11 +521,11 @@ describe('la impersonación del SAU (§2.1.3, ADR-004)', () => {
   });
 
   it('el centro que no existe no se puede impersonar', async () => {
-    const { cookie } = await altaDeCentro('impersonacion-fantasma');
+    await altaDeCentro('impersonacion-fantasma');
 
     const res = await app.request(
       '/api/v1/admin/impersonate',
-      req(cookie, 'POST', {
+      req(await superAdmin(), 'POST', {
         organizationId: 'org_no_existe',
         reason: 'Probando si el aislamiento aguanta un id inventado.',
       }),

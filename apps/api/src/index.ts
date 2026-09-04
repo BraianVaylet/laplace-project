@@ -6,6 +6,8 @@ import { createAuth } from './auth/auth.js';
 import { createLockoutGuard, createMongoLockoutStore } from './auth/lockout-guard.js';
 import { createLoggingEmailSender } from './auth/ports.js';
 import { createEntitlementsLoader } from './entitlements/middleware.js';
+import { createErrorEventStore } from './observability/error-events.js';
+import { fromBsonDate, toBsonDate } from './persistence/bson-date.js';
 import { createOrganizationPlanReader } from './entitlements/organization-plan-reader.js';
 import { createEventBus } from './events/bus.js';
 import { createJobRunner } from './jobs/runner.js';
@@ -41,6 +43,7 @@ async function main() {
 
   const events = createEventBus(logger);
   const entitlements = createEntitlementsLoader(createOrganizationPlanReader(db as Db));
+  const errorEvents = createErrorEventStore(db as Db);
 
   const modules = createModules({
     events,
@@ -70,6 +73,29 @@ async function main() {
         return { organizationId: (org as { id: string }).id };
       },
     },
+    errorEvents,
+    /*
+     * Las corridas de job que fallaron, para el panel de salud del DFSA
+     * (§11.3). Se leen de la coleccion que ya escribe el runner: un job que
+     * falla en silencio es peor que un job que no existe.
+     */
+    jobRuns: {
+      failedSince: async (since) => {
+        const filas = await (db as Db)
+          .collection('jobRun')
+          .find({ status: 'failed', startedAt: { $gte: toBsonDate(since) } })
+          .sort({ startedAt: -1 })
+          .limit(20)
+          .toArray();
+
+        return filas.map((fila) => ({
+          name: String(fila['name']),
+          at: fromBsonDate(fila['startedAt'] as Date).toString(),
+          error: String(fila['error'] ?? 'sin detalle'),
+        }));
+      },
+    },
+
     /*
      * El dueño de la cuenta: el `owner` de la organizacion de Better Auth. Es a
      * quien le llega el aviso de que soporte entro (§2.1.3). Se lee de la
@@ -111,6 +137,7 @@ async function main() {
     logger,
     corsOrigins: env.CORS_ORIGINS,
     auth,
+    errorEvents,
     modules: modules.routes,
     lockoutGuard: createLockoutGuard({ store: createMongoLockoutStore(db as Db) }),
     openapi: {

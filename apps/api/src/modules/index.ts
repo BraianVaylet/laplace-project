@@ -20,7 +20,8 @@ import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
 import { createVenuesModule } from './venues/index.js';
 import { createCrmModule } from './crm/index.js';
 import { createMetricsModule } from './metrics/index.js';
-import { createSuscModule, type OrganizationCreator } from './susc/index.js';
+import { createSuscModule, type JobRunLookup, type OrganizationCreator } from './susc/index.js';
+import type { ErrorEventStore } from '../observability/error-events.js';
 import { createWaiverModule } from './waivers/index.js';
 import {
   createLoggingMailer,
@@ -63,6 +64,10 @@ export interface ModuleDeps {
         organizationId: string,
       ) => Promise<{ userId: string; name: string; email: string | null } | null>)
     | undefined;
+  /** El registro de errores del panel de soporte del DFSA (§11.3). */
+  errorEvents?: ErrorEventStore | undefined;
+  /** Las corridas de job fallidas, para el panel de salud. */
+  jobRuns?: JobRunLookup | undefined;
   /**
    * Libera las reservas futuras de un contrato al congelarlo o vencerlo. Lo va a
    * contestar Booking (F1-14); hasta entonces no hay reservas que liberar.
@@ -430,6 +435,8 @@ export function createModules(deps: ModuleDeps) {
   const susc = createSuscModule({
     audit,
     events: deps.events,
+    ...(deps.errorEvents ? { errorEvents: deps.errorEvents } : {}),
+    ...(deps.jobRuns ? { jobRuns: deps.jobRuns } : {}),
     now: deps.now ?? (() => Temporal.Now.instant()),
     organizations: deps.organizations ?? {
       // Sin Better Auth cableado no se puede dar de alta: fallar es mejor que

@@ -64,6 +64,24 @@ export class SubscriptionRepository {
       .exec();
   }
 
+  /** Todas, para el panel del SAU. Es su trabajo verlas cruzando centros. */
+  async all(limit = 500): Promise<SubscriptionDoc[]> {
+    return SubscriptionModel.find()
+      .sort({ createdAt: -1 })
+      .limit(limit)
+      .lean<SubscriptionDoc[]>()
+      .exec();
+  }
+
+  /** Cuántas hay de cada estado. Es el resumen del panel de salud (§11.3). */
+  async countByStatus(): Promise<Record<string, number>> {
+    const filas = await SubscriptionModel.aggregate<{ _id: string; total: number }>([
+      { $group: { _id: '$status', total: { $sum: 1 } } },
+    ]).exec();
+
+    return Object.fromEntries(filas.map((fila) => [fila._id, fila.total]));
+  }
+
   /** Los trials que ya se vencieron. Los busca el job, sin contexto de tenant. */
   async expiredTrials(now: Temporal.Instant, limit = 500): Promise<SubscriptionDoc[]> {
     return SubscriptionModel.find({ status: 'trial', trialEndsAt: { $lte: toBsonDate(now) } })

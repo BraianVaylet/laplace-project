@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     25 |
+| Fase 1 — MVP vendible   |       32 |          186 |     26 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1621,7 +1621,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
     centro sí salen de ahí (F1-20).
   - Lighthouse CI (SEO ≥ 95, accesibilidad ≥ 95) queda para el pipeline de F1-31, junto con el E2E.
 
-## [ ] F1-27 · DFSA mínimo
+## [x] F1-27 · DFSA mínimo
 
 - **module:** susc
 - **description:** Lo que el SAU necesita para operar el SaaS en Fase 1 (§5.1.1): suscriptores,
@@ -1647,7 +1647,16 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **test_plan:** Test de que los endpoints del DFSA no exponen colecciones con `tenantId`. Test del
   buscador por `requestId` y `errorCode`. Test de la auditoría del cambio de estado.
 - **error-codes:** ninguno nuevo
-- **data-model-impact:** `AuditLog` de §5.2.2. Índice `{ tenantId, at }` + TTL de retención.
+- **data-model-impact:** colección `errorEvents`, **de plataforma** y con TTL de 30 días. 🔴 Guarda
+  el **código** del error, nunca su contenido: en el `meta` puede estar el nombre y el saldo de un
+  socio, y el SAU no ve datos de miembros (ADR-004, decisión 7). Sin ella, el `requestId` que el
+  producto le pide compartir al usuario no tenía dónde pegarse.
+- **cerrado de F1-25:** todo `/api/v1/admin` exige ahora **SAU + segundo factor**. Hay un test que
+  barre las rutas registradas bajo ese prefijo y verifica que ninguna se abra: una ruta nueva sin
+  guard rompe el CI.
+- **deuda declarada:** la pantalla de planes del DFSA (la API está: editar nombre, precio,
+  descripción y qué incluye) y la de textos legales quedan para cuando se necesiten — están en la
+  navegación. Los webhooks pendientes informan cero hasta Fase 2, que es cuando existen.
 
 ## [ ] F1-28 · WAFM: horario, reservar y cancelar
 

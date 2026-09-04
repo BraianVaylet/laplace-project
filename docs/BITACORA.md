@@ -41,6 +41,28 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
   test de integración contra una organización real: un doble no puede probar la forma de lo real.
 - **Pendiente:** ninguno.
 
+## 2026-09-04 — F1-27: el panel del super admin y el buscador de soporte
+
+- **Módulo:** `susc` · `observability` · `http` · `dfsa`
+- **Tipo:** feature
+- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/Qbem5GRG (F1-27) — movida a **Completadas**
+- **Qué cambió:** el SAU ve los suscriptores con su plan, su estado y su uso contra los límites;
+  cambia estados y edita planes; tiene panel de salud con errores por código y jobs fallidos; y
+  puede pegar un `requestId` o un código de error y ver qué pasó. Todo `/api/v1/admin` exige ahora
+  super admin **y** segundo factor — hasta acá solo pedía sesión.
+- **Por qué:** §5.1.1 y §11.3. El producto le dice al usuario "compartí el código con soporte" en
+  cada error: sin este panel, del otro lado no había dónde pegarlo.
+- **Impacto:** colección `errorEvents` de plataforma, con TTL de 30 días · 5 endpoints nuevos bajo
+  `/api/v1/admin` · el handler global de errores escribe el registro sin poder romper la respuesta ·
+  ningún código de error nuevo · las tres pantallas del DFSA (suscriptores, salud y buscador).
+- **Decisión de privacidad:** el registro guarda el **código** del error, no su contenido. En el
+  `meta` puede estar el nombre y el saldo de un socio, y ADR-004 decisión 7 dice que el SAU no ve
+  datos de miembros. Hay tests de los dos lados: que el listado no traiga nombres y que el buscador
+  no devuelva el mensaje.
+- **Pendiente:** la pantalla de planes del DFSA (la API está entera) y la de textos legales. Los
+  webhooks pendientes informan cero hasta Fase 2, que es cuando existen.
+
 ## 2026-09-04 — F1-26: la landing completa y el formulario de contacto
 
 - **Módulo:** `landing` · `crm` (nuevo) · `schemas`

@@ -11,6 +11,11 @@ import {
   type SubscriberStatus,
   type Subscription,
   type SubscriptionPlanId,
+  type HealthPanel,
+  type SubscriberUsage,
+  type SupportHit,
+  type SupportQuery,
+  type UpdatePlanInput,
   type UpdatePlanPriceInput,
 } from '@laplace/schemas';
 import type { AuditWriter } from '../../../audit/audit-log.js';
@@ -29,7 +34,8 @@ import {
 } from '../domain/subscription.js';
 import type { PlanDoc, SubscriptionDoc } from '../infrastructure/susc.model.js';
 import type { PlanRepository, SubscriptionRepository } from '../infrastructure/susc.repository.js';
-import type { OrganizationCreator, PlanLimitsLookup, UsageLookup } from './ports.js';
+import type { ErrorEventStore } from '../../../observability/error-events.js';
+import type { JobRunLookup, OrganizationCreator, PlanLimitsLookup, UsageLookup } from './ports.js';
 
 export interface SuscServiceDeps {
   subscriptions: SubscriptionRepository;
@@ -39,6 +45,10 @@ export interface SuscServiceDeps {
   limits: PlanLimitsLookup;
   audit: AuditWriter;
   events: DomainEventBus;
+  /** El registro de errores del panel de soporte (§11.3). */
+  errorEvents: ErrorEventStore;
+  /** Las corridas de job fallidas. Las consulta el panel de salud. */
+  jobRuns: JobRunLookup;
   now: () => Temporal.Instant;
 }
 
@@ -284,6 +294,102 @@ export class SuscService {
     return toResponse(actualizada as SubscriptionDoc);
   }
 
+  // ── El panel del SAU (§5.1.1, §11.3) ──────────────────────────────────────
+
+  /**
+   * Los suscriptores con su uso contra los límites de su plan.
+   *
+   * 🔴 Devuelve **conteos, no personas** (ADR-004, decisión 7): cuántos socios
+   * tiene el centro, nunca quiénes son. Para ver datos de un centro hay un solo
+   * camino, y es la impersonación auditada.
+   */
+  async subscribers(): Promise<SubscriberUsage[]> {
+    const filas = await this.deps.subscriptions.all();
+
+    return Promise.all(
+      filas.map(async (fila) => {
+        const usage = await this.deps.usage.of(fila.organizationId);
+        const limits = this.deps.limits.of(fila.planId);
+
+        return {
+          organizationId: fila.organizationId,
+          centerName: fila.centerName,
+          status: fila.status,
+          planId: fila.planId,
+          priceSnapshotCents: fila.priceSnapshotCents,
+          trialEndsAt: fila.trialEndsAt ? fromBsonDate(fila.trialEndsAt).toString() : null,
+          usage,
+          limits,
+          overLimit: excedeAlgo(usage, limits),
+        };
+      }),
+    );
+  }
+
+  /** Editar el plan entero: nombre, precio, descripción y qué incluye (§2.1.4). */
+  async updatePlan(planId: SubscriptionPlanId, input: UpdatePlanInput): Promise<Plan> {
+    const plan = await this.planOrFail(planId);
+
+    const guardado = await this.deps.plans.save({
+      ...plan,
+      name: input.name,
+      priceCents: input.priceCents,
+      description: input.description,
+      highlights: input.highlights,
+      effectiveFrom: input.effectiveFrom,
+    });
+
+    return toPlanResponse(guardado);
+  }
+
+  /** La salud técnica del SaaS (§11.3), en una ventana de 24 horas. */
+  async health(): Promise<HealthPanel> {
+    const desde = this.deps.now().subtract({ hours: 24 });
+    const porEstado = await this.deps.subscriptions.countByStatus();
+
+    return {
+      errorsByCode: await this.deps.errorEvents.countByCode(desde),
+      failedJobs: await this.deps.jobRuns.failedSince(desde),
+      /*
+       * Cero y no ausente: el panel tiene que mostrar la fila igual, porque la
+       * pregunta "¿hay webhooks trabados?" se contesta con un número. Los
+       * webhooks entran con Mercado Pago en Fase 2.
+       */
+      pendingWebhooks: 0,
+      subscribers: {
+        total: Object.values(porEstado).reduce((suma, cuantos) => suma + cuantos, 0),
+        trial: porEstado['trial'] ?? 0,
+        active: porEstado['active'] ?? 0,
+        suspended: porEstado['suspended'] ?? 0,
+      },
+    };
+  }
+
+  /**
+   * 🔴 El buscador de soporte (§11.3): el socio pasa su `requestId` o su código
+   * y del otro lado se ve qué pasó.
+   *
+   * Devuelve el código, el estado y la ruta. **Nunca el mensaje ni el `meta`**:
+   * ahí puede estar el nombre y el saldo de un socio, y el SAU no ve datos de
+   * miembros.
+   */
+  async support(query: SupportQuery): Promise<SupportHit[]> {
+    const eventos = await this.deps.errorEvents.find({
+      ...(query.requestId === undefined ? {} : { requestId: query.requestId }),
+      ...(query.errorCode === undefined ? {} : { code: query.errorCode }),
+    });
+
+    return eventos.map((evento) => ({
+      requestId: evento.requestId,
+      code: evento.code,
+      status: evento.status,
+      method: evento.method,
+      path: evento.path,
+      organizationId: evento.tenantId,
+      at: evento.at.toISOString(),
+    }));
+  }
+
   // ── Impersonación ─────────────────────────────────────────────────────────
 
   /**
@@ -389,6 +495,18 @@ export class SuscService {
       },
     );
   }
+}
+
+/** ¿Algo ya pasó el tope de su plan? Es la señal de upsell del panel. */
+function excedeAlgo(
+  usage: { venues: number; activeMembers: number; staffUsers: number },
+  limits: { venues: number | null; activeMembers: number | null; staffUsers: number | null },
+): boolean {
+  return (
+    (limits.venues !== null && usage.venues > limits.venues) ||
+    (limits.activeMembers !== null && usage.activeMembers > limits.activeMembers) ||
+    (limits.staffUsers !== null && usage.staffUsers > limits.staffUsers)
+  );
 }
 
 function toResponse(doc: SubscriptionDoc): Subscription {
