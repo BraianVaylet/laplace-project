@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `account`
 - **Tipo:** feature
-- **Commit/PR:** —
+- **Commit/PR:** `68d290d` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/L0822vqC (F1-29) — movida a **Completadas**
 - **Qué cambió:** el socio abre la WAFM y ve sus packs —cuántas clases le quedan, hasta cuándo y en
   qué clases valen—, edita su perfil y su contacto de emergencia, cambia su foto, se descarga todos
