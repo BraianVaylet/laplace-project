@@ -45,7 +45,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `susc` · `observability` · `http` · `dfsa`
 - **Tipo:** feature
-- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `5cc155d` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/Qbem5GRG (F1-27) — movida a **Completadas**
 - **Qué cambió:** el SAU ve los suscriptores con su plan, su estado y su uso contra los límites;
   cambia estados y edita planes; tiene panel de salud con errores por código y jobs fallidos; y
