@@ -9,6 +9,7 @@ import { Home } from './Home.js';
 import { MyQr } from './MyQr.js';
 import { Notifications } from './Notifications.js';
 import { PendingWaivers } from './PendingWaivers.js';
+import { Schedule } from './Schedule.js';
 import { Shell } from './Shell.js';
 
 /**
@@ -19,6 +20,7 @@ import { Shell } from './Shell.js';
  */
 const NAV_IDS: Record<string, string> = {
   '/': 'home',
+  '/horario': 'schedule',
   '/qr': 'qr',
 };
 
@@ -67,7 +69,15 @@ const notificationsRoute = createRoute({
   component: Notifications,
 });
 
+/** El horario del centro: la pantalla que el socio abre todos los días. */
+const scheduleRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/horario',
+  component: Schedule,
+});
+
 export const routeTree = rootRoute.addChildren([
+  scheduleRoute,
   homeRoute,
   qrRoute,
   documentsRoute,

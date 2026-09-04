@@ -41,6 +41,42 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
   test de integración contra una organización real: un doble no puede probar la forma de lo real.
 - **Pendiente:** ninguno.
 
+## 2026-09-04 — Fix: un socio podía leer las reservas de un compañero
+
+- **Módulo:** `booking`
+- **Tipo:** fix
+- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Trello:** —
+- **Qué cambió:** `GET /api/v1/bookings` aceptaba `?memberId=` sin chequear permiso. Como
+  `booking.read` lo tiene también el socio — lo necesita para ver las suyas —, cualquiera podía
+  pedir `/api/v1/bookings?memberId=mem_otro` y leer las reservas de un compañero de su mismo
+  centro. Ahora el parámetro solo lo honra quien puede reservar por otro
+  (`booking.createForOther`), que es el mostrador.
+- **Por qué:** apareció escribiendo F1-28, al cablear la pantalla que consume ese endpoint. La
+  suite de aislamiento no lo veía porque prueba **entre tenants**, y acá atacante y víctima son del
+  mismo.
+- **Impacto:** ninguno sobre el modelo de datos. Dos tests nuevos: que el socio no vea las ajenas y
+  que el mostrador sí.
+- **Pendiente:** vale revisar si hay otros endpoints que acepten un identificador de otro por query
+  con un permiso que el socio también tiene. Es el mismo patrón.
+
+## 2026-09-04 — F1-28: el horario y la reserva del socio
+
+- **Módulo:** `wafm` · `booking` · `auth`
+- **Tipo:** feature
+- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/Vfq9bsed (F1-28) — movida a **Completadas**
+- **Qué cambió:** el socio abre la WAFM, ve el horario de la semana con el cupo de cada clase,
+  reserva y cancela. El botón responde **al instante** y se revierte con el mensaje del error si la
+  API dice que no. Antes de confirmar ve la política de cancelación, y antes de cancelar sabe si
+  recupera el crédito. La clase llena ofrece la lista de espera con su posición.
+- **Por qué:** §2.1.5 y §5.1.3. La meta de §2.0 es que más del 80% de las reservas las haga el
+  socio y no el staff: es exactamente el ahorro de tiempo que se vende.
+- **Impacto:** ninguna colección ni código de error nuevos · el rol `member` gana `venue.read` para
+  poder elegir sede · el botón del modal pasó a decir "Confirmar reserva": decía lo mismo que el de
+  la fila, y dos botones con el mismo nombre son ambiguos también para un lector de pantalla.
+- **Pendiente:** el E2E de reservar y cancelar y la prueba real de modo avión van con F1-31.
+
 ## 2026-09-04 — F1-27: el panel del super admin y el buscador de soporte
 
 - **Módulo:** `susc` · `observability` · `http` · `dfsa`

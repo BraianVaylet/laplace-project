@@ -200,7 +200,27 @@ export function createBookingRoutes(
 
   routes.get('/api/v1/bookings', requirePermission({ booking: ['read'] }), async (c) => {
     const query = paginationQuerySchema.parse(c.req.query());
-    const memberId = c.req.query('memberId') ?? (await resolveMember(c.get('userId') as string));
+
+    /*
+     * 🔴 `?memberId=` es SOLO para el staff.
+     *
+     * `booking.read` lo tiene tambien el socio (lo necesita para ver las
+     * suyas). Sin este chequeo, un socio podia pedir
+     * `/api/v1/bookings?memberId=mem_otro` y leer las reservas de cualquier
+     * companero de su mismo centro: el aislamiento por tenant no lo tapa,
+     * porque los dos son del mismo tenant.
+     *
+     * Quien mira la ficha de otro es quien puede reservar por otro
+     * (`booking.createForOther`), que es exactamente el mostrador.
+     */
+    const org = c.get('org') as unknown as { roles: string[] } | undefined;
+    const puedeVerAjenas = authorize(org?.roles ?? [], { booking: ['createForOther'] });
+    const pedido = c.req.query('memberId');
+
+    const memberId =
+      puedeVerAjenas && pedido !== undefined
+        ? pedido
+        : await resolveMember(c.get('userId') as string);
     if (!memberId) return c.json({ items: [], nextCursor: null });
 
     return c.json(await service.ofMember(memberId, query.cursor, query.limit));

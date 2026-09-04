@@ -48,7 +48,8 @@ const MATRIX: Record<string, Record<string, OrgRoleName[]>> = {
   },
   venue: {
     create: ['owner'],
-    read: ['owner', 'manager_assistant', 'front_desk', 'head_coach', 'coach'],
+    // El socio tambien: elige en que sede entrena y ve la politica que lo rige.
+    read: ['owner', 'manager_assistant', 'front_desk', 'head_coach', 'coach', 'member'],
     update: ['owner', 'manager_assistant'],
     archive: ['owner'],
   },

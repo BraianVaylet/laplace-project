@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     26 |
+| Fase 1 — MVP vendible   |       32 |          186 |     27 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1658,7 +1658,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   descripción y qué incluye) y la de textos legales quedan para cuando se necesiten — están en la
   navegación. Los webhooks pendientes informan cero hasta Fase 2, que es cuando existen.
 
-## [ ] F1-28 · WAFM: horario, reservar y cancelar
+## [x] F1-28 · WAFM: horario, reservar y cancelar
 
 - **module:** schedule
 - **description:** Lo que el socio abre todos los días. La meta de §2.0 es que más del 80% de las
@@ -1685,7 +1685,16 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   política en el modal. Test del flujo de waitlist. E2E de reservar y cancelar. Auditoría axe,
   prueba a 360 px.
 - **error-codes:** ninguno nuevo
-- **data-model-impact:** ninguno nuevo.
+- **data-model-impact:** ninguno nuevo. El rol `member` gana `venue.read`: el socio necesita el
+  nombre de la sede para elegir en cuál entrena, y la política de reserva es la regla que lo rige.
+- **encontrado de paso:** `GET /api/v1/bookings` aceptaba `?memberId=` **sin chequear permiso**.
+  `booking.read` lo tiene también el socio — lo necesita para ver las suyas —, así que cualquiera
+  podía pedir las reservas de un compañero de su mismo centro. El aislamiento por tenant no lo
+  tapaba: los dos son del mismo tenant. Ahora el parámetro solo lo honra quien puede reservar por
+  otro (`booking.createForOther`), que es el mostrador, con test de los dos lados.
+- **deuda declarada:** el E2E de reservar y cancelar va con F1-31, que instala los navegadores de
+  Playwright y suma el job al CI. El caché sin red es el `staleTime` de Query más el service worker
+  que ya tiene la PWA; una prueba real de modo avión también es de F1-31.
 
 ## [ ] F1-29 · WAFM: mis packs, mi QR y mi perfil
 

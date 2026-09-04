@@ -1557,3 +1557,47 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
     }
   });
 });
+
+describe('las reservas de otro socio (F1-28)', () => {
+  it('🔴 un socio NO puede leer las reservas de un compañero del mismo centro', async () => {
+    /*
+     * `booking.read` lo tiene también el socio: lo necesita para ver las suyas.
+     * Sin gatear el `?memberId=`, pedir `/api/v1/bookings?memberId=mem_otro`
+     * devolvía las reservas de cualquiera del mismo centro — el aislamiento por
+     * tenant no lo tapa, porque los dos son del mismo tenant.
+     */
+    const centro = await centroListo('vecinos');
+    const micaela = await atletaDe(centro, 'Micaela');
+    await darPack(centro, micaela.memberId, 8);
+    const julian = await atletaDe(centro, 'Julian');
+    await darPack(centro, julian.memberId, 8);
+    await reservarOk(centro, micaela.memberId);
+
+    const res = await app.request(
+      `/api/v1/bookings?memberId=${micaela.memberId}`,
+      req(julian.cookie, 'GET'),
+    );
+    const body = (await res.json()) as { items: Array<{ memberId: string }> };
+
+    // Ve las suyas, que no son ninguna: el parámetro se ignora.
+    expect(res.status).toBe(200);
+    expect(body.items).toEqual([]);
+  });
+
+  it('el mostrador sí las ve: es quien reserva por otro', async () => {
+    const centro = await centroListo('mostrador-ve');
+    const micaela = await atletaDe(centro, 'Micaela');
+    await darPack(centro, micaela.memberId, 8);
+    await reservarOk(centro, micaela.memberId);
+
+    // El dueño del centro tiene `booking.createForOther`.
+    const res = await app.request(
+      `/api/v1/bookings?memberId=${micaela.memberId}`,
+      req(centro.cookie, 'GET'),
+    );
+    const body = (await res.json()) as { items: Array<{ memberId: string }> };
+
+    expect(body.items).toHaveLength(1);
+    expect(body.items[0]?.memberId).toBe(micaela.memberId);
+  });
+});

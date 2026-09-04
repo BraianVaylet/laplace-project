@@ -134,6 +134,12 @@ const frontDesk = ac.newRole({
 
 /** El socio (MU): opera sobre lo suyo desde la WAFM. */
 const member = ac.newRole({
+  /*
+   * El socio ve las sedes de su centro: necesita su nombre y su direccion para
+   * elegir en cual entrena, y la politica de reserva es la regla a la que esta
+   * sujeto. No hay nada del negocio ahi (F1-28).
+   */
+  venue: ['read'],
   product: ['read'],
   classSession: ['read'],
   booking: ['create', 'read', 'cancel'],
