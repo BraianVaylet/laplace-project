@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `docs`
 - **Tipo:** docs
-- **Commit/PR:** —
+- **Commit/PR:** `7727b83` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/KOoe9EOR (F1-32) — movida a **Completadas**
 - **Qué cambió:** el repo tiene `README.md` —que no existía— y los cuatro documentos que pide §5:
   funcional, técnico, de arquitectura y uno por aplicativo. Se sumó `pnpm docs:links`, que corre en
