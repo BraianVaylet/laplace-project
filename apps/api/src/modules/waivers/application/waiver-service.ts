@@ -183,6 +183,26 @@ export class WaiverService {
   }
 
   /**
+   * Lo que este socio firmó, para el export de sus datos (§9.2, F1-29). Es el
+   * derecho de acceso: el titular se lleva lo suyo, incluido qué aceptó y
+   * cuándo.
+   */
+  async selfConsentsOf(
+    memberId: string,
+  ): Promise<Array<{ documentType: string; version: number; acceptedAt: string }>> {
+    const contexto = await this.members.contextOf(memberId);
+    if (!contexto?.userId) return [];
+
+    const firmas = await this.consents.liveOf(contexto.userId);
+
+    return firmas.map((consent) => ({
+      documentType: consent.documentType,
+      version: consent.version,
+      acceptedAt: fromBsonDate(consent.acceptedAt).toString(),
+    }));
+  }
+
+  /**
    * Registra la aceptación (§2.1.20). El hash y la versión salen del
    * documento en este instante, nunca de lo que mande el cliente: es lo que
    * hace que "qué firmó exactamente" sea una pregunta con una sola respuesta

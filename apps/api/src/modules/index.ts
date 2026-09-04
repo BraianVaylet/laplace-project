@@ -18,6 +18,12 @@ import { createProductsModule } from './products/index.js';
 import { createScheduleModule, type SessionBookingReleaser } from './schedule/index.js';
 import { createRoomsModule, type FutureSessionCounter } from './rooms/index.js';
 import { createVenuesModule } from './venues/index.js';
+import {
+  createAccountModule,
+  createInMemoryObjectStorage,
+  randomSigningSecret,
+  type ObjectStorage,
+} from './account/index.js';
 import { createCrmModule } from './crm/index.js';
 import { createMetricsModule } from './metrics/index.js';
 import { createSuscModule, type JobRunLookup, type OrganizationCreator } from './susc/index.js';
@@ -64,6 +70,12 @@ export interface ModuleDeps {
         organizationId: string,
       ) => Promise<{ userId: string; name: string; email: string | null } | null>)
     | undefined;
+  /**
+   * Donde viven las fotos de perfil. En produccion es Backblaze B2 (§6); sin
+   * inyectarlo, queda una implementacion en memoria que respeta el mismo
+   * contrato — firma el enlace y lo vence.
+   */
+  storage?: ObjectStorage | undefined;
   /** El registro de errores del panel de soporte del DFSA (§11.3). */
   errorEvents?: ErrorEventStore | undefined;
   /** Las corridas de job fallidas, para el panel de salud. */
@@ -484,6 +496,35 @@ export function createModules(deps: ModuleDeps) {
 
   routes.route('/', crm.routes);
 
+  /*
+   * Lo del socio sobre lo suyo (§2.1.2, §9.2). Ninguna de sus rutas acepta un
+   * `memberId`: se resuelve siempre desde la sesion.
+   */
+  const account = createAccountModule({
+    now: deps.now ?? (() => Temporal.Now.instant()),
+    storage: deps.storage ?? createInMemoryObjectStorage(randomSigningSecret()),
+    resolveMember: (userId) => members.service.findIdByUserId(userId),
+    members: {
+      find: (memberId) => members.service.selfViewOf(memberId),
+      update: (memberId, patch) => members.service.updateSelf(memberId, patch),
+      requestDeletion: (memberId, at, reason) =>
+        members.service.requestDeletion(memberId, at, reason),
+    },
+    contracts: { ofMember: (memberId) => contracts.service.selfViewOf(memberId) },
+    bookings: {
+      ofMember: async (memberId) =>
+        (await booking.service.ofMember(memberId)).items.map((reserva) => ({
+          bookingId: String(reserva['publicId']),
+          sessionId: reserva.sessionId,
+          status: reserva.status,
+          bookedAt: fromBsonDate(reserva.bookedAt).toString(),
+        })),
+    },
+    consents: { ofMember: (memberId) => waivers.service.selfConsentsOf(memberId) },
+  });
+
+  routes.route('/', account.routes);
+
   /** Todo lo que el runner tiene que programar (§10). */
   const jobs = [
     ...contracts.jobs,
@@ -512,6 +553,7 @@ export function createModules(deps: ModuleDeps) {
     metrics,
     susc,
     crm,
+    account,
   };
 }
 

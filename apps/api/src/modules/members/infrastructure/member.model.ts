@@ -27,6 +27,15 @@ export interface MemberDoc extends Record<string, unknown> {
   email?: string;
   birthDate?: string;
   emergencyContact?: { fullName: string; phone: string; relationship?: string };
+  /**
+   * 🔴 La **clave del objeto**, no una URL. El enlace a la foto de una persona
+   * se firma en cada lectura y vence; uno publico y permanente es exactamente
+   * lo que §2.1.2 no permite.
+   */
+  avatarKey?: string | null;
+  /** Cuando pidio la baja de sus datos (§9.2). Se purga 90 dias despues. */
+  deletionRequestedAt?: Date | null;
+  deletionReason?: string | null;
   guardian?: { fullName: string; phone: string; relationship?: string };
   status: string;
   flags: { debtor: boolean; suspended: boolean };
@@ -64,6 +73,9 @@ const memberSchema = new Schema<MemberDoc>(
     email: { type: String, required: false },
     birthDate: { type: String, required: false },
     emergencyContact: { type: contact, required: false },
+    avatarKey: { type: String, required: false, default: null },
+    deletionRequestedAt: { type: Date, required: false, default: null },
+    deletionReason: { type: String, required: false, default: null },
     guardian: { type: contact, required: false },
     status: { type: String, required: true, default: 'lead' },
     flags: {

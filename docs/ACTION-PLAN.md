@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     27 |
+| Fase 1 — MVP vendible   |       32 |          186 |     28 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1696,7 +1696,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   Playwright y suma el job al CI. El caché sin red es el `staleTime` de Query más el service worker
   que ya tiene la PWA; una prueba real de modo avión también es de F1-31.
 
-## [ ] F1-29 · WAFM: mis packs, mi QR y mi perfil
+## [x] F1-29 · WAFM: mis packs, mi QR y mi perfil
 
 - **module:** contracts
 - **description:** Lo que el socio consulta: cuántas clases le quedan, cuándo vencen, su QR de
@@ -1722,7 +1722,28 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **test_plan:** Test de validación de mime real con un archivo renombrado. Test de que la URL de la
   foto es firmada y vence. Test del export de datos. Auditoría axe.
 - **error-codes:** `LP-ACCT-422-001` (archivo inválido), `LP-ACCT-413-002` (archivo muy grande)
-- **data-model-impact:** `User.avatarUrl` como clave de objeto, no como URL pública.
+- **data-model-impact:** `User.avatarUrl` como clave de objeto, no como URL pública. En `Member` se
+  agregan `avatarKey`, `deletionRequestedAt` y `deletionReason`: el pedido de baja tiene que quedar
+  con fecha, que es lo que hace exigible el plazo de 90 días de ADR-004.
+- **cómo se cerró:** las seis rutas viven bajo `/api/v1/my/*` y **ninguna acepta un `memberId`**. Si
+  lo aceptara, el aislamiento por tenant no taparía nada: el socio y su compañero son del mismo
+  centro. El `memberId` sale de la sesión, siempre, en un solo lugar (`miFicha`). El tipo de la foto
+  se decide por los **bytes** (`sniffImageType`, con las firmas de JPEG, PNG y WebP), no por la
+  extensión ni el `Content-Type`, que los escribe quien sube el archivo: un SVG renombrado a `.png`
+  ejecutaría script contra el dominio que lo sirve. El enlace a la foto se firma con HMAC y vence a
+  los 15 minutos; una URL pública permanente de la foto de una persona es justo lo que no puede
+  pasar. El export de §9.2 entrega **todo** — perfil, contratos, reservas y consentimientos —, no un
+  resumen elegido por nosotros, y la baja se registra sin borrar: el centro tiene obligaciones sobre
+  lo firmado y lo cobrado.
+- **encontrado de paso:** el cliente de API compartido serializaba **todo** cuerpo con
+  `JSON.stringify`, así que una foto llegaba al servidor como `{}`. Ahora `ArrayBuffer`, vistas
+  tipadas, `Blob` y `FormData` pasan crudos y sin `content-type` inventado, con sus tres tests. Lo
+  habría comido cualquier subida de archivo futura, no solo esta.
+- **deuda declarada:** Backblaze B2 no está aprovisionado (depende de F0-16, bloqueada). El
+  almacenamiento va en memoria pero **honra el mismo contrato** —`put` / `signedUrl` / `remove`, con
+  firma HMAC y vencimiento reales—, así que cambiarlo por B2 no toca el servicio ni sus tests. Las
+  preferencias de notificación del criterio quedan en la pantalla de F1-21, que es donde vive el
+  motor. El QR ya estaba a 1 tap desde F1-19.
 
 ## [ ] F1-30 · Onboarding guiado del SMU
 

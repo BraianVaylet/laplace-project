@@ -23,6 +23,29 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-04 — F1-29: lo del socio sobre lo suyo
+
+- **Módulo:** `account`
+- **Tipo:** feature
+- **Commit/PR:** —
+- **Trello:** https://trello.com/c/L0822vqC (F1-29) — movida a **Completadas**
+- **Qué cambió:** el socio abre la WAFM y ve sus packs —cuántas clases le quedan, hasta cuándo y en
+  qué clases valen—, edita su perfil y su contacto de emergencia, cambia su foto, se descarga todos
+  sus datos en JSON y puede pedir la baja. Seis rutas nuevas bajo `/api/v1/my/*`.
+- **Por qué:** son las dos preguntas que hoy el socio manda por WhatsApp al centro (§2.1.2), y los
+  derechos de acceso y supresión de la Ley 25.326 (§9.2), que escondidos detrás de un mail a soporte
+  no se cumplen.
+- **Impacto:** `Member` suma `avatarKey`, `deletionRequestedAt` y `deletionReason`. Ninguna ruta de
+  `/my/*` acepta un `memberId`: sale de la sesión. El tipo de la foto se decide por los **bytes**,
+  no por la extensión ni el `Content-Type` —los dos los escribe quien sube el archivo, y un SVG
+  renombrado a `.png` ejecutaría script contra el dominio que lo sirve—, con tope de 2 MB y enlace
+  firmado que vence a los 15 minutos. Códigos nuevos: `LP-ACCT-422-001` y `LP-ACCT-413-002`. Se
+  arregló además el cliente de API compartido, que serializaba todo cuerpo con `JSON.stringify` y
+  convertía cualquier archivo en `{}`.
+- **Pendiente:** Backblaze B2 no está aprovisionado (F0-16 sigue bloqueada): el almacenamiento va en
+  memoria con el mismo contrato y la misma firma HMAC, así que se reemplaza sin tocar el servicio.
+  Las preferencias de notificación quedan en la pantalla de F1-21.
+
 ## 2026-09-04 — Fix: los entitlements leían la organización por un campo que no existe
 
 - **Módulo:** `entitlements`
