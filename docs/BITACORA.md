@@ -23,6 +23,27 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-04 — F1-31: los tres caminos críticos, en Playwright y en CI
+
+- **Módulo:** `ci`
+- **Tipo:** infra
+- **Commit/PR:** —
+- **Trello:** https://trello.com/c/3aLdhhHu (F1-31) — movida a **Completadas**
+- **Qué cambió:** `pnpm test:e2e` recorre los tres caminos que §Testing.7 no negocia —alta y primera
+  clase publicada, reservar/cancelar/recuperar el crédito, y asistencia con el no-show que marca el
+  job— en Chrome de escritorio y en mobile. El CI los corre en su propio job y publica capturas y
+  traces cuando algo falla; `deploy-staging` ahora depende de que pasen.
+- **Por qué:** eran el requisito de §Testing.7 y los navegadores no estaban ni instalados. Sin esto,
+  romper la devolución de crédito al cancelar no lo detectaba nadie hasta que lo dijera un socio.
+- **Impacto:** ninguno sobre el modelo de datos ni sobre la API. El arnés (`e2e/support/`) levanta un
+  Mongo **efímero** en memoria, corre las migraciones y arranca el entrypoint real de la API: nunca
+  staging ni producción. El disparador de jobs vive solo en `e2e/` — agregarle a la API una ruta
+  para correr jobs sería abrir en producción una puerta que solo necesita el test. `pnpm typecheck`
+  ahora incluye `e2e/`, que hasta hoy no miraba nadie.
+- **Pendiente:** lo que los caminos hacen por API es lo que todavía no tiene pantalla (altas del
+  DFSM y venta de packs, deuda de F1-06 y F1-30). La medición real del time-to-first-class de §2.0
+  sigue siendo una prueba manual.
+
 ## 2026-09-04 — F1-30: el asistente de primeros pasos
 
 - **Módulo:** `susc`

@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     29 |
+| Fase 1 — MVP vendible   |       32 |          186 |     30 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1795,7 +1795,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   necesita esas altas, que son de F1-06 y de lo que quede de Fase 1. La prueba real de los 30
   minutos es del E2E de F1-31.
 
-## [ ] F1-31 · E2E de los tres caminos críticos
+## [x] F1-31 · E2E de los tres caminos críticos
 
 - **module:** ci
 - **description:** Los tres flujos que §Testing.7 declara obligatorios, en Playwright, corriendo en
@@ -1819,6 +1819,31 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   correspondiente falla.
 - **error-codes:** ninguno
 - **data-model-impact:** ninguno
+- **cómo se cerró:** los navegadores ya están instalados y el job entró al CI, con `deploy-staging`
+  colgando de él. La base es **efímera**: el arnés levanta un replica set en memoria, corre las
+  migraciones y arranca **el entrypoint de verdad** (`apps/api/src/index.ts`) — reconstruir la app
+  en el test probaría una app que no se despliega. Nunca toca staging ni producción: los tres
+  caminos escriben, y un E2E contra datos reales es uno que un día borra los de alguien.
+- **los tres se validaron rompiéndolos, como pedía el test plan:** anulando la devolución al
+  cancelar, el camino 2 falla con la captura del saldo en 7; anulando `markNoShows`, el camino 3
+  falla con `Received: "booked"`; haciendo que saltear marque hecho, el camino 1 falla en el paso
+  que ya no dice "Lo dejaste para después". Los tres se revirtieron.
+- **encontrado de paso:** el smoke pedía **cero errores de consola**, y con la API arriba empezó a
+  fallar por los 401 de un visitante sin sesión — que es el producto funcionando: un anónimo no
+  tiene packs ni reservas. Pasó a mirar errores de JavaScript (`pageerror`) y no de red; como
+  estaba, el test exigía que la API dejara pasar a cualquiera. Nunca se había visto porque hasta
+  ahora nada contestaba en el puerto 3000.
+- **también salió de acá:** `e2e/` no lo miraba nadie —ni `tsc` ni ESLint—, así que un E2E roto se
+  descubría al correrlo. Ahora `pnpm typecheck` lo incluye (`tsconfig.e2e.json`), y eso destapó de
+  entrada un `workers: undefined` que `exactOptionalPropertyTypes` no acepta.
+- **deuda declarada:** lo que va por API en los tres caminos es **lo que todavía no tiene
+  pantalla** — el alta de la cuenta, la de la sede, la de la clase, la del producto y la venta del
+  pack. Son deuda de F1-06 y F1-30; cuando esas pantallas existan, cada llamada del arnés se
+  reemplaza por sus clics y el cuerpo del test no se toca. El disparador de jobs vive en `e2e/` y
+  usa el mismo seam de reloj que los tests de integración: la ventana de check-in cierra media hora
+  después del inicio y un E2E no puede quedarse esperando. La medición real de los 30 minutos de
+  §2.0 sigue siendo una prueba manual: el camino 1 verifica que el asistente diga la verdad, no
+  cuánto tarda una persona.
 
 ## [ ] F1-32 · Documentación del producto
 
