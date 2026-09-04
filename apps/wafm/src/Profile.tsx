@@ -76,7 +76,7 @@ export function Profile({ client = api }: ProfileProps = {}) {
   });
 
   if (perfil.isPending) {
-    return <Skeleton className="h-64" aria-label="Cargando tu perfil" />;
+    return <Skeleton className="h-64" label="Cargando tu perfil" />;
   }
 
   if (perfil.isError) {

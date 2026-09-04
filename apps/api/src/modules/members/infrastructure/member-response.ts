@@ -9,8 +9,12 @@ import type { MemberDoc, MemberNoteDoc } from './member.model.js';
  * agregue mañana al documento no se filtra por olvido. Las notas internas del
  * staff nunca salen por acá (§2.1.7); tienen su propio endpoint y su propio
  * permiso.
+ *
+ * 🔴 `seesMoney` decide si sale el saldo. Sin él la ficha viaja con la deuda
+ * adentro y el front la esconde — que es lo mismo que mandarla: está en la
+ * respuesta, en el caché del navegador y en cualquier `curl`.
  */
-export function toMemberResponse(doc: MemberDoc): MemberResponse {
+export function toMemberResponse(doc: MemberDoc, seesMoney = false): MemberResponse {
   return {
     publicId: String(doc['publicId']),
     venueIds: doc.venueIds,
@@ -25,7 +29,7 @@ export function toMemberResponse(doc: MemberDoc): MemberResponse {
     status: doc.status as MemberStatus,
     flags: doc.flags,
     tags: doc.tags,
-    balanceCents: doc.balanceCents,
+    balanceCents: seesMoney ? doc.balanceCents : null,
     joinedAt: isoOf(doc.joinedAt) ?? '',
     lastAttendanceAt: isoOf(doc.lastAttendanceAt),
     // El mostrador tiene que poder explicar por qué alguien no puede reservar.

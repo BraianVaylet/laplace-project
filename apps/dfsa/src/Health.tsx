@@ -118,7 +118,7 @@ export function Health({ client = api }: HealthProps = {}) {
       </Card>
 
       {salud.isPending ? (
-        <Skeleton className="h-64" aria-label="Cargando la salud del sistema" />
+        <Skeleton className="h-64" label="Cargando la salud del sistema" />
       ) : salud.isError ? (
         <ErrorState
           title="No pudimos traer la salud del sistema"

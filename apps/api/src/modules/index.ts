@@ -146,7 +146,44 @@ export function createModules(deps: ModuleDeps) {
     ...(deps.now ? { now: deps.now } : {}),
   });
 
-  const members = createMembersModule(deps);
+  /*
+   * La ficha 360 (F1-06) junta cosas de cuatro modulos. Los puertos se resuelven
+   * al atender el pedido, no al construir: Contracts, Booking y Waivers se
+   * arman mas abajo, y adelantarlos solo para esto invertiria el orden de todo
+   * lo demas.
+   *
+   * 🔴 Ningun puerto trae plata. El estado de cuenta vive en `/statement` con
+   * `billing:read`.
+   */
+  const members = createMembersModule({
+    ...deps,
+    overview: {
+      contracts: { ofMember: (memberId) => contracts.service.selfViewOf(memberId) },
+      bookings: {
+        ofMember: async (memberId) => {
+          const reservas = (await booking.service.ofMember(memberId, undefined, 100)).items;
+          const clases = await schedule.service.sessionSummariesOf(
+            reservas.map((reserva) => reserva.sessionId),
+          );
+
+          return reservas.map((reserva) => {
+            const clase = clases.get(reserva.sessionId);
+
+            return {
+              bookingId: String(reserva['publicId']),
+              sessionId: reserva.sessionId,
+              // Una clase borrada no deja a la reserva sin nombre en pantalla.
+              className: clase?.name ?? 'Clase',
+              startAt: clase?.startAt ?? fromBsonDate(reserva.bookedAt),
+              status: reserva.status,
+            };
+          });
+        },
+      },
+      waivers: { signedOf: (memberId) => waivers.service.signedViewOf(memberId) },
+    },
+  });
+
   /*
    * Products y Contracts se necesitan mutuamente: Contracts pregunta si se puede
    * vender, y Products pregunta si esa persona ya uso su clase de prueba. Se

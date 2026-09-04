@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     30 |
+| Fase 1 — MVP vendible   |       32 |          186 |     31 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -671,7 +671,7 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   - El límite del plan no usa `requireWithinLimit`: ese guard corta de a uno y acá hay que poder
     decir "de los 143 del archivo, 12 no entran".
 
-## [ ] F1-06 · Ficha 360 del miembro en el DFSM
+## [x] F1-06 · Ficha 360 del miembro en el DFSM
 
 - **module:** members
 - **description:** Una sola pantalla con todo lo del socio (§2.1.7). Es la pantalla más usada del
@@ -697,6 +697,29 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   `coach` no recibe los datos de deuda **desde la API**, no solo que no los pinta. Auditoría axe.
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** ninguno nuevo.
+- **cómo se cerró:** `GET /api/v1/members/:id/overview` junta en **una sola respuesta** los
+  contratos, las próximas reservas, la asistencia de 90 días y las firmas — quien abre la ficha
+  tiene a alguien enfrente esperando, y encadenar cuatro pedidos es hacerlo esperar cuatro veces.
+  Los otros módulos entran por puerto, no por import (ADR-003). En pantalla, en cambio, **cada
+  sección es su propio pedido**: si se cae cobranza, el mostrador sigue viendo los packs. Una
+  pantalla que se cae entera por una sección es una que no se puede usar justo cuando más hace
+  falta.
+- **🔴 encontrado de paso, y es el hallazgo de la tarjeta:** `balanceCents` viajaba en **toda**
+  respuesta de socio —el detalle y el listado—, y esas rutas solo piden `athlete:read`, que es el
+  permiso que el coach necesita para trabajar. La deuda de cada socio se le colaba sin que nadie la
+  pidiera, contra §2.1.12. Ahora el saldo sale `null` para quien no tiene `billing:read`, decidido
+  **del lado del servidor**: mandarlo para que el front lo esconda es mandarlo igual — queda en la
+  respuesta, en el caché del navegador y en cualquier `curl`. Tres tests de regresión: el coach en
+  el detalle, el coach en el listado y el mostrador, que sí lo ve porque cobra.
+- **también encontrado de paso:** seis pantallas le pasaban `aria-label` al `Skeleton` y **se
+  descartaba en silencio** — TypeScript no revisa los atributos JSX con guion, así que nadie se
+  entera. Con siete esqueletos en la misma pantalla, quien usa lector escuchaba "Cargando" siete
+  veces sin saber qué. `Skeleton` ahora tiene una prop `label` de verdad, y las seis quedaron
+  arregladas.
+- **deuda declarada:** el botón "Venderle un pack" del estado vacío no lleva a ningún lado: la
+  pantalla de venta del DFSM no existe todavía, y es la misma deuda que arrastran el asistente de
+  F1-30 y el arnés de E2E de F1-31. El buscador global ahora enlaza a la ficha, que era el destino
+  que le faltaba desde F0-13.
 
 ## [x] F1-07 · Módulo Products
 

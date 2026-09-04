@@ -203,6 +203,44 @@ export class WaiverService {
   }
 
   /**
+   * Lo que el socio firmó, como lo mira el staff en la ficha 360 (§2.1.7).
+   *
+   * Marca `outdated` cuando el centro publicó una versión posterior: "firmó el
+   * reglamento" y "firmó **este** reglamento" son cosas distintas, y la
+   * diferencia es exactamente la que importa el día que alguien reclama.
+   */
+  async signedViewOf(memberId: string): Promise<
+    Array<{
+      documentId: string;
+      title: string;
+      version: number;
+      acceptedAt: string;
+      outdated: boolean;
+    }>
+  > {
+    const contexto = await this.members.contextOf(memberId);
+    if (!contexto?.userId) return [];
+
+    const vigentes = new Map(
+      (await this.documents.currentByType()).map(
+        (doc) => [doc.type, { title: doc.title, version: doc.version }] as const,
+      ),
+    );
+
+    return (await this.consents.liveOf(contexto.userId)).map((consent) => {
+      const vigente = vigentes.get(consent.documentType);
+
+      return {
+        documentId: consent.documentId,
+        title: vigente?.title ?? consent.documentType,
+        version: consent.version,
+        acceptedAt: fromBsonDate(consent.acceptedAt).toString(),
+        outdated: vigente !== undefined && vigente.version > consent.version,
+      };
+    });
+  }
+
+  /**
    * Registra la aceptación (§2.1.20). El hash y la versión salen del
    * documento en este instante, nunca de lo que mande el cliente: es lo que
    * hace que "qué firmó exactamente" sea una pregunta con una sola respuesta

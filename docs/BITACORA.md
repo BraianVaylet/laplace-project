@@ -23,6 +23,27 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-04 — F1-06: la ficha 360 del socio, y la deuda que se le escapaba al coach
+
+- **Módulo:** `members`
+- **Tipo:** feature
+- **Commit/PR:** —
+- **Trello:** https://trello.com/c/gWV6GOZC (F1-06) — movida a **Completadas**
+- **Qué cambió:** el DFSM tiene la pantalla que más se usa: abrís un socio desde el buscador y ves
+  sus datos, su estado de cuenta, sus packs con lo que le queda, lo que tiene reservado, su
+  asistencia de los últimos 90 días, lo que firmó y las notas internas. Ruta nueva
+  `GET /api/v1/members/:id/overview` y pantalla `/miembros/:memberId`.
+- **Por qué:** era la tarjeta que quedaba de Fase 1 con todas sus dependencias cerradas, y §2.1.7
+  la describe como la pantalla más usada del producto: si obliga a navegar a otras cinco, se siente
+  lento aunque la API conteste rápido.
+- **Impacto:** ninguno sobre el modelo de datos. **Fix de seguridad:** `balanceCents` viajaba en
+  toda respuesta de socio, y esas rutas solo piden `athlete:read` — el permiso del coach. La deuda
+  de cada socio se le escapaba sin que nadie la pidiera, contra §2.1.12. Ahora sale `null` para
+  quien no tiene `billing:read`, decidido en el servidor. También se arregló `Skeleton`, que
+  descartaba en silencio el `aria-label` que le pasaban seis pantallas.
+- **Pendiente:** el botón "Venderle un pack" del estado vacío no lleva a ningún lado: la pantalla de
+  venta del DFSM sigue sin existir, igual que las altas que arrastran F1-30 y F1-31.
+
 ## 2026-09-04 — F1-31: los tres caminos críticos, en Playwright y en CI
 
 - **Módulo:** `ci`

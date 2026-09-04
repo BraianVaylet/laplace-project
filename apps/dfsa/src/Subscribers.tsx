@@ -34,7 +34,7 @@ export function Subscribers({ client = api }: SubscribersProps = {}) {
   });
 
   if (suscriptores.isPending) {
-    return <Skeleton className="h-64" aria-label="Cargando los suscriptores" />;
+    return <Skeleton className="h-64" label="Cargando los suscriptores" />;
   }
 
   if (suscriptores.isError) {

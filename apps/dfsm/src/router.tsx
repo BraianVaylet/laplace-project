@@ -7,6 +7,7 @@ import {
   useRouterState,
 } from '@tanstack/react-router';
 import { ClassRoster } from './ClassRoster.js';
+import { MemberFile } from './MemberFile.js';
 import { Home } from './Home.js';
 import { Kiosk } from './Kiosk.js';
 import { Shell } from './Shell.js';
@@ -53,13 +54,28 @@ const rosterRoute = createRoute({
   },
 });
 
+/**
+ * La ficha 360 lleva el `memberId` **en la URL**: quien atiende la comparte por
+ * WhatsApp con el dueño, la deja abierta y vuelve. Nada de eso funciona si la
+ * pantalla vive en un estado de React.
+ */
+const memberRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/miembros/$memberId',
+  component: function MemberRoute() {
+    const { memberId } = useParams({ from: '/miembros/$memberId' });
+
+    return <MemberFile memberId={memberId} />;
+  },
+});
+
 const kioskRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/kiosko',
   component: Kiosk,
 });
 
-export const routeTree = rootRoute.addChildren([homeRoute, rosterRoute, kioskRoute]);
+export const routeTree = rootRoute.addChildren([homeRoute, rosterRoute, memberRoute, kioskRoute]);
 
 export const router = createRouter({ routeTree });
 

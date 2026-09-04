@@ -503,6 +503,28 @@ export class ScheduleService {
    * llenar, y contarla hundiria la utilizacion del dia sin que nadie hiciera
    * nada mal.
    */
+  /**
+   * Nombre y horario de varias clases de una. Lo consume la ficha 360 (F1-06):
+   * pedirlas de a una sería una consulta por reserva, y la ficha las muestra
+   * todas juntas.
+   */
+  async sessionSummariesOf(
+    sessionIds: readonly string[],
+  ): Promise<Map<string, { name: string; startAt: Temporal.Instant }>> {
+    if (sessionIds.length === 0) return new Map();
+
+    const clases = await this.sessions.list({ publicId: { $in: [...sessionIds] } } as never, {
+      limit: Math.min(sessionIds.length, 200),
+    });
+
+    return new Map(
+      clases.items.map((clase) => [
+        String(clase['publicId']),
+        { name: clase.name, startAt: fromBsonDate(clase.startAt) },
+      ]),
+    );
+  }
+
   async sessionsOfWindow(
     venueId: string,
     from: Temporal.Instant,
