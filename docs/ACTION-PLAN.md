@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     31 |
+| Fase 1 — MVP vendible   |       32 |          186 |     32 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1868,7 +1868,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   §2.0 sigue siendo una prueba manual: el camino 1 verifica que el asistente diga la verdad, no
   cuánto tarda una persona.
 
-## [ ] F1-32 · Documentación del producto
+## [x] F1-32 · Documentación del producto
 
 - **module:** docs
 - **description:** Los cuatro documentos que pide §5: funcional, técnico, de arquitectura y uno por
@@ -1894,6 +1894,24 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   que el proyecto levante. Link check automático en CI.
 - **error-codes:** ninguno
 - **data-model-impact:** ninguno
+- **cómo se cerró:** `README.md` en la raíz —que no existía— y cuatro documentos en `docs/`:
+  [FUNCIONAL](FUNCIONAL.md) (qué hace, por rol y por módulo, sin implementación),
+  [TECNICO](TECNICO.md) (stack, cómo levantarlo, convenciones), [ARQUITECTURA](ARQUITECTURA.md)
+  (tenancy, módulos, eventos, jobs, con el diagrama y los enlaces a los ADR) y uno por aplicativo en
+  [apps/](apps/), con sus pantallas, sus roles y sus permisos.
+- **el OpenAPI ya estaba cubierto y no hizo falta tocarlo:** sale del **mismo registro de rutas** que
+  usan los guards y la suite de aislamiento, y `tests/openapi.test.ts` ya verificaba que toda ruta
+  registrada aparezca documentada. Una documentación de API que se escribe aparte es una que queda
+  desactualizada; esta no puede.
+- **la bitácora quedó completa:** las tres entradas anteriores al plan estaban sin commit porque se
+  escribieron antes de que existiera. Ahora las 54 tienen el suyo.
+- **link check automático:** `pnpm docs:links` recorre los 87 markdown del repo y falla si un enlace
+  relativo apunta a algo que no existe. Está en el CI, después del lint. Documentación con enlaces
+  rotos manda a alguien a una página que no está y le hace dudar del resto. Los enlaces externos no
+  se chequean a propósito: que un sitio ajeno esté caído no puede romper este build.
+- **deuda declarada:** la prueba de "clonar en una máquina limpia y que levante" es manual y queda
+  pendiente de una máquina limpia de verdad. Lo que sí se verificó es que cada comando, puerto y
+  ruta del documento técnico existe tal como está escrito.
 
 ---
 

@@ -23,6 +23,24 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-04 — F1-32: la documentación del producto, y con eso la Fase 1 cerrada
+
+- **Módulo:** `docs`
+- **Tipo:** docs
+- **Commit/PR:** —
+- **Trello:** https://trello.com/c/KOoe9EOR (F1-32) — movida a **Completadas**
+- **Qué cambió:** el repo tiene `README.md` —que no existía— y los cuatro documentos que pide §5:
+  funcional, técnico, de arquitectura y uno por aplicativo. Se sumó `pnpm docs:links`, que corre en
+  CI y falla si un enlace relativo de la documentación apunta a algo que no existe.
+- **Por qué:** era la última tarjeta de Fase 1, y su criterio es concreto: alguien que nunca vio el
+  repo lo clona, lee el técnico y lo levanta sin preguntar nada.
+- **Impacto:** ninguno sobre el código ni sobre el modelo de datos. El OpenAPI no hizo falta
+  tocarlo: sale del mismo registro de rutas que usan los guards, y ya tenía su test de que ninguna
+  ruta queda sin documentar. Las tres entradas de esta bitácora que estaban sin commit —las
+  anteriores al plan— quedaron completas.
+- **Pendiente:** la prueba de clonar en una máquina limpia es manual y queda para cuando haya una.
+  Se verificó que cada comando, puerto y ruta del documento técnico existe tal como está escrito.
+
 ## 2026-09-04 — F1-06: la ficha 360 del socio, y la deuda que se le escapaba al coach
 
 - **Módulo:** `members`
@@ -1810,7 +1828,7 @@ verde, gate de cobertura por criticidad cumplido.
 
 - **Módulo:** `infra`
 - **Tipo:** fix
-- **Commit/PR:** —
+- **Commit/PR:** `2f009d3` (entró con el scaffold)
 - **Trello:** —
 - **Qué cambió:** ESLint pasa a tener un único config en la raíz, con las reglas de React y la de
   fronteras de módulo aplicadas por `files`. Se eliminaron los 8 config por paquete y la raíz
@@ -1828,7 +1846,7 @@ verde, gate de cobertura por criticidad cumplido.
 
 - **Módulo:** `infra`
 - **Tipo:** infra
-- **Commit/PR:** —
+- **Commit/PR:** `2f009d3`
 - **Trello:** —
 - **Qué cambió:** el repo ya corre `pnpm lint / typecheck / test / build` en verde sobre las 5 apps
   y los 4 packages. La API levanta con `/health` y `/ready`, valida su entorno al arrancar y
@@ -1846,7 +1864,7 @@ verde, gate de cobertura por criticidad cumplido.
 
 - **Módulo:** `docs`
 - **Tipo:** decisión
-- **Commit/PR:** —
+- **Commit/PR:** `6dc2007`
 - **Trello:** —
 - **Qué cambió:** la spec pasa a vivir en `docs/spec/LAPLACE-SPEC.md` dentro del repo. Se agregan
   los ADR 000 a 003, el diccionario de errores, esta bitácora, `CLAUDE.md` y el directorio

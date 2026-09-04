@@ -17,6 +17,7 @@
     "typecheck": "turbo run typecheck && tsc --noEmit -p tsconfig.e2e.json",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "docs:links": "node scripts/check-links.mjs",
     "prepare": "husky"
   },
   "devDependencies": {

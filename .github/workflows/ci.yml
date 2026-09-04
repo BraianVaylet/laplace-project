@@ -36,6 +36,11 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      # Documentacion con enlaces rotos manda a alguien a una pagina que no
+      # esta y le hace dudar del resto (F1-32).
+      - name: Enlaces de la documentacion
+        run: pnpm docs:links
+
       - name: Typecheck
         run: pnpm typecheck
 
