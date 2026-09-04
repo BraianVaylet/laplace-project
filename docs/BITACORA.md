@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `metrics` · `members` · `waivers` · `dfsm` · `ui` · `http`
 - **Tipo:** feature
-- **Commit/PR:** `PENDIENTE` (rama `feat/phase-1-mvp`)
+- **Commit/PR:** `79b4ef9` (rama `feat/phase-1-mvp`)
 - **Trello:** https://trello.com/c/h0C4rOia (F1-24) — movida a **Completadas**
 - **Qué cambió:** el DFSM abre en un tablero y no en un menú: las clases de hoy con su ocupación,
   cuánta gente entró, la caja del día y el panel de alertas de §2.1.12 — quién no viene hace dos
