@@ -354,7 +354,7 @@ function ConfirmBooking({
         </p>
 
         {politica.isPending ? (
-          <Skeleton className="h-12" aria-label="Cargando la política de cancelación" />
+          <Skeleton className="h-12" label="Cargando la política de cancelación" />
         ) : politica.isError ? (
           <p className="text-fg-muted text-sm">
             No pudimos traer la política de cancelación. Podés reservar igual y consultarla en el
@@ -416,7 +416,7 @@ function ConfirmCancel({
       }
     >
       {politica.isPending ? (
-        <Skeleton className="h-12" aria-label="Cargando la política de cancelación" />
+        <Skeleton className="h-12" label="Cargando la política de cancelación" />
       ) : (
         <p className="text-fg-muted text-sm">
           {tarde

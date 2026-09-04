@@ -18,7 +18,7 @@
 | Fase                    |   Tareas | Story points | Hechas |
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     27 |
+| Fase 1 — MVP vendible   |       32 |          186 |     32 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -671,7 +671,7 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   - El límite del plan no usa `requireWithinLimit`: ese guard corta de a uno y acá hay que poder
     decir "de los 143 del archivo, 12 no entran".
 
-## [ ] F1-06 · Ficha 360 del miembro en el DFSM
+## [x] F1-06 · Ficha 360 del miembro en el DFSM
 
 - **module:** members
 - **description:** Una sola pantalla con todo lo del socio (§2.1.7). Es la pantalla más usada del
@@ -697,6 +697,29 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   `coach` no recibe los datos de deuda **desde la API**, no solo que no los pinta. Auditoría axe.
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** ninguno nuevo.
+- **cómo se cerró:** `GET /api/v1/members/:id/overview` junta en **una sola respuesta** los
+  contratos, las próximas reservas, la asistencia de 90 días y las firmas — quien abre la ficha
+  tiene a alguien enfrente esperando, y encadenar cuatro pedidos es hacerlo esperar cuatro veces.
+  Los otros módulos entran por puerto, no por import (ADR-003). En pantalla, en cambio, **cada
+  sección es su propio pedido**: si se cae cobranza, el mostrador sigue viendo los packs. Una
+  pantalla que se cae entera por una sección es una que no se puede usar justo cuando más hace
+  falta.
+- **🔴 encontrado de paso, y es el hallazgo de la tarjeta:** `balanceCents` viajaba en **toda**
+  respuesta de socio —el detalle y el listado—, y esas rutas solo piden `athlete:read`, que es el
+  permiso que el coach necesita para trabajar. La deuda de cada socio se le colaba sin que nadie la
+  pidiera, contra §2.1.12. Ahora el saldo sale `null` para quien no tiene `billing:read`, decidido
+  **del lado del servidor**: mandarlo para que el front lo esconda es mandarlo igual — queda en la
+  respuesta, en el caché del navegador y en cualquier `curl`. Tres tests de regresión: el coach en
+  el detalle, el coach en el listado y el mostrador, que sí lo ve porque cobra.
+- **también encontrado de paso:** seis pantallas le pasaban `aria-label` al `Skeleton` y **se
+  descartaba en silencio** — TypeScript no revisa los atributos JSX con guion, así que nadie se
+  entera. Con siete esqueletos en la misma pantalla, quien usa lector escuchaba "Cargando" siete
+  veces sin saber qué. `Skeleton` ahora tiene una prop `label` de verdad, y las seis quedaron
+  arregladas.
+- **deuda declarada:** el botón "Venderle un pack" del estado vacío no lleva a ningún lado: la
+  pantalla de venta del DFSM no existe todavía, y es la misma deuda que arrastran el asistente de
+  F1-30 y el arnés de E2E de F1-31. El buscador global ahora enlaza a la ficha, que era el destino
+  que le faltaba desde F0-13.
 
 ## [x] F1-07 · Módulo Products
 
@@ -1696,7 +1719,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   Playwright y suma el job al CI. El caché sin red es el `staleTime` de Query más el service worker
   que ya tiene la PWA; una prueba real de modo avión también es de F1-31.
 
-## [ ] F1-29 · WAFM: mis packs, mi QR y mi perfil
+## [x] F1-29 · WAFM: mis packs, mi QR y mi perfil
 
 - **module:** contracts
 - **description:** Lo que el socio consulta: cuántas clases le quedan, cuándo vencen, su QR de
@@ -1722,9 +1745,30 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **test_plan:** Test de validación de mime real con un archivo renombrado. Test de que la URL de la
   foto es firmada y vence. Test del export de datos. Auditoría axe.
 - **error-codes:** `LP-ACCT-422-001` (archivo inválido), `LP-ACCT-413-002` (archivo muy grande)
-- **data-model-impact:** `User.avatarUrl` como clave de objeto, no como URL pública.
+- **data-model-impact:** `User.avatarUrl` como clave de objeto, no como URL pública. En `Member` se
+  agregan `avatarKey`, `deletionRequestedAt` y `deletionReason`: el pedido de baja tiene que quedar
+  con fecha, que es lo que hace exigible el plazo de 90 días de ADR-004.
+- **cómo se cerró:** las seis rutas viven bajo `/api/v1/my/*` y **ninguna acepta un `memberId`**. Si
+  lo aceptara, el aislamiento por tenant no taparía nada: el socio y su compañero son del mismo
+  centro. El `memberId` sale de la sesión, siempre, en un solo lugar (`miFicha`). El tipo de la foto
+  se decide por los **bytes** (`sniffImageType`, con las firmas de JPEG, PNG y WebP), no por la
+  extensión ni el `Content-Type`, que los escribe quien sube el archivo: un SVG renombrado a `.png`
+  ejecutaría script contra el dominio que lo sirve. El enlace a la foto se firma con HMAC y vence a
+  los 15 minutos; una URL pública permanente de la foto de una persona es justo lo que no puede
+  pasar. El export de §9.2 entrega **todo** — perfil, contratos, reservas y consentimientos —, no un
+  resumen elegido por nosotros, y la baja se registra sin borrar: el centro tiene obligaciones sobre
+  lo firmado y lo cobrado.
+- **encontrado de paso:** el cliente de API compartido serializaba **todo** cuerpo con
+  `JSON.stringify`, así que una foto llegaba al servidor como `{}`. Ahora `ArrayBuffer`, vistas
+  tipadas, `Blob` y `FormData` pasan crudos y sin `content-type` inventado, con sus tres tests. Lo
+  habría comido cualquier subida de archivo futura, no solo esta.
+- **deuda declarada:** Backblaze B2 no está aprovisionado (depende de F0-16, bloqueada). El
+  almacenamiento va en memoria pero **honra el mismo contrato** —`put` / `signedUrl` / `remove`, con
+  firma HMAC y vencimiento reales—, así que cambiarlo por B2 no toca el servicio ni sus tests. Las
+  preferencias de notificación del criterio quedan en la pantalla de F1-21, que es donde vive el
+  motor. El QR ya estaba a 1 tap desde F1-19.
 
-## [ ] F1-30 · Onboarding guiado del SMU
+## [x] F1-30 · Onboarding guiado del SMU
 
 - **module:** susc
 - **description:** El asistente de §2.1.3. La métrica de éxito de §2.0 es
@@ -1748,8 +1792,33 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   Test de que cada paso se puede saltear.
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** `Organization.onboarding { step, completedSteps[], completedAt }`.
+- **cómo se cerró, y en qué se desvió del impacto que decía la tarjeta:** el progreso **se cuenta,
+  no se declara**. Cada paso mira si la cosa existe de verdad —hay sede, hay horario, hay plantilla
+  de clase, hay producto, hay código de invitación—, así que `step` y `completedSteps[]` no se
+  guardan: un checklist auto-declarado marca "clase publicada" sin que exista una clase, y el SMU
+  se entera cuando un socio abre la app y no encuentra nada. Lo único que se persiste es lo que el
+  usuario declara (qué salteó) y los dos hechos que no se pueden recalcular: cuándo terminó y
+  cuándo publicó su primera clase. **Saltear no marca hecho:** saca el paso del camino y lo deja
+  pendiente, que es lo que realmente está — una barra en 100% con el centro vacío es peor que no
+  tener barra. Vive en `Subscription`, no en la `Organization` de Better Auth: ese documento es de
+  la librería, y meterle campos propios es cómo se rompe la próxima migración de identidad.
+- **el time-to-first-class quedó medido, no estimado:** §2.0 pide menos de 30 minutos, y sin el
+  número nadie lo verifica. Se sella la primera vez que se ve una plantilla publicada y no se
+  recalcula: si se leyera con el reloj de cada consulta, la métrica diría lo que tardó en abrir la
+  pantalla. El alta guarda su propio `signedUpAt` con el reloj inyectable — `createdAt` lo escribe
+  Mongoose con el reloj de pared y ningún test puede moverlo (es el tropiezo de F1-23).
+- **el asistente va arriba del tablero, y antes del "elegí un centro":** el que recién se registra
+  no tiene ninguna sede, así que el home le mostraba un estado vacío sin salida. La pantalla del
+  primer día era justo la que no explicaba qué hacer. Cuando el onboarding termina, el bloque
+  desaparece solo: dejarlo para siempre le roba el lugar al tablero, que es lo que se mira todas
+  las mañanas.
+- **deuda declarada:** los pasos llevan a `/sedes`, `/horario`, `/productos` y `/miembros`, que son
+  las rutas del menú del DFSM y **todavía no tienen pantalla** — igual que los ítems del `AppShell`
+  desde F0-13. El asistente dice qué falta y lo mide bien; llevar de la mano hasta el formulario
+  necesita esas altas, que son de F1-06 y de lo que quede de Fase 1. La prueba real de los 30
+  minutos es del E2E de F1-31.
 
-## [ ] F1-31 · E2E de los tres caminos críticos
+## [x] F1-31 · E2E de los tres caminos críticos
 
 - **module:** ci
 - **description:** Los tres flujos que §Testing.7 declara obligatorios, en Playwright, corriendo en
@@ -1773,8 +1842,33 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   correspondiente falla.
 - **error-codes:** ninguno
 - **data-model-impact:** ninguno
+- **cómo se cerró:** los navegadores ya están instalados y el job entró al CI, con `deploy-staging`
+  colgando de él. La base es **efímera**: el arnés levanta un replica set en memoria, corre las
+  migraciones y arranca **el entrypoint de verdad** (`apps/api/src/index.ts`) — reconstruir la app
+  en el test probaría una app que no se despliega. Nunca toca staging ni producción: los tres
+  caminos escriben, y un E2E contra datos reales es uno que un día borra los de alguien.
+- **los tres se validaron rompiéndolos, como pedía el test plan:** anulando la devolución al
+  cancelar, el camino 2 falla con la captura del saldo en 7; anulando `markNoShows`, el camino 3
+  falla con `Received: "booked"`; haciendo que saltear marque hecho, el camino 1 falla en el paso
+  que ya no dice "Lo dejaste para después". Los tres se revirtieron.
+- **encontrado de paso:** el smoke pedía **cero errores de consola**, y con la API arriba empezó a
+  fallar por los 401 de un visitante sin sesión — que es el producto funcionando: un anónimo no
+  tiene packs ni reservas. Pasó a mirar errores de JavaScript (`pageerror`) y no de red; como
+  estaba, el test exigía que la API dejara pasar a cualquiera. Nunca se había visto porque hasta
+  ahora nada contestaba en el puerto 3000.
+- **también salió de acá:** `e2e/` no lo miraba nadie —ni `tsc` ni ESLint—, así que un E2E roto se
+  descubría al correrlo. Ahora `pnpm typecheck` lo incluye (`tsconfig.e2e.json`), y eso destapó de
+  entrada un `workers: undefined` que `exactOptionalPropertyTypes` no acepta.
+- **deuda declarada:** lo que va por API en los tres caminos es **lo que todavía no tiene
+  pantalla** — el alta de la cuenta, la de la sede, la de la clase, la del producto y la venta del
+  pack. Son deuda de F1-06 y F1-30; cuando esas pantallas existan, cada llamada del arnés se
+  reemplaza por sus clics y el cuerpo del test no se toca. El disparador de jobs vive en `e2e/` y
+  usa el mismo seam de reloj que los tests de integración: la ventana de check-in cierra media hora
+  después del inicio y un E2E no puede quedarse esperando. La medición real de los 30 minutos de
+  §2.0 sigue siendo una prueba manual: el camino 1 verifica que el asistente diga la verdad, no
+  cuánto tarda una persona.
 
-## [ ] F1-32 · Documentación del producto
+## [x] F1-32 · Documentación del producto
 
 - **module:** docs
 - **description:** Los cuatro documentos que pide §5: funcional, técnico, de arquitectura y uno por
@@ -1800,6 +1894,24 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   que el proyecto levante. Link check automático en CI.
 - **error-codes:** ninguno
 - **data-model-impact:** ninguno
+- **cómo se cerró:** `README.md` en la raíz —que no existía— y cuatro documentos en `docs/`:
+  [FUNCIONAL](FUNCIONAL.md) (qué hace, por rol y por módulo, sin implementación),
+  [TECNICO](TECNICO.md) (stack, cómo levantarlo, convenciones), [ARQUITECTURA](ARQUITECTURA.md)
+  (tenancy, módulos, eventos, jobs, con el diagrama y los enlaces a los ADR) y uno por aplicativo en
+  [apps/](apps/), con sus pantallas, sus roles y sus permisos.
+- **el OpenAPI ya estaba cubierto y no hizo falta tocarlo:** sale del **mismo registro de rutas** que
+  usan los guards y la suite de aislamiento, y `tests/openapi.test.ts` ya verificaba que toda ruta
+  registrada aparezca documentada. Una documentación de API que se escribe aparte es una que queda
+  desactualizada; esta no puede.
+- **la bitácora quedó completa:** las tres entradas anteriores al plan estaban sin commit porque se
+  escribieron antes de que existiera. Ahora las 54 tienen el suyo.
+- **link check automático:** `pnpm docs:links` recorre los 87 markdown del repo y falla si un enlace
+  relativo apunta a algo que no existe. Está en el CI, después del lint. Documentación con enlaces
+  rotos manda a alguien a una página que no está y le hace dudar del resto. Los enlaces externos no
+  se chequean a propósito: que un sitio ajeno esté caído no puede romper este build.
+- **deuda declarada:** la prueba de "clonar en una máquina limpia y que levante" es manual y queda
+  pendiente de una máquina limpia de verdad. Lo que sí se verificó es que cada comando, puerto y
+  ruta del documento técnico existe tal como está escrito.
 
 ---
 

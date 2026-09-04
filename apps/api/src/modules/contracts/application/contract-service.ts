@@ -481,6 +481,42 @@ export class ContractService {
   }
 
   /**
+   * Los packs del socio, como los ve el (F1-29). Es el puerto que consume
+   * Account, y el `memberId` sale siempre de la sesion de quien pregunta.
+   *
+   * Trae los vencidos y agotados tambien: "no te queda ninguna" es una
+   * respuesta, y esconderlos deja al socio sin entender por que no puede
+   * reservar.
+   */
+  async selfViewOf(memberId: string): Promise<
+    Array<{
+      contractId: string;
+      productName: string;
+      productType: string;
+      status: string;
+      creditsTotal: number;
+      creditsUsed: number;
+      endsAt: Temporal.Instant | null;
+      allowedCategories: string[];
+      venueId: string;
+    }>
+  > {
+    const contratos = await this.contracts.list({ memberId } as never, { limit: 50 });
+
+    return contratos.items.map((contract) => ({
+      contractId: String(contract['publicId']),
+      productName: contract.productName,
+      productType: contract.productType,
+      status: contract.status,
+      creditsTotal: contract.creditsTotal,
+      creditsUsed: contract.creditsUsed,
+      endsAt: contract.endsAt ? fromBsonDate(contract.endsAt) : null,
+      allowedCategories: contract.allowedCategories,
+      venueId: contract.venueId,
+    }));
+  }
+
+  /**
    * Los contratos que vencen antes de esa fecha, en una sede. Es el puerto que
    * consume el panel de alertas del DFSM (F1-24). El nombre del socio lo pone
    * quien llama: Contracts no conoce el modelo de Members (ADR-003).

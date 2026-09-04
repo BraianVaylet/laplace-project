@@ -82,6 +82,11 @@ export class InviteCodeService {
     });
   }
 
+  /** Cuantos codigos vigentes hay. Lo consulta el asistente de onboarding. */
+  countLive(): Promise<number> {
+    return this.codes.countLive();
+  }
+
   async list(cursor?: string, limit?: number): Promise<Page<InviteCodeDoc>> {
     return this.codes.list(
       {},

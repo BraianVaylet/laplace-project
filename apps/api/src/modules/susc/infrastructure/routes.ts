@@ -6,6 +6,8 @@ import {
   fiscalDataSchema,
   impersonateSchema,
   impersonationSchema,
+  onboardingProgressSchema,
+  onboardingStepIdSchema,
   planChangeResultSchema,
   healthPanelSchema,
   planIdSchema,
@@ -22,6 +24,7 @@ import {
   type FiscalData,
   type ImpersonateInput,
   type SignUpSubscriberInput,
+  type OnboardingStepId,
   type UpdatePlanInput,
   type UpdatePlanPriceInput,
 } from '@laplace/schemas';
@@ -115,6 +118,41 @@ export function createSuscRoutes(service: SuscService) {
       errorCodes: ['LP-SUSC-422-001', 'LP-SYS-404-002', 'LP-AUTH-403-002'],
     },
     {
+      method: 'GET',
+      path: '/api/v1/subscription/onboarding',
+      tenantScoped: true,
+      isolationFixture: () => Promise.resolve({ path: '/api/v1/subscription/onboarding' }),
+      summary: 'El asistente de primeros pasos y su progreso',
+      tags: ['susc'],
+      permission: { organization: ['update'] },
+      response: { status: 200, schema: onboardingProgressSchema },
+      errorCodes: ['LP-SYS-404-002', 'LP-AUTH-403-002'],
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/subscription/onboarding/:stepId/skip',
+      tenantScoped: true,
+      isolationFixture: () =>
+        Promise.resolve({ path: '/api/v1/subscription/onboarding/invite/skip' }),
+      summary: 'Dejar un paso para después',
+      tags: ['susc'],
+      permission: { organization: ['update'] },
+      response: { status: 200, schema: onboardingProgressSchema },
+      errorCodes: ['LP-SYS-404-002', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+    },
+    {
+      method: 'POST',
+      path: '/api/v1/subscription/onboarding/:stepId/resume',
+      tenantScoped: true,
+      isolationFixture: () =>
+        Promise.resolve({ path: '/api/v1/subscription/onboarding/invite/resume' }),
+      summary: 'Volver a un paso que se había salteado',
+      tags: ['susc'],
+      permission: { organization: ['update'] },
+      response: { status: 200, schema: onboardingProgressSchema },
+      errorCodes: ['LP-SYS-404-002', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+    },
+    {
       method: 'POST',
       path: '/api/v1/subscription/status',
       tenantScoped: true,
@@ -170,6 +208,24 @@ export function createSuscRoutes(service: SuscService) {
     validated<FiscalData, AppEnv>(fiscalDataSchema, async (c, input) =>
       c.json(await service.setFiscal(tenantOf(), input)),
     ),
+  );
+
+  routes.get(
+    '/api/v1/subscription/onboarding',
+    requirePermission({ organization: ['update'] }),
+    async (c) => c.json(await service.onboarding(tenantOf())),
+  );
+
+  routes.post(
+    '/api/v1/subscription/onboarding/:stepId/skip',
+    requirePermission({ organization: ['update'] }),
+    async (c) => c.json(await service.skipStep(tenantOf(), pasoDe(c.req.param('stepId')))),
+  );
+
+  routes.post(
+    '/api/v1/subscription/onboarding/:stepId/resume',
+    requirePermission({ organization: ['update'] }),
+    async (c) => c.json(await service.resumeStep(tenantOf(), pasoDe(c.req.param('stepId')))),
   );
 
   routes.post(
@@ -337,6 +393,22 @@ export function createSauRoutes(service: SuscService) {
  */
 function tenantOf(): string {
   return requireTenant().tenantId;
+}
+
+/**
+ * El paso viene de la URL, así que se valida antes de guardarlo: sin esto se
+ * podrían acumular pasos inventados en `skippedSteps` para siempre.
+ */
+function pasoDe(stepId: string): OnboardingStepId {
+  const paso = onboardingStepIdSchema.safeParse(stepId);
+  if (paso.success) return paso.data;
+
+  throw new AppError({
+    code: 'LP-SYS-422-006',
+    status: 422,
+    message: `No existe el paso ${stepId} en el asistente.`,
+    meta: { stepId },
+  });
 }
 
 function impersonationWithoutReason() {

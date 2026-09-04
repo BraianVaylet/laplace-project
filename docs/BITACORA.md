@@ -23,6 +23,111 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-04 — F1-32: la documentación del producto, y con eso la Fase 1 cerrada
+
+- **Módulo:** `docs`
+- **Tipo:** docs
+- **Commit/PR:** `7727b83` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/KOoe9EOR (F1-32) — movida a **Completadas**
+- **Qué cambió:** el repo tiene `README.md` —que no existía— y los cuatro documentos que pide §5:
+  funcional, técnico, de arquitectura y uno por aplicativo. Se sumó `pnpm docs:links`, que corre en
+  CI y falla si un enlace relativo de la documentación apunta a algo que no existe.
+- **Por qué:** era la última tarjeta de Fase 1, y su criterio es concreto: alguien que nunca vio el
+  repo lo clona, lee el técnico y lo levanta sin preguntar nada.
+- **Impacto:** ninguno sobre el código ni sobre el modelo de datos. El OpenAPI no hizo falta
+  tocarlo: sale del mismo registro de rutas que usan los guards, y ya tenía su test de que ninguna
+  ruta queda sin documentar. Las tres entradas de esta bitácora que estaban sin commit —las
+  anteriores al plan— quedaron completas.
+- **Pendiente:** la prueba de clonar en una máquina limpia es manual y queda para cuando haya una.
+  Se verificó que cada comando, puerto y ruta del documento técnico existe tal como está escrito.
+
+## 2026-09-04 — F1-06: la ficha 360 del socio, y la deuda que se le escapaba al coach
+
+- **Módulo:** `members`
+- **Tipo:** feature
+- **Commit/PR:** `442d7f3` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/gWV6GOZC (F1-06) — movida a **Completadas**
+- **Qué cambió:** el DFSM tiene la pantalla que más se usa: abrís un socio desde el buscador y ves
+  sus datos, su estado de cuenta, sus packs con lo que le queda, lo que tiene reservado, su
+  asistencia de los últimos 90 días, lo que firmó y las notas internas. Ruta nueva
+  `GET /api/v1/members/:id/overview` y pantalla `/miembros/:memberId`.
+- **Por qué:** era la tarjeta que quedaba de Fase 1 con todas sus dependencias cerradas, y §2.1.7
+  la describe como la pantalla más usada del producto: si obliga a navegar a otras cinco, se siente
+  lento aunque la API conteste rápido.
+- **Impacto:** ninguno sobre el modelo de datos. **Fix de seguridad:** `balanceCents` viajaba en
+  toda respuesta de socio, y esas rutas solo piden `athlete:read` — el permiso del coach. La deuda
+  de cada socio se le escapaba sin que nadie la pidiera, contra §2.1.12. Ahora sale `null` para
+  quien no tiene `billing:read`, decidido en el servidor. También se arregló `Skeleton`, que
+  descartaba en silencio el `aria-label` que le pasaban seis pantallas.
+- **Pendiente:** el botón "Venderle un pack" del estado vacío no lleva a ningún lado: la pantalla de
+  venta del DFSM sigue sin existir, igual que las altas que arrastran F1-30 y F1-31.
+
+## 2026-09-04 — F1-31: los tres caminos críticos, en Playwright y en CI
+
+- **Módulo:** `ci`
+- **Tipo:** infra
+- **Commit/PR:** `62c7b8d` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/3aLdhhHu (F1-31) — movida a **Completadas**
+- **Qué cambió:** `pnpm test:e2e` recorre los tres caminos que §Testing.7 no negocia —alta y primera
+  clase publicada, reservar/cancelar/recuperar el crédito, y asistencia con el no-show que marca el
+  job— en Chrome de escritorio y en mobile. El CI los corre en su propio job y publica capturas y
+  traces cuando algo falla; `deploy-staging` ahora depende de que pasen.
+- **Por qué:** eran el requisito de §Testing.7 y los navegadores no estaban ni instalados. Sin esto,
+  romper la devolución de crédito al cancelar no lo detectaba nadie hasta que lo dijera un socio.
+- **Impacto:** ninguno sobre el modelo de datos ni sobre la API. El arnés (`e2e/support/`) levanta un
+  Mongo **efímero** en memoria, corre las migraciones y arranca el entrypoint real de la API: nunca
+  staging ni producción. El disparador de jobs vive solo en `e2e/` — agregarle a la API una ruta
+  para correr jobs sería abrir en producción una puerta que solo necesita el test. `pnpm typecheck`
+  ahora incluye `e2e/`, que hasta hoy no miraba nadie.
+- **Pendiente:** lo que los caminos hacen por API es lo que todavía no tiene pantalla (altas del
+  DFSM y venta de packs, deuda de F1-06 y F1-30). La medición real del time-to-first-class de §2.0
+  sigue siendo una prueba manual.
+
+## 2026-09-04 — F1-30: el asistente de primeros pasos
+
+- **Módulo:** `susc`
+- **Tipo:** feature
+- **Commit/PR:** `2801f3c` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/N3mXndHu (F1-30) — movida a **Completadas**
+- **Qué cambió:** el SMU que recién se registró abre el DFSM y encuentra el camino: crear la sede,
+  cargar los horarios, publicar la primera clase, crear un producto e invitar socios, con barra de
+  progreso, la opción de dejar cualquier paso para después y la de retomarlo. Tres rutas nuevas bajo
+  `/api/v1/subscription/onboarding`.
+- **Por qué:** la métrica de §2.0 es time-to-first-class menor a 30 minutos, y el home del primer
+  día era un "elegí un centro" sin salida: el que acaba de registrarse no tiene ninguna sede.
+- **Impacto:** `Subscription` suma `signedUpAt` y `onboarding { skippedSteps, completedAt,
+firstClassPublishedAt }`. **No** guarda `step` ni `completedSteps[]` como decía la tarjeta: el
+  progreso se cuenta del estado real del centro en cada consulta, porque un checklist
+  auto-declarado marca "clase publicada" sin que exista una clase. Saltear un paso lo deja
+  pendiente, nunca hecho. Ningún código de error nuevo: el paso inventado en la URL contesta
+  `LP-SYS-422-006`, que ya es el de validación en el borde.
+- **Pendiente:** las pantallas de alta de sede, clase, producto y códigos del DFSM no existen
+  todavía, así que el asistente marca el camino pero no lleva hasta el formulario. La prueba real
+  de los 30 minutos es del E2E de F1-31.
+
+## 2026-09-04 — F1-29: lo del socio sobre lo suyo
+
+- **Módulo:** `account`
+- **Tipo:** feature
+- **Commit/PR:** `68d290d` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/L0822vqC (F1-29) — movida a **Completadas**
+- **Qué cambió:** el socio abre la WAFM y ve sus packs —cuántas clases le quedan, hasta cuándo y en
+  qué clases valen—, edita su perfil y su contacto de emergencia, cambia su foto, se descarga todos
+  sus datos en JSON y puede pedir la baja. Seis rutas nuevas bajo `/api/v1/my/*`.
+- **Por qué:** son las dos preguntas que hoy el socio manda por WhatsApp al centro (§2.1.2), y los
+  derechos de acceso y supresión de la Ley 25.326 (§9.2), que escondidos detrás de un mail a soporte
+  no se cumplen.
+- **Impacto:** `Member` suma `avatarKey`, `deletionRequestedAt` y `deletionReason`. Ninguna ruta de
+  `/my/*` acepta un `memberId`: sale de la sesión. El tipo de la foto se decide por los **bytes**,
+  no por la extensión ni el `Content-Type` —los dos los escribe quien sube el archivo, y un SVG
+  renombrado a `.png` ejecutaría script contra el dominio que lo sirve—, con tope de 2 MB y enlace
+  firmado que vence a los 15 minutos. Códigos nuevos: `LP-ACCT-422-001` y `LP-ACCT-413-002`. Se
+  arregló además el cliente de API compartido, que serializaba todo cuerpo con `JSON.stringify` y
+  convertía cualquier archivo en `{}`.
+- **Pendiente:** Backblaze B2 no está aprovisionado (F0-16 sigue bloqueada): el almacenamiento va en
+  memoria con el mismo contrato y la misma firma HMAC, así que se reemplaza sin tocar el servicio.
+  Las preferencias de notificación quedan en la pantalla de F1-21.
+
 ## 2026-09-04 — Fix: los entitlements leían la organización por un campo que no existe
 
 - **Módulo:** `entitlements`
@@ -1723,7 +1828,7 @@ verde, gate de cobertura por criticidad cumplido.
 
 - **Módulo:** `infra`
 - **Tipo:** fix
-- **Commit/PR:** —
+- **Commit/PR:** `2f009d3` (entró con el scaffold)
 - **Trello:** —
 - **Qué cambió:** ESLint pasa a tener un único config en la raíz, con las reglas de React y la de
   fronteras de módulo aplicadas por `files`. Se eliminaron los 8 config por paquete y la raíz
@@ -1741,7 +1846,7 @@ verde, gate de cobertura por criticidad cumplido.
 
 - **Módulo:** `infra`
 - **Tipo:** infra
-- **Commit/PR:** —
+- **Commit/PR:** `2f009d3`
 - **Trello:** —
 - **Qué cambió:** el repo ya corre `pnpm lint / typecheck / test / build` en verde sobre las 5 apps
   y los 4 packages. La API levanta con `/health` y `/ready`, valida su entorno al arrancar y
@@ -1759,7 +1864,7 @@ verde, gate de cobertura por criticidad cumplido.
 
 - **Módulo:** `docs`
 - **Tipo:** decisión
-- **Commit/PR:** —
+- **Commit/PR:** `6dc2007`
 - **Trello:** —
 - **Qué cambió:** la spec pasa a vivir en `docs/spec/LAPLACE-SPEC.md` dentro del repo. Se agregan
   los ADR 000 a 003, el diccionario de errores, esta bitácora, `CLAUDE.md` y el directorio

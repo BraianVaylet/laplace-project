@@ -185,6 +185,11 @@ export class VenueService {
   countActive(): Promise<number> {
     return this.venues.countActive();
   }
+
+  /** Sedes con horario cargado. La necesita el asistente de onboarding (§2.1.3). */
+  countWithBusinessHours(): Promise<number> {
+    return this.venues.countWithBusinessHours();
+  }
 }
 
 /**

@@ -31,6 +31,7 @@ export class SubscriptionRepository {
     timeZone: string;
     trialEndsAt: Temporal.Instant;
     currentPeriodEndsAt: Temporal.Instant;
+    signedUpAt: Temporal.Instant;
   }): Promise<SubscriptionDoc | null> {
     try {
       const created = await SubscriptionModel.create({
@@ -45,6 +46,8 @@ export class SubscriptionRepository {
         currentPeriodEndsAt: toBsonDate(data.currentPeriodEndsAt),
         pendingPlanId: null,
         fiscal: null,
+        signedUpAt: toBsonDate(data.signedUpAt),
+        onboarding: { skippedSteps: [], completedAt: null, firstClassPublishedAt: null },
       });
 
       return created.toObject();

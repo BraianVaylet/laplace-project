@@ -620,7 +620,7 @@ describe('aislamiento de tenant', () => {
 });
 
 describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
-  it('las once rutas de members traen su fixture de ataque', () => {
+  it('las doce rutas de members traen su fixture de ataque', () => {
     // Las de `/import` son de F1-05 y el estado de cuenta es de Billing (F1-10):
     // cada una tiene su propia suite.
     const members = allRegisteredRoutes().filter(
@@ -630,7 +630,7 @@ describe('las rutas declaradas quedan cubiertas por la suite de F0-05', () => {
         !route.path.endsWith('/statement'),
     );
 
-    expect(members).toHaveLength(11);
+    expect(members).toHaveLength(12);
     for (const route of members) {
       expect(route.tenantScoped, `${route.method} ${route.path}`).toBe(true);
       expect(route.isolationFixture, `${route.method} ${route.path}`).toBeDefined();

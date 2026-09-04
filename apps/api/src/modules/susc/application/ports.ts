@@ -46,3 +46,20 @@ export interface PlanLimitsLookup {
 export interface JobRunLookup {
   failedSince(since: Temporal.Instant): Promise<Array<{ name: string; at: string; error: string }>>;
 }
+
+/**
+ * Lo que el centro tiene cargado, para el asistente de onboarding (§2.1.3).
+ *
+ * 🔴 Son **conteos del estado real**, no banderas que alguien marcó. Un
+ * checklist auto-declarado dice "clase publicada" sin que exista una clase, y
+ * el SMU se entera cuando un socio abre la app y no encuentra nada.
+ */
+export interface CenterSetupLookup {
+  of(organizationId: string): Promise<{
+    venues: number;
+    venuesWithHours: number;
+    classTemplates: number;
+    products: number;
+    inviteCodes: number;
+  }>;
+}

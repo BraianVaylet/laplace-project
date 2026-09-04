@@ -304,3 +304,37 @@ describe('metodos', () => {
     expect(calls[0]?.init.method).toBe(expected);
   });
 });
+
+describe('cuerpos binarios', () => {
+  it('🔴 un ArrayBuffer viaja tal cual, no como JSON', async () => {
+    /*
+     * Serializarlo convertiria una foto en `{}`, y el servidor — que mira los
+     * bytes para saber que formato es — recibiria dos llaves.
+     */
+    const { api, calls } = client(() => json({}));
+    const bytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer;
+
+    await api.request('/my/avatar', { method: 'POST', body: bytes });
+
+    expect(calls[0]?.init.body).toBe(bytes);
+  });
+
+  it('un binario NO declara content-type: lo decide el servidor mirando los bytes', async () => {
+    const { api, calls } = client(() => json({}));
+
+    await api.request('/my/avatar', { method: 'POST', body: new Uint8Array([1, 2, 3]) });
+
+    const headers = calls[0]?.init.headers as Record<string, string>;
+    expect(headers['content-type']).toBeUndefined();
+  });
+
+  it('un objeto comun sigue yendo como JSON', async () => {
+    const { api, calls } = client(() => json({}));
+
+    await api.post('/x', { hola: 'mundo' });
+
+    const headers = calls[0]?.init.headers as Record<string, string>;
+    expect(headers['content-type']).toBe('application/json');
+    expect(calls[0]?.init.body).toBe('{"hola":"mundo"}');
+  });
+});

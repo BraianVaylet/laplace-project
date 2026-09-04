@@ -183,8 +183,15 @@ export const memberResponseSchema = z.object({
   status: memberStatusSchema,
   flags: memberFlagsSchema,
   tags: z.array(z.string()),
-  /** Saldo en centavos. Negativo = debe. Lo maneja Billing (F1-10). */
-  balanceCents: z.number().int(),
+  /**
+   * Saldo en centavos. Negativo = debe. Lo maneja Billing (F1-10).
+   *
+   * 🔴 `null` cuando quien pregunta no puede ver plata (§2.1.12). El coach abre
+   * la ficha todos los días para saber si el socio puede entrenar; cuánto debe
+   * no es asunto suyo, y mandarlo igual para que el front lo esconda es
+   * mandarlo.
+   */
+  balanceCents: z.number().int().nullable(),
   joinedAt: z.string(),
   lastAttendanceAt: z.string().nullable(),
   /** Faltas acumuladas y bloqueo por ausencias (§2.1.5.d). Lo maneja Booking. */
@@ -224,3 +231,69 @@ export const memberSearchHitSchema = z.object({
 });
 
 export type MemberSearchHit = z.infer<typeof memberSearchHitSchema>;
+
+/**
+ * La ficha 360 del socio (§2.1.7). Es la pantalla más usada del DFSM: si
+ * obliga a navegar a otras cinco, el producto se siente lento aunque la API
+ * conteste rápido.
+ *
+ * 🔴 **Acá no viene plata.** El estado de cuenta y la deuda tienen su propio
+ * endpoint con su propio permiso (`billing:read`), así que el coach —que abre
+ * esta pantalla todos los días— recibe un 403 al pedirlo, en vez de recibir la
+ * deuda y confiar en que el front la esconda.
+ */
+export const memberContractViewSchema = z.object({
+  contractId: z.string(),
+  productName: z.string(),
+  productType: z.string(),
+  status: z.string(),
+  creditsLeft: z.number().int().nullable(),
+  creditsTotal: z.number().int().nullable(),
+  endsAt: z.string().nullable(),
+  daysLeft: z.number().int().nullable(),
+});
+
+export type MemberContractView = z.infer<typeof memberContractViewSchema>;
+
+export const memberBookingViewSchema = z.object({
+  bookingId: z.string(),
+  sessionId: z.string(),
+  className: z.string(),
+  startAt: z.string(),
+  status: z.string(),
+});
+
+export type MemberBookingView = z.infer<typeof memberBookingViewSchema>;
+
+/** Los últimos 90 días, que es la ventana que le sirve al mostrador (§2.1.7). */
+export const memberAttendanceViewSchema = z.object({
+  windowDays: z.number().int(),
+  attended: z.number().int(),
+  noShows: z.number().int(),
+  lastAttendanceAt: z.string().nullable(),
+  /** Días sin venir. `null` si nunca vino: no es lo mismo que "vino hoy". */
+  daysSinceLastVisit: z.number().int().nullable(),
+});
+
+export type MemberAttendanceView = z.infer<typeof memberAttendanceViewSchema>;
+
+export const memberWaiverViewSchema = z.object({
+  documentId: z.string(),
+  title: z.string(),
+  version: z.number().int(),
+  acceptedAt: z.string(),
+  /** Si el centro publicó una versión nueva, lo firmado ya no alcanza. */
+  outdated: z.boolean(),
+});
+
+export type MemberWaiverView = z.infer<typeof memberWaiverViewSchema>;
+
+export const memberOverviewSchema = z.object({
+  memberId: z.string(),
+  contracts: z.array(memberContractViewSchema),
+  upcomingBookings: z.array(memberBookingViewSchema),
+  attendance: memberAttendanceViewSchema,
+  waivers: z.array(memberWaiverViewSchema),
+});
+
+export type MemberOverview = z.infer<typeof memberOverviewSchema>;

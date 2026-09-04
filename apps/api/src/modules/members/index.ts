@@ -12,6 +12,12 @@ import {
 } from './application/invite-code-service.js';
 import { MemberImportService } from './application/member-import-service.js';
 import { MemberService, type Today } from './application/member-service.js';
+import { MemberOverviewService } from './application/member-overview-service.js';
+import type {
+  MemberBookingsPort,
+  MemberContractsPort,
+  MemberWaiversPort,
+} from './application/overview-ports.js';
 import type { MemberDoc } from './infrastructure/member.model.js';
 import { InviteCodeRepository } from './infrastructure/invite-code.repository.js';
 import { createInviteCodeRoutes } from './infrastructure/invite-code-routes.js';
@@ -26,6 +32,7 @@ import { VICTIM_MEMBER_NAME, createMemberRoutes } from './infrastructure/routes.
 export interface MembersModule {
   routes: Hono<AppEnv>;
   service: MemberService;
+  overview: MemberOverviewService;
   inviteCodes: InviteCodeService;
   imports: MemberImportService;
 }
@@ -42,6 +49,17 @@ export interface MembersModuleDeps {
    * el punto de composicion: el modulo no conoce la libreria de identidad.
    */
   memberships: OrganizationMembershipPort;
+  /**
+   * Lo que la ficha 360 junta de los otros módulos (§2.1.7). Sin ellos la ficha
+   * contesta vacía en vez de romper: es una pantalla de lectura.
+   */
+  overview?:
+    | {
+        contracts: MemberContractsPort;
+        bookings: MemberBookingsPort;
+        waivers: MemberWaiversPort;
+      }
+    | undefined;
 }
 
 /** Hoy en la zona del servidor. Cada Venue tiene la suya, pero la edad no depende de eso. */
@@ -105,6 +123,16 @@ export function createMembersModule(deps: MembersModuleDeps): MembersModule {
 
   const imports = new MemberImportService({ members });
 
+  const vacio = {
+    contracts: { ofMember: () => Promise.resolve([]) },
+    bookings: { ofMember: () => Promise.resolve([]) },
+    waivers: { signedOf: () => Promise.resolve([]) },
+  };
+  const overview = new MemberOverviewService({
+    ...(deps.overview ?? vacio),
+    now: deps.now ?? (() => Temporal.Now.instant()),
+  });
+
   const routes = new Hono<AppEnv>();
   /*
    * El import va PRIMERO: `/api/v1/members/import` tiene la misma forma que
@@ -112,13 +140,19 @@ export function createMembersModule(deps: MembersModuleDeps): MembersModule {
    * quedaria con el pedido.
    */
   routes.route('/', createImportRoutes(imports, deps.entitlements, seedVictimMember));
-  routes.route('/', createMemberRoutes(service, deps.entitlements, seedVictimMember));
+  routes.route('/', createMemberRoutes(service, overview, deps.entitlements, seedVictimMember));
   routes.route('/', createInviteCodeRoutes(inviteCodes, deps.entitlements, seedVictimCode));
 
-  return { routes, service, inviteCodes, imports };
+  return { routes, service, overview, inviteCodes, imports };
 }
 
 export type { MemberService } from './application/member-service.js';
+export type { MemberOverviewService } from './application/member-overview-service.js';
+export type {
+  MemberBookingsPort,
+  MemberContractsPort,
+  MemberWaiversPort,
+} from './application/overview-ports.js';
 export type {
   InviteCodeService,
   OrganizationMembershipPort,

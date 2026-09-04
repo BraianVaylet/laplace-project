@@ -98,16 +98,31 @@ export function MemberSearch({ client = api, onPick }: MemberSearchProps = {}) {
           )}
           {resultados.map((socio) => (
             <li key={socio.memberId}>
-              <button
-                type="button"
-                // `onMouseDown` y no `onClick`: el `onBlur` del campo cierra la
-                // lista antes de que el clic llegue a soltarse.
-                onMouseDown={() => onPick?.(socio)}
-                className="hover:bg-surface-3 focus-visible:focus-ring flex min-h-11 w-full items-center justify-between gap-3 px-3 text-left"
-              >
-                <span className="text-fg text-sm font-medium">{socio.fullName}</span>
-                <span className="text-fg-muted text-sm">{socio.hint}</span>
-              </button>
+              {/*
+                Sin `onPick`, el resultado es un **enlace a su ficha**: es lo
+                que se espera de un buscador, y de paso se puede abrir en otra
+                pestaña o copiar. Con `onPick`, decide quien lo monta.
+              */}
+              {onPick ? (
+                <button
+                  type="button"
+                  // `onMouseDown` y no `onClick`: el `onBlur` del campo cierra
+                  // la lista antes de que el clic llegue a soltarse.
+                  onMouseDown={() => onPick(socio)}
+                  className="hover:bg-surface-3 focus-visible:focus-ring flex min-h-11 w-full items-center justify-between gap-3 px-3 text-left"
+                >
+                  <span className="text-fg text-sm font-medium">{socio.fullName}</span>
+                  <span className="text-fg-muted text-sm">{socio.hint}</span>
+                </button>
+              ) : (
+                <a
+                  href={`/miembros/${socio.memberId}`}
+                  className="hover:bg-surface-3 focus-visible:focus-ring flex min-h-11 w-full items-center justify-between gap-3 px-3 text-left"
+                >
+                  <span className="text-fg text-sm font-medium">{socio.fullName}</span>
+                  <span className="text-fg-muted text-sm">{socio.hint}</span>
+                </a>
+              )}
             </li>
           ))}
         </ul>
