@@ -12,6 +12,18 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "@laplace/dfsm", "dev"],
       "port": 5174
+    },
+    {
+      "name": "dfsa",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@laplace/dfsa", "dev"],
+      "port": 5173
+    },
+    {
+      "name": "landing",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "@laplace/landing", "dev"],
+      "port": 5176
     }
   ]
 }
