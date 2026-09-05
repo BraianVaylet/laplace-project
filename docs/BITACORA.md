@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `products`
 - **Tipo:** feature
-- **Commit/PR:** —
+- **Commit/PR:** `5041ba4` (rama `feat/phase-1-ui-debt`)
 - **Trello:** https://trello.com/c/tCLskxpw (F1-34) — movida a **Completadas**
 - **Qué cambió:** el DFSM tiene `/productos`: el listado y el alta de los siete tipos de §2.1.17,
   con el formulario siguiendo al tipo elegido. El E2E del camino 1 ya crea la sede y el producto por
