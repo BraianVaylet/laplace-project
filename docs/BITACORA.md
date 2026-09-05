@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `billing`
 - **Tipo:** feature
-- **Commit/PR:** —
+- **Commit/PR:** `2ee6913` (rama `feat/phase-1-ui-debt`)
 - **Trello:** https://trello.com/c/qLGeCC1l (F1-37) — movida a **Completadas**
 - **Qué cambió:** `POST /api/v1/sales` vende un producto a un socio en **una sola operación**:
   contrato, cargo, pago y activación, todo en una transacción y con `Idempotency-Key`. Desde la
