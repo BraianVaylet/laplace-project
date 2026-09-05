@@ -10,10 +10,10 @@ import { autenticar, suscriptorSinSede } from './support/centro.js';
  * **solo cuando la cosa existe**. Un checklist que se auto-declara completo
  * deja al centro creyendo que abrió.
  *
- * 🔴 Lo que va por API acá es lo que **todavía no tiene pantalla**: el alta de
- * la cuenta y la de la clase. La sede se crea por pantalla desde F1-33 y el
- * producto desde F1-34, que es como se paga esta deuda: cada llamada se
- * reemplaza por sus clics y el resto del test no se toca.
+ * 🔴 Lo único que queda por API es el **alta de la cuenta**, que no tiene
+ * pantalla en ningún lado todavía. La sede se carga por pantalla desde F1-33,
+ * el producto desde F1-34 y la clase desde F1-35: así se paga la deuda, cada
+ * llamada reemplazada por sus clics sin tocar el resto del test.
  */
 test.describe('camino 1: del alta a la primera clase', () => {
   test('el asistente marca hecho lo que existe, y nada más', async ({ page, context }) => {
@@ -43,10 +43,6 @@ test.describe('camino 1: del alta a la primera clase', () => {
     await page.goto('http://localhost:5174/');
     await expect(page.getByText('1 de 5 pasos')).toBeVisible();
 
-    const venueId = (await (await smu.api.get('venues')).json()).items[0].publicId as string;
-    const roomId = (await (await smu.api.get(`rooms?venueId=${venueId}`)).json()).items[0]
-      .publicId as string;
-
     // 🔴 Saltear no completa: el paso queda pendiente, no hecho.
     await page.getByRole('button', { name: 'Dejar para después Cargá los horarios' }).click();
     await expect(page.getByText('Lo dejaste para después')).toBeVisible();
@@ -56,25 +52,17 @@ test.describe('camino 1: del alta a la primera clase', () => {
     await page.getByRole('button', { name: 'Retomar Cargá los horarios' }).click();
     await expect(page.getByText('Lo dejaste para después')).toBeHidden();
 
-    await smu.api.post('class-templates', {
-      data: {
-        venueId,
-        roomId,
-        name: 'Funcional',
-        categoryId: 'funcional',
-        durationMin: 60,
-        capacity: 12,
-        recurrence: {
-          freq: 'weekly',
-          byWeekday: [1, 3, 5],
-          timeOfDay: '19:00',
-          interval: 1,
-          from: new Date().toISOString().slice(0, 10),
-        },
-      },
-    });
+    // La clase también se publica por pantalla desde F1-35.
+    await page.goto('http://localhost:5174/horario');
+    await page.getByRole('button', { name: 'Publicar una clase' }).click();
+    await page.getByLabel(/Nombre de la clase/).fill('Funcional');
+    await page.getByLabel(/Categoría/).fill('funcional');
+    await page.getByLabel('Lunes').check();
+    await page.getByLabel('Miércoles').check();
+    // `exact`: sin esto engancharía también "Publicar una clase".
+    await page.getByRole('button', { name: 'Publicar', exact: true }).click();
 
-    await page.reload();
+    await page.goto('http://localhost:5174/');
     await expect(page.getByText('2 de 5 pasos')).toBeVisible();
 
     // El producto también se crea por pantalla desde F1-34.

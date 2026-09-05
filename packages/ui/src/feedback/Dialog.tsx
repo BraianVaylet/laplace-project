@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { cn } from '../cn.js';
 
 /**
@@ -32,6 +32,13 @@ export function Dialog({
   className,
 }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  /*
+   * 🔴 Los ids se generan, no se escriben a mano. Con dos dialogos en la misma
+   * pantalla, un `id="dialog-title"` fijo los duplica y `aria-labelledby`
+   * apunta al titulo del otro: el lector anuncia el modal equivocado.
+   */
+  const titleId = useId();
+  const descriptionId = useId();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -55,8 +62,8 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
-      aria-labelledby="dialog-title"
-      {...(description ? { 'aria-describedby': 'dialog-description' } : {})}
+      aria-labelledby={titleId}
+      {...(description ? { 'aria-describedby': descriptionId } : {})}
       onClick={(event) => {
         // El click sobre el backdrop llega con el <dialog> como target.
         if (dismissOnBackdrop && event.target === ref.current) onClose();
@@ -67,12 +74,12 @@ export function Dialog({
         className,
       )}
     >
-      <h2 id="dialog-title" className="text-fg text-lg font-semibold">
+      <h2 id={titleId} className="text-fg text-lg font-semibold">
         {title}
       </h2>
 
       {description ? (
-        <p id="dialog-description" className="text-fg-muted mt-1 text-sm">
+        <p id={descriptionId} className="text-fg-muted mt-1 text-sm">
           {description}
         </p>
       ) : null}

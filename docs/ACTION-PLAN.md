@@ -19,7 +19,7 @@
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
 | Fase 1 — MVP vendible   |       32 |          186 |     32 |
-| Fase 1 — deuda de UI    |        5 |           31 |      2 |
+| Fase 1 — deuda de UI    |        5 |           31 |      3 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -2009,7 +2009,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   llegaba primero.
 - **la deuda del E2E se sigue pagando:** el camino 1 ya crea la sede **y el producto** por pantalla.
 
-## [ ] F1-35 · DFSM: agenda y clases
+## [x] F1-35 · DFSM: agenda y clases
 
 - **module:** schedule
 - **description:** La grilla semanal del centro, el alta de plantillas y la edición y cancelación de
@@ -2032,6 +2032,24 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   cancelación con su conteo. Auditoría axe, prueba a 360 px.
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** ninguno nuevo
+- **cómo se cerró:** `/horario` con la grilla semanal por sede —navegable hacia adelante y hacia
+  atrás—, el alta de plantillas, la edición con alcance y la cancelación con motivo.
+- **editar pregunta el alcance, y "solo esta" viene elegida:** cambiar "todas las de los lunes"
+  cuando se quería cambiar una sola reescribe la grilla de un mes. El alcance viaja en `?scope=` de
+  la plantilla, que es donde la API lo lee; sin él **no propaga**, y ese es el default que menos
+  rompe. La clase suelta no ofrece la opción: no tiene plantilla a la que propagar.
+- **cancelar dice a cuánta gente afecta antes de confirmar** y **exige el motivo**: del otro lado
+  hay socios que se organizaron para venir, y "se canceló" a secas no le sirve a nadie. El texto
+  aclara que se les devuelve el crédito.
+- **lo que ya pasó no se toca:** la clase pasada no muestra ni editar ni cancelar. Reescribir lo que
+  ocurrió deja un registro que no coincide con la realidad.
+- **encontrado de paso:** `Dialog` escribía `id="dialog-title"` **a mano**. Con dos diálogos en la
+  misma pantalla se duplicaba el id y `aria-labelledby` apuntaba al título del otro: el lector
+  anunciaba el modal equivocado. Ahora los ids se generan con `useId`, y las pantallas montan solo
+  el diálogo abierto en vez de dejar tres permanentes en el DOM.
+- **el camino 1 ya no usa la API para nada de negocio:** sede, producto y clase se cargan por
+  pantalla. Lo único que queda por API es el alta de la cuenta, que no tiene pantalla en ningún
+  lado todavía.
 
 ## [ ] F1-36 · DFSM: socios y códigos de invitación
 

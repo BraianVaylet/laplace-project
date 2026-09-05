@@ -6,6 +6,7 @@ import {
   useParams,
   useRouterState,
 } from '@tanstack/react-router';
+import { Agenda } from './Agenda.js';
 import { ClassRoster } from './ClassRoster.js';
 import { MemberFile } from './MemberFile.js';
 import { Products } from './Products.js';
@@ -88,6 +89,12 @@ const venueDetailRoute = createRoute({
   },
 });
 
+const agendaRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/horario',
+  component: Agenda,
+});
+
 const productsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/productos',
@@ -107,6 +114,7 @@ export const routeTree = rootRoute.addChildren([
   venuesRoute,
   venueDetailRoute,
   productsRoute,
+  agendaRoute,
   kioskRoute,
 ]);
 

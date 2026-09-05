@@ -23,6 +23,24 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-05 — F1-35: la agenda se arma por pantalla, y los diálogos dejan de compartir id
+
+- **Módulo:** `schedule`
+- **Tipo:** feature
+- **Commit/PR:** —
+- **Trello:** https://trello.com/c/kiYLhCsp (F1-35) — movida a **Completadas**
+- **Qué cambió:** el DFSM tiene `/horario`: la grilla semanal por sede, el alta de plantillas, la
+  edición eligiendo "solo esta" o "esta y las que siguen", y la cancelación con motivo y con el
+  número de inscriptos a la vista. El E2E del camino 1 ya carga sede, producto y clase por pantalla.
+- **Por qué:** tercera de las cinco tarjetas de deuda de UI, y la más usada de las cinco: es donde
+  el SMU pasa el tiempo cuando arma la semana.
+- **Impacto:** ninguno sobre la API ni sobre el modelo. **Fix de accesibilidad en `@laplace/ui`:**
+  `Dialog` escribía `id="dialog-title"` a mano, así que con dos diálogos en pantalla el id se
+  duplicaba y `aria-labelledby` apuntaba al título del otro — el lector anunciaba el modal
+  equivocado. Ahora se generan con `useId`.
+- **Pendiente:** las dos pantallas que faltan — socios y la venta desde el mostrador (F1-36 y
+  F1-37).
+
 ## 2026-09-05 — F1-34: el catálogo se carga por pantalla, y el rate limit se puede apagar solo en dev
 
 - **Módulo:** `products`
