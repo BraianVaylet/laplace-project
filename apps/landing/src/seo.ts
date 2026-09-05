@@ -22,6 +22,12 @@ export const PAGES: readonly PageSeo[] = [
       'Clases, reservas, packs y cobranza para tu centro deportivo. Precio en pesos, sin dólares. Probalo 14 días gratis, sin tarjeta.',
   },
   {
+    path: '/empezar',
+    title: 'Probá Laplace 14 días · Sin tarjeta',
+    description:
+      'Creá tu centro en dos minutos y probá Laplace 14 días. Sin tarjeta, sin llamada de ventas y con precio en pesos.',
+  },
+  {
     path: '/terminos',
     title: 'Términos y condiciones · Laplace',
     description: 'Términos del servicio de Laplace para centros deportivos.',

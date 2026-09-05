@@ -4,6 +4,7 @@ import { Home } from './pages/Home.js';
 import { Terms } from './pages/Terms.js';
 import { Privacy } from './pages/Privacy.js';
 import { DataProcessing } from './pages/DataProcessing.js';
+import { SignUp } from './pages/SignUp.js';
 
 /**
  * Rutas que se prerenderizan a HTML estatico (ADR-005).
@@ -19,6 +20,9 @@ export const routes: RouteRecord[] = [
     entry: 'src/Layout.tsx',
     children: [
       { index: true, Component: Home, entry: 'src/pages/Home.tsx' },
+      // Se prerenderiza como el resto: es la página que convierte, y tiene que
+      // estar en el HTML aunque el JavaScript tarde (§5.1.4).
+      { path: 'empezar', Component: SignUp, entry: 'src/pages/SignUp.tsx' },
       { path: 'terminos', Component: Terms, entry: 'src/pages/Terms.tsx' },
       { path: 'privacidad', Component: Privacy, entry: 'src/pages/Privacy.tsx' },
       {

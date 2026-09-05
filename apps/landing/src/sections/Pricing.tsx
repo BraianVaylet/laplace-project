@@ -1,5 +1,5 @@
 import { LANDING_PLANS, formatArs } from '@laplace/schemas';
-import { Badge, Button } from '@laplace/ui';
+import { Badge } from '@laplace/ui';
 
 /**
  * Los precios (§5.1.4).
@@ -53,10 +53,21 @@ export function Pricing() {
                 ))}
               </ul>
 
+              {/*
+                El plan viaja en la URL: quien eligió Max en la tabla no tiene
+                que volver a elegirlo abajo.
+              */}
               <div className="mt-auto">
-                <Button variant={plan.featured ? 'primary' : 'secondary'} className="w-full">
+                <a
+                  href={`/empezar?plan=${plan.planId}`}
+                  className={`focus-visible:outline-brand-500 inline-flex h-11 w-full items-center justify-center rounded-md px-4 text-sm font-medium focus-visible:outline-2 focus-visible:outline-offset-2 ${
+                    plan.featured
+                      ? 'bg-brand-600 hover:bg-brand-700 text-white'
+                      : 'bg-surface-2 text-fg hover:bg-surface-3'
+                  }`}
+                >
                   Probar 14 días
-                </Button>
+                </a>
               </div>
             </article>
           </li>

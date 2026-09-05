@@ -15,14 +15,15 @@
 
 ## Estado
 
-| Fase                    |   Tareas | Story points | Hechas |
-| ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     32 |
-| Fase 1 — deuda de UI    |        5 |           31 |      5 |
-| Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
-| Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
-| Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
+| Fase                       |   Tareas | Story points | Hechas |
+| -------------------------- | -------: | -----------: | -----: |
+| Fase 0 — Fundaciones       |       16 |           89 |     15 |
+| Fase 1 — MVP vendible      |       32 |          186 |     32 |
+| Fase 1 — deuda de UI       |        5 |           31 |      5 |
+| Fase 1 — puerta de entrada |        1 |            5 |      1 |
+| Fase 2 — Diferenciación    | 7 épicas |         ~140 |      0 |
+| Fase 3 — Profundidad       | 5 épicas |         ~110 |      0 |
+| Fase 4 — Escala            | 5 épicas |          ~80 |      0 |
 
 **Ya cerrado antes de este plan** (commit `2f009d3`): monorepo pnpm + Turborepo, CI, envelope de
 error §5.0, logger Pino §11.1, `/health` y `/ready`, harness de Mongo con replica set,
@@ -2140,6 +2141,37 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **el camino 2 del E2E se recorre entero por pantalla:** el mostrador vende desde la ficha en su
   propia sesión de navegador y el socio reserva, cancela y mira su saldo en la WAFM. Es el único de
   los tres caminos que cruza las dos aplicaciones.
+
+## [x] F1-38 · Landing: el alta self-service
+
+- **module:** susc
+- **description:** El formulario de registro. La API está desde F1-25 —cuenta, organización y
+  prueba de 14 días sin tarjeta— y el CTA existe, pero **no lleva a ningún lado**: hoy nadie puede
+  hacerse cliente sin `curl`. Es la puerta de entrada del producto.
+- **acceptance-criteria:**
+  - Dado un visitante, cuando toca "Probar 14 días", entonces llega a un formulario con su nombre,
+    su email, una clave y el nombre de su centro.
+  - Dado el formulario, cuando lo envía, entonces se crea la cuenta y la suscripción en prueba, y
+    queda con sesión iniciada.
+  - Dado el plan elegido en la tabla de precios, cuando llega al formulario, entonces viene
+    preseleccionado, y lo puede cambiar.
+  - Dado un email ya registrado, cuando lo usa, entonces se le dice con el error tipado y se le
+    ofrece entrar en vez de registrarse.
+  - Dada una clave corta, cuando la escribe, entonces se le dice el mínimo **antes** de enviar.
+  - Dado el alta completa, cuando termina, entonces se le explica adónde sigue y con qué usuario.
+  - Dado el formulario, cuando se prerenderiza, entonces su contenido está en el HTML: es la página
+    que tiene que rankear (§5.1.4).
+- **example:** El dueño de un box entra un martes a las 21:00 desde el celular, toca "Probar 14
+  días" en el plan Pro, carga cuatro campos y a los dos minutos está en el asistente de primeros
+  pasos de su centro.
+- **story-points:** 5
+- **depends_on:** F1-25, F1-26, F1-30
+- **risk:** med
+- **test_plan:** Componentes: alta feliz, email repetido, clave corta, plan preseleccionado. Test de
+  que el formulario sale en el HTML prerenderizado. E2E: el camino 1 arranca desde la landing.
+  Auditoría axe.
+- **error-codes:** ninguno nuevo
+- **data-model-impact:** ninguno nuevo
 
 ---
 

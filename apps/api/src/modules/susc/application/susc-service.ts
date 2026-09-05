@@ -84,11 +84,12 @@ export class SuscService {
     const plan = await this.planOrFail(input.planId);
     const slug = input.slug ?? slugify(input.centerName);
 
-    const { organizationId } = await this.deps.organizations.create({
-      name: input.centerName,
+    const { organizationId } = await this.createOrganization(
+      input.centerName,
       slug,
       ownerUserId,
-    });
+      input.slug !== undefined,
+    );
 
     const ahora = this.deps.now();
     const creada = await this.deps.subscriptions.create({
@@ -113,6 +114,46 @@ export class SuscService {
     }
 
     return toResponse(creada);
+  }
+
+  /**
+   * 🔴 Crea la organización, buscándole un slug libre si el derivado ya está.
+   *
+   * El slug sale del nombre del centro, y hay más de un "Box Toro" en el país.
+   * El primero que se registra no puede quedarse con el nombre: el segundo
+   * vería fallar su alta por algo que no eligió ni entiende — el slug es un
+   * detalle de la URL, no su identidad.
+   *
+   * Solo se reintenta si el slug vino **derivado**. Si lo eligió a mano, el
+   * choque es información que necesita.
+   */
+  private async createOrganization(
+    centerName: string,
+    slug: string,
+    ownerUserId: string,
+    elegido = false,
+  ): Promise<{ organizationId: string }> {
+    for (let intento = 0; intento <= (elegido ? 0 : MAX_SLUG_RETRIES); intento += 1) {
+      const candidato = intento === 0 ? slug : `${slug}-${sufijoDeSlug()}`;
+
+      try {
+        return await this.deps.organizations.create({
+          name: centerName,
+          slug: candidato,
+          ownerUserId,
+        });
+      } catch (error) {
+        if (intento === (elegido ? 0 : MAX_SLUG_RETRIES)) throw error;
+      }
+    }
+
+    // Inalcanzable: el último intento sale por `return` o por `throw`.
+    throw new AppError({
+      code: 'LP-SUSC-409-002',
+      status: 409,
+      message: 'No pudimos crear tu centro. Probá con otro nombre.',
+      meta: { slug },
+    });
   }
 
   async mine(organizationId: string): Promise<Subscription> {
@@ -595,6 +636,12 @@ const SIN_ONBOARDING = {
   completedAt: null,
   firstClassPublishedAt: null,
 };
+
+/** Cuántas veces se prueba con otro slug antes de rendirse. */
+const MAX_SLUG_RETRIES = 3;
+
+/** Cuatro caracteres alcanzan: es un desempate, no un identificador. */
+const sufijoDeSlug = () => Math.random().toString(36).slice(2, 6);
 
 /** ¿Algo ya pasó el tope de su plan? Es la señal de upsell del panel. */
 function excedeAlgo(

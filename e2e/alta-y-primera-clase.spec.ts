@@ -1,5 +1,4 @@
 import { expect, test } from '@playwright/test';
-import { autenticar, suscriptorSinSede } from './support/centro.js';
 
 /**
  * Camino crítico 1 (§Testing.7): **alta del suscriptor → onboarding → primera
@@ -10,17 +9,26 @@ import { autenticar, suscriptorSinSede } from './support/centro.js';
  * **solo cuando la cosa existe**. Un checklist que se auto-declara completo
  * deja al centro creyendo que abrió.
  *
- * 🔴 Lo único que queda por API es el **alta de la cuenta**, que no tiene
- * pantalla en ningún lado todavía. La sede se carga por pantalla desde F1-33,
- * el producto desde F1-34 y la clase desde F1-35: así se paga la deuda, cada
- * llamada reemplazada por sus clics sin tocar el resto del test.
+ * 🔴 **El camino entero va por pantalla**, desde la landing. Es el recorrido
+ * real de un cliente: entra al sitio, se registra, y de ahí sale con su centro
+ * armado. Ninguna llamada de negocio se hace por API.
  */
 test.describe('camino 1: del alta a la primera clase', () => {
-  test('el asistente marca hecho lo que existe, y nada más', async ({ page, context }) => {
+  test('el asistente marca hecho lo que existe, y nada más', async ({ page }) => {
     test.setTimeout(120_000);
 
-    const smu = await suscriptorSinSede('camino1');
-    await autenticar(context, smu);
+    /*
+     * Se registra desde la landing, como cualquiera que llegue por Google. El
+     * plan viaja en la URL desde la tabla de precios.
+     */
+    const email = `camino1-${Date.now().toString(36)}@laplace.test`;
+    await page.goto('http://localhost:5176/empezar?plan=pro');
+    await page.getByLabel(/Tu nombre/).fill('Braian');
+    await page.getByLabel(/Tu email/).fill(email);
+    await page.getByLabel(/Elegí una clave/).fill('unaClaveLargaYSegura123');
+    await page.getByLabel(/Nombre de tu centro/).fill('Box Toro');
+    await page.getByRole('button', { name: 'Crear mi centro' }).click();
+    await expect(page.getByText(/Box Toro ya existe/)).toBeVisible();
 
     await page.goto('http://localhost:5174/');
 
@@ -55,12 +63,21 @@ test.describe('camino 1: del alta a la primera clase', () => {
     // La clase también se publica por pantalla desde F1-35.
     await page.goto('http://localhost:5174/horario');
     await page.getByRole('button', { name: 'Publicar una clase' }).click();
+    // La sala llega en su propio pedido: sin ella el formulario no se puede
+    // enviar, y el botón está deshabilitado hasta que aparezca.
+    await expect(page.getByLabel('Sala')).toBeEnabled();
     await page.getByLabel(/Nombre de la clase/).fill('Funcional');
     await page.getByLabel(/Categoría/).fill('funcional');
     await page.getByLabel('Lunes').check();
     await page.getByLabel('Miércoles').check();
     // `exact`: sin esto engancharía también "Publicar una clase".
     await page.getByRole('button', { name: 'Publicar', exact: true }).click();
+    /*
+     * Se espera la confirmación antes de navegar: irse en el medio aborta el
+     * pedido y la clase no queda publicada. Es la misma carrera que sufriría
+     * alguien que toca "Publicar" y cambia de pantalla enseguida.
+     */
+    await expect(page.getByText('Publicamos la clase.')).toBeVisible();
 
     await page.goto('http://localhost:5174/');
     await expect(page.getByText('2 de 5 pasos')).toBeVisible();

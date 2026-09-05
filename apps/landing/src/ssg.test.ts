@@ -94,6 +94,20 @@ describe.skipIf(!hasBuild)('el HTML que realmente se sirve', () => {
     expect(index).not.toMatch(/<div id="root"><\/div>/);
   });
 
+  it('🔴 el formulario de alta está en el HTML servido, no solo en el navegador', () => {
+    /*
+     * Es la página que convierte (F1-38). Si el contenido lo arma React
+     * después, quien entra con una conexión mala ve un rectángulo vacío justo
+     * en el momento en que decidió probar el producto.
+     */
+    const empezar = html('empezar.html');
+
+    expect(empezar).toContain('Probá Laplace 14 días');
+    expect(empezar).toContain('Crear mi centro');
+    expect(empezar).toContain('Nombre de tu centro');
+    expect(empezar).not.toMatch(/<div id="root"><\/div>/);
+  });
+
   it('tiene exactamente UN title, y es el de la ruta', () => {
     const titles = html('index.html').match(/<title[^>]*>[^<]*<\/title>/g) ?? [];
 

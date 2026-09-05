@@ -23,6 +23,24 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-05 — F1-38: la puerta de entrada, y dos cosas que impedían entrar
+
+- **Módulo:** `susc`
+- **Tipo:** feature
+- **Commit/PR:** —
+- **Trello:** https://trello.com/c/evThfd56 (F1-38) — movida a **Completadas**
+- **Qué cambió:** la landing tiene `/empezar`: nombre, email, clave y centro, y en dos minutos
+  alguien es cliente con 14 días de prueba. El CTA de la tabla de precios ahora lleva ahí, con el
+  plan elegido en la URL. El E2E del camino 1 arranca en la landing.
+- **Por qué:** la API estaba desde F1-25 y el CTA existía, pero **nadie podía hacerse cliente sin
+  `curl`**. Era la última deuda declarada de la Fase 1.
+- **Impacto:** ninguno sobre el modelo. **Dos fixes:** el alta no dejaba el centro activo en la
+  sesión —quien se registraba entraba al DFSM y la API le contestaba 403 a todo—, y dos centros con
+  el mismo nombre no podían registrarse, porque el slug sale del nombre y el segundo chocaba con un
+  error de Better Auth crudo. Ahora se le busca un slug libre; el elegido a mano sigue chocando,
+  que es lo correcto.
+- **Pendiente:** ninguno de esta tarjeta. Queda F0-16, bloqueada esperando credenciales.
+
 ## 2026-09-05 — F1-37: la venta de mostrador, y dos huecos que destapó
 
 - **Módulo:** `billing`

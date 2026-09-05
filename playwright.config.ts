@@ -58,5 +58,12 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
     },
+    {
+      // La landing: el camino 1 arranca ahí, que es donde arranca un cliente.
+      command: 'pnpm --filter @laplace/landing dev',
+      url: 'http://localhost:5176',
+      reuseExistingServer: !process.env.CI,
+      timeout: 120_000,
+    },
   ],
 });
