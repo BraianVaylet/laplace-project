@@ -19,7 +19,7 @@
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
 | Fase 1 — MVP vendible   |       32 |          186 |     32 |
-| Fase 1 — deuda de UI    |        5 |           31 |      3 |
+| Fase 1 — deuda de UI    |        5 |           31 |      4 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -2051,7 +2051,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   pantalla. Lo único que queda por API es el alta de la cuenta, que no tiene pantalla en ningún
   lado todavía.
 
-## [ ] F1-36 · DFSM: socios y códigos de invitación
+## [x] F1-36 · DFSM: socios y códigos de invitación
 
 - **module:** members
 - **description:** El listado de socios, el alta desde el mostrador y los códigos de invitación. Es
@@ -2075,6 +2075,17 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   códigos. Test de que la columna de saldo no aparece sin permiso. Auditoría axe.
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** ninguno nuevo
+- **cómo se cerró:** `/miembros` con el padrón, el filtro por estado, el alta desde el mostrador y
+  los códigos de invitación. Cada nombre es un enlace a su ficha 360, que era el destino que le
+  faltaba al buscador global desde F0-13.
+- **el filtro va en el pedido, no en el navegador:** filtrar en el cliente sobre una página anda
+  bien hasta el socio 51.
+- **la columna de saldo no existe si la API no manda saldos:** desde F1-06 llegan en `null` para
+  quien no tiene `billing:read`, y pintar un "$0" sería inventar un dato que además está mal.
+- **la mayoría de edad la decide el servidor:** el formulario no la calcula, muestra el error tipado
+  que contesta la API — que es la que sabe qué día es hoy.
+- **revocar un código aclara la duda que frena a cualquiera antes de tocar el botón:** deja de
+  funcionar de inmediato, y quienes ya lo usaron siguen siendo socios.
 
 ## [ ] F1-37 · DFSM: vender y cobrar desde el mostrador
 
@@ -2100,6 +2111,14 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   envío. Test de que el monto viaja en centavos enteros. Auditoría axe.
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** ninguno nuevo
+- **🔴 encontrado antes de empezarla, y cambia el alcance:** vender **no es una llamada, son
+  cuatro** — crear el contrato, emitir el cargo, registrar el pago y activar el contrato —, y hoy
+  ninguna las junta: nadie escucha `contract.sold`, así que la venta no genera cargo. Encadenarlas
+  desde el navegador significa que un corte en el medio deja un contrato sin cargo, o un cargo
+  pagado con el contrato inactivo. Es plata, y §5.2.4 pide transacción.
+  **Esta tarjeta necesita un caso de uso nuevo en la API** —una venta de mostrador atómica, con
+  `Idempotency-Key`— antes de la pantalla. No es deuda de UI: es un hueco del backend que la
+  pantalla destapó.
 
 ---
 

@@ -9,6 +9,7 @@ import {
 import { Agenda } from './Agenda.js';
 import { ClassRoster } from './ClassRoster.js';
 import { MemberFile } from './MemberFile.js';
+import { Members } from './Members.js';
 import { Products } from './Products.js';
 import { VenueDetail } from './VenueDetail.js';
 import { Venues } from './Venues.js';
@@ -95,6 +96,12 @@ const agendaRoute = createRoute({
   component: Agenda,
 });
 
+const membersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/miembros',
+  component: Members,
+});
+
 const productsRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/productos',
@@ -113,6 +120,7 @@ export const routeTree = rootRoute.addChildren([
   memberRoute,
   venuesRoute,
   venueDetailRoute,
+  membersRoute,
   productsRoute,
   agendaRoute,
   kioskRoute,

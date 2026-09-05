@@ -23,6 +23,24 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-05 — F1-36: el padrón y los códigos de invitación
+
+- **Módulo:** `members`
+- **Tipo:** feature
+- **Commit/PR:** —
+- **Trello:** https://trello.com/c/zsl1KwES (F1-36) — movida a **Completadas**
+- **Qué cambió:** el DFSM tiene `/miembros`: el padrón con filtro por estado, el alta desde el
+  mostrador y los códigos de invitación con su generación y su revocación. Cada nombre enlaza a la
+  ficha 360.
+- **Por qué:** cuarta de las cinco tarjetas de deuda de UI, y el último paso del asistente de
+  primeros pasos.
+- **Impacto:** ninguno sobre la API ni sobre el modelo. La columna de saldo aparece solo si la API
+  mandó saldos: desde F1-06 llegan en `null` para quien no puede ver plata, y pintar un "$0" sería
+  inventar un dato equivocado.
+- **Pendiente:** F1-37 (vender y cobrar) **cambió de alcance**: vender son cuatro llamadas y hoy
+  ninguna las junta, así que encadenarlas desde el navegador dejaría contratos sin cargo o cargos
+  pagados con el contrato inactivo. Necesita un caso de uso atómico en la API antes que la pantalla.
+
 ## 2026-09-05 — F1-35: la agenda se arma por pantalla, y los diálogos dejan de compartir id
 
 - **Módulo:** `schedule`
