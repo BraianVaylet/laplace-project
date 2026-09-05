@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `members`
 - **Tipo:** feature
-- **Commit/PR:** —
+- **Commit/PR:** `eb8cc3d` (rama `feat/phase-1-ui-debt`)
 - **Trello:** https://trello.com/c/zsl1KwES (F1-36) — movida a **Completadas**
 - **Qué cambió:** el DFSM tiene `/miembros`: el padrón con filtro por estado, el alta desde el
   mostrador y los códigos de invitación con su generación y su revocación. Cada nombre enlaza a la
