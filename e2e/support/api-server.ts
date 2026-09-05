@@ -75,6 +75,13 @@ async function main() {
    * minuto arrancó la corrida.
    */
   process.env['JOBS_ENABLED'] = 'false';
+  /*
+   * Los tres caminos crean decenas de cuentas desde una sola IP y chocan contra
+   * el rate limit de §9.1, que está bien que exista. Apagarlo acá solo es
+   * posible porque `APP_ENV` es `dev`: el schema del entorno lo rechaza en
+   * staging y en producción.
+   */
+  process.env['AUTH_RATE_LIMIT'] = 'off';
 
   // El entrypoint lee el entorno al importarse: por eso va después de setearlo.
   await import('../../apps/api/src/index.js');

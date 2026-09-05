@@ -8,6 +8,7 @@ import {
 } from '@tanstack/react-router';
 import { ClassRoster } from './ClassRoster.js';
 import { MemberFile } from './MemberFile.js';
+import { Products } from './Products.js';
 import { VenueDetail } from './VenueDetail.js';
 import { Venues } from './Venues.js';
 import { Home } from './Home.js';
@@ -87,6 +88,12 @@ const venueDetailRoute = createRoute({
   },
 });
 
+const productsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/productos',
+  component: Products,
+});
+
 const kioskRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/kiosko',
@@ -99,6 +106,7 @@ export const routeTree = rootRoute.addChildren([
   memberRoute,
   venuesRoute,
   venueDetailRoute,
+  productsRoute,
   kioskRoute,
 ]);
 

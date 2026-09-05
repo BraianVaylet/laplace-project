@@ -3,11 +3,16 @@ import { defineConfig, devices } from '@playwright/test';
 /** E2E de los 3 caminos criticos de la spec §6 (Testing). */
 export default defineConfig({
   testDir: './e2e',
-  fullyParallel: true,
+  /*
+   * 🔴 En serie, no en paralelo. Los tres caminos comparten **una sola base
+   * efímera** y una sola API: correrlos a la vez no prueba nada más y agrega
+   * fallos que dependen de quién llegó primero. Un E2E que a veces pasa es peor
+   * que uno que tarda un minuto más.
+   */
+  fullyParallel: false,
+  workers: 1,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
-  // En CI de a uno: los tres caminos comparten la base efimera.
-  ...(process.env.CI ? { workers: 1 } : {}),
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL: process.env.E2E_BASE_URL ?? 'http://localhost:5175',

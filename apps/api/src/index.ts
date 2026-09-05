@@ -39,6 +39,8 @@ async function main() {
     emailSender: createLoggingEmailSender((msg, meta) => {
       logger.info(meta, msg);
     }),
+    // Solo dev puede apagarlo: el schema del entorno rechaza `off` en el resto.
+    rateLimitEnabled: env.AUTH_RATE_LIMIT === 'on',
   });
 
   const events = createEventBus(logger);

@@ -23,6 +23,25 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-05 — F1-34: el catálogo se carga por pantalla, y el rate limit se puede apagar solo en dev
+
+- **Módulo:** `products`
+- **Tipo:** feature
+- **Commit/PR:** —
+- **Trello:** https://trello.com/c/tCLskxpw (F1-34) — movida a **Completadas**
+- **Qué cambió:** el DFSM tiene `/productos`: el listado y el alta de los siete tipos de §2.1.17,
+  con el formulario siguiendo al tipo elegido. El E2E del camino 1 ya crea la sede y el producto por
+  pantalla.
+- **Por qué:** segunda de las cinco tarjetas de deuda de UI. Sin producto no hay contrato, y sin
+  contrato nadie puede reservar.
+- **Impacto:** ninguno sobre el modelo de datos. **Sí sobre el entorno:** aparece `AUTH_RATE_LIMIT`,
+  que solo se puede poner en `off` con `APP_ENV=dev` — el arranque lo rechaza en staging y en prod,
+  con su test. Lo destapó el arnés de E2E, que crea decenas de cuentas desde una sola IP y chocaba
+  contra el rate limit de §9.1. La suite de E2E pasó a correr **en serie**: comparte una sola base
+  efímera, y el paralelismo solo agregaba fallos que dependían de quién llegaba primero.
+- **Pendiente:** las tres pantallas que faltan — agenda, socios y la venta desde el mostrador
+  (F1-35 a F1-37).
+
 ## 2026-09-04 — F1-33: las sedes ya se cargan por pantalla
 
 - **Módulo:** `venues`

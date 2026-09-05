@@ -19,7 +19,7 @@
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
 | Fase 1 — MVP vendible   |       32 |          186 |     32 |
-| Fase 1 — deuda de UI    |        5 |           31 |      1 |
+| Fase 1 — deuda de UI    |        5 |           31 |      2 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -1968,7 +1968,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **la deuda del E2E se paga sola:** el camino 1 ya no crea la sede por API — la crea **por
   pantalla**, y el resto del test no se tocó. Es exactamente lo que decía la nota de F1-31.
 
-## [ ] F1-34 · DFSM: catálogo de productos
+## [x] F1-34 · DFSM: catálogo de productos
 
 - **module:** products
 - **description:** El alta y la edición de lo que el centro vende. Sin producto no hay contrato, y
@@ -1990,6 +1990,24 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   que el dinero nunca se convierte en float. Auditoría axe.
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** ninguno nuevo
+- **cómo se cerró:** `/productos` con el listado y el alta. **El formulario sigue al tipo**: una
+  membresía ilimitada no ofrece el campo de créditos, la limitada pide su tope y la clase de prueba
+  tiene el precio en cero y deshabilitado. Ofrecer un campo que el tipo no admite invita a cargar
+  una contradicción que después el motor de reservas tiene que desambiguar; las reglas son las
+  mismas que valida el schema compartido, acá no se duplican, se muestran.
+- **el precio se carga en pesos y viaja en centavos enteros:** `Math.round` y no `Math.trunc`,
+  porque en punto flotante `0.1 + 0.2` es `0.30000000000000004` y truncar perdería el centavo. Hay
+  test de que 75.000,50 pesos salen como `7500050`.
+- **archivar aclara qué pasa con lo vendido:** el producto sale de la venta y quienes ya lo
+  compraron siguen entrenando con lo que pagaron.
+- **encontrado de paso, dos cosas del arnés de E2E.** Con las pantallas nuevas la suite crea más
+  cuentas y empezó a chocar contra el **rate limit de auth** (§9.1), que está bien que exista: ahora
+  se puede apagar con `AUTH_RATE_LIMIT=off` y **el schema del entorno lo rechaza fuera de dev**, con
+  su test — una variable mal puesta en producción dejaría la defensa contra fuerza bruta sin efecto
+  en silencio. Y la suite pasó a correr **en serie**: los tres caminos comparten una sola base
+  efímera, así que el paralelismo no probaba nada más y agregaba fallos que dependían de quién
+  llegaba primero.
+- **la deuda del E2E se sigue pagando:** el camino 1 ya crea la sede **y el producto** por pantalla.
 
 ## [ ] F1-35 · DFSM: agenda y clases
 

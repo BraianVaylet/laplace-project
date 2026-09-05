@@ -11,9 +11,9 @@ import { autenticar, suscriptorSinSede } from './support/centro.js';
  * deja al centro creyendo que abrió.
  *
  * 🔴 Lo que va por API acá es lo que **todavía no tiene pantalla**: el alta de
- * la cuenta, la de la clase y la del producto. La sede ya se crea por pantalla
- * desde F1-33, que es como se paga esta deuda: la llamada se reemplaza por sus
- * clics y el resto del test no se toca.
+ * la cuenta y la de la clase. La sede se crea por pantalla desde F1-33 y el
+ * producto desde F1-34, que es como se paga esta deuda: cada llamada se
+ * reemplaza por sus clics y el resto del test no se toca.
  */
 test.describe('camino 1: del alta a la primera clase', () => {
   test('el asistente marca hecho lo que existe, y nada más', async ({ page, context }) => {
@@ -36,7 +36,9 @@ test.describe('camino 1: del alta a la primera clase', () => {
     await page.getByLabel(/Dirección/).fill('Alsina 123, Bahía Blanca');
     // `exact`: sin esto también engancharía "Crear la primera".
     await page.getByRole('button', { name: 'Crear', exact: true }).click();
-    await expect(page.getByText('Box Toro Centro')).toBeVisible();
+    // Por rol y no por texto: el nombre también aparece en el aviso de éxito,
+    // que además se va solo a los pocos segundos.
+    await expect(page.getByRole('heading', { name: 'Box Toro Centro' })).toBeVisible();
 
     await page.goto('http://localhost:5174/');
     await expect(page.getByText('1 de 5 pasos')).toBeVisible();
@@ -75,16 +77,15 @@ test.describe('camino 1: del alta a la primera clase', () => {
     await page.reload();
     await expect(page.getByText('2 de 5 pasos')).toBeVisible();
 
-    await smu.api.post('products', {
-      data: {
-        name: 'Pack 8 clases',
-        type: 'class_pack',
-        priceCents: 6_000_000,
-        credits: 8,
-        durationDays: 60,
-        venueIds: [venueId],
-      },
-    });
+    // El producto también se crea por pantalla desde F1-34.
+    await page.goto('http://localhost:5174/productos');
+    await page.getByRole('button', { name: 'Crear el primero' }).click();
+    await page.getByLabel(/Nombre/).fill('Pack 8 clases');
+    await page.getByLabel(/Precio/).fill('60000');
+    await page.getByLabel(/Cuántas clases trae/).fill('8');
+    await page.getByLabel(/En cuántos días vence/).fill('60');
+    await page.getByRole('button', { name: 'Crear', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Pack 8 clases' })).toBeVisible();
 
     /*
      * Con la clase publicada y algo para vender, el centro opera: el asistente
