@@ -20,6 +20,17 @@ export class VenueRepository extends TenantRepository<VenueDoc> {
   }
 
   /**
+   * Cuantas sedes tienen horario cargado. Lo consulta el asistente de
+   * onboarding: una sede sin horario no puede agendar nada.
+   */
+  async countWithBusinessHours(): Promise<number> {
+    return this.count({
+      status: 'active',
+      'businessHours.0': { $exists: true },
+    } as FilterQuery<VenueDoc>);
+  }
+
+  /**
    * 🔴 Todas las sedes activas de **todos los tenants**, para el job de
    * metricas.
    *

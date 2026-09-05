@@ -40,6 +40,23 @@ export interface SubscriptionDoc extends Record<string, unknown> {
   /** El plan al que baja al terminar el ciclo, si pidió bajar. */
   pendingPlanId: SubscriptionPlanId | null;
   fiscal: { cuit: string; businessName: string; ivaCondition: IvaCondition } | null;
+  /**
+   * Cuándo se dio de alta, con el reloj inyectable. **No se usa `createdAt`**:
+   * Mongoose lo escribe con el reloj de pared, así que ningún test puede
+   * moverlo, y de acá sale la métrica de §2.0 (F1-23 ya tropezó con esto).
+   */
+  signedUpAt: Date | null;
+  /**
+   * El asistente de §2.1.3. Guarda **solo lo que el usuario declara** —qué
+   * salteó— y los dos hechos que no se pueden recalcular: cuándo terminó y
+   * cuándo publicó su primera clase. El resto del progreso sale del estado
+   * real del centro, contado en el momento.
+   */
+  onboarding: {
+    skippedSteps: string[];
+    completedAt: Date | null;
+    firstClassPublishedAt: Date | null;
+  };
 }
 
 const subscriptionSchema = new Schema<SubscriptionDoc>(
@@ -62,6 +79,16 @@ const subscriptionSchema = new Schema<SubscriptionDoc>(
       },
       required: false,
       default: null,
+    },
+    signedUpAt: { type: Date, required: false, default: null },
+    onboarding: {
+      type: {
+        skippedSteps: { type: [String], required: true, default: [] },
+        completedAt: { type: Date, required: false, default: null },
+        firstClassPublishedAt: { type: Date, required: false, default: null },
+      },
+      required: true,
+      default: () => ({ skippedSteps: [], completedAt: null, firstClassPublishedAt: null }),
     },
   },
   { collection: COLLECTIONS.subscription, timestamps: true },

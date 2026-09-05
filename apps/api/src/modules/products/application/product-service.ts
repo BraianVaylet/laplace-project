@@ -52,6 +52,11 @@ export class ProductService {
     return this.products.create({ ...input, soldCount: 0, active: true } as Partial<ProductDoc>);
   }
 
+  /** Cuantos productos vendibles hay. La consulta el asistente de onboarding. */
+  countActive(): Promise<number> {
+    return this.products.countActive();
+  }
+
   async list(filters: ProductFilters, cursor?: string, limit?: number): Promise<Page<ProductDoc>> {
     const filter: Record<string, unknown> = {};
     if (filters.type !== undefined) filter['type'] = filters.type;

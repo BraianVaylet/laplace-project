@@ -15,13 +15,15 @@
 
 ## Estado
 
-| Fase                    |   Tareas | Story points | Hechas |
-| ----------------------- | -------: | -----------: | -----: |
-| Fase 0 — Fundaciones    |       16 |           89 |     15 |
-| Fase 1 — MVP vendible   |       32 |          186 |     27 |
-| Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
-| Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
-| Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
+| Fase                       |   Tareas | Story points | Hechas |
+| -------------------------- | -------: | -----------: | -----: |
+| Fase 0 — Fundaciones       |       16 |           89 |     15 |
+| Fase 1 — MVP vendible      |       32 |          186 |     32 |
+| Fase 1 — deuda de UI       |        5 |           31 |      5 |
+| Fase 1 — puerta de entrada |        1 |            5 |      1 |
+| Fase 2 — Diferenciación    | 7 épicas |         ~140 |      0 |
+| Fase 3 — Profundidad       | 5 épicas |         ~110 |      0 |
+| Fase 4 — Escala            | 5 épicas |          ~80 |      0 |
 
 **Ya cerrado antes de este plan** (commit `2f009d3`): monorepo pnpm + Turborepo, CI, envelope de
 error §5.0, logger Pino §11.1, `/health` y `/ready`, harness de Mongo con replica set,
@@ -671,7 +673,7 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   - El límite del plan no usa `requireWithinLimit`: ese guard corta de a uno y acá hay que poder
     decir "de los 143 del archivo, 12 no entran".
 
-## [ ] F1-06 · Ficha 360 del miembro en el DFSM
+## [x] F1-06 · Ficha 360 del miembro en el DFSM
 
 - **module:** members
 - **description:** Una sola pantalla con todo lo del socio (§2.1.7). Es la pantalla más usada del
@@ -697,6 +699,29 @@ de revisión está al cerrar F1-16, con el corazón del producto andando de punt
   `coach` no recibe los datos de deuda **desde la API**, no solo que no los pinta. Auditoría axe.
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** ninguno nuevo.
+- **cómo se cerró:** `GET /api/v1/members/:id/overview` junta en **una sola respuesta** los
+  contratos, las próximas reservas, la asistencia de 90 días y las firmas — quien abre la ficha
+  tiene a alguien enfrente esperando, y encadenar cuatro pedidos es hacerlo esperar cuatro veces.
+  Los otros módulos entran por puerto, no por import (ADR-003). En pantalla, en cambio, **cada
+  sección es su propio pedido**: si se cae cobranza, el mostrador sigue viendo los packs. Una
+  pantalla que se cae entera por una sección es una que no se puede usar justo cuando más hace
+  falta.
+- **🔴 encontrado de paso, y es el hallazgo de la tarjeta:** `balanceCents` viajaba en **toda**
+  respuesta de socio —el detalle y el listado—, y esas rutas solo piden `athlete:read`, que es el
+  permiso que el coach necesita para trabajar. La deuda de cada socio se le colaba sin que nadie la
+  pidiera, contra §2.1.12. Ahora el saldo sale `null` para quien no tiene `billing:read`, decidido
+  **del lado del servidor**: mandarlo para que el front lo esconda es mandarlo igual — queda en la
+  respuesta, en el caché del navegador y en cualquier `curl`. Tres tests de regresión: el coach en
+  el detalle, el coach en el listado y el mostrador, que sí lo ve porque cobra.
+- **también encontrado de paso:** seis pantallas le pasaban `aria-label` al `Skeleton` y **se
+  descartaba en silencio** — TypeScript no revisa los atributos JSX con guion, así que nadie se
+  entera. Con siete esqueletos en la misma pantalla, quien usa lector escuchaba "Cargando" siete
+  veces sin saber qué. `Skeleton` ahora tiene una prop `label` de verdad, y las seis quedaron
+  arregladas.
+- **deuda declarada:** el botón "Venderle un pack" del estado vacío no lleva a ningún lado: la
+  pantalla de venta del DFSM no existe todavía, y es la misma deuda que arrastran el asistente de
+  F1-30 y el arnés de E2E de F1-31. El buscador global ahora enlaza a la ficha, que era el destino
+  que le faltaba desde F0-13.
 
 ## [x] F1-07 · Módulo Products
 
@@ -1696,7 +1721,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   Playwright y suma el job al CI. El caché sin red es el `staleTime` de Query más el service worker
   que ya tiene la PWA; una prueba real de modo avión también es de F1-31.
 
-## [ ] F1-29 · WAFM: mis packs, mi QR y mi perfil
+## [x] F1-29 · WAFM: mis packs, mi QR y mi perfil
 
 - **module:** contracts
 - **description:** Lo que el socio consulta: cuántas clases le quedan, cuándo vencen, su QR de
@@ -1722,9 +1747,30 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **test_plan:** Test de validación de mime real con un archivo renombrado. Test de que la URL de la
   foto es firmada y vence. Test del export de datos. Auditoría axe.
 - **error-codes:** `LP-ACCT-422-001` (archivo inválido), `LP-ACCT-413-002` (archivo muy grande)
-- **data-model-impact:** `User.avatarUrl` como clave de objeto, no como URL pública.
+- **data-model-impact:** `User.avatarUrl` como clave de objeto, no como URL pública. En `Member` se
+  agregan `avatarKey`, `deletionRequestedAt` y `deletionReason`: el pedido de baja tiene que quedar
+  con fecha, que es lo que hace exigible el plazo de 90 días de ADR-004.
+- **cómo se cerró:** las seis rutas viven bajo `/api/v1/my/*` y **ninguna acepta un `memberId`**. Si
+  lo aceptara, el aislamiento por tenant no taparía nada: el socio y su compañero son del mismo
+  centro. El `memberId` sale de la sesión, siempre, en un solo lugar (`miFicha`). El tipo de la foto
+  se decide por los **bytes** (`sniffImageType`, con las firmas de JPEG, PNG y WebP), no por la
+  extensión ni el `Content-Type`, que los escribe quien sube el archivo: un SVG renombrado a `.png`
+  ejecutaría script contra el dominio que lo sirve. El enlace a la foto se firma con HMAC y vence a
+  los 15 minutos; una URL pública permanente de la foto de una persona es justo lo que no puede
+  pasar. El export de §9.2 entrega **todo** — perfil, contratos, reservas y consentimientos —, no un
+  resumen elegido por nosotros, y la baja se registra sin borrar: el centro tiene obligaciones sobre
+  lo firmado y lo cobrado.
+- **encontrado de paso:** el cliente de API compartido serializaba **todo** cuerpo con
+  `JSON.stringify`, así que una foto llegaba al servidor como `{}`. Ahora `ArrayBuffer`, vistas
+  tipadas, `Blob` y `FormData` pasan crudos y sin `content-type` inventado, con sus tres tests. Lo
+  habría comido cualquier subida de archivo futura, no solo esta.
+- **deuda declarada:** Backblaze B2 no está aprovisionado (depende de F0-16, bloqueada). El
+  almacenamiento va en memoria pero **honra el mismo contrato** —`put` / `signedUrl` / `remove`, con
+  firma HMAC y vencimiento reales—, así que cambiarlo por B2 no toca el servicio ni sus tests. Las
+  preferencias de notificación del criterio quedan en la pantalla de F1-21, que es donde vive el
+  motor. El QR ya estaba a 1 tap desde F1-19.
 
-## [ ] F1-30 · Onboarding guiado del SMU
+## [x] F1-30 · Onboarding guiado del SMU
 
 - **module:** susc
 - **description:** El asistente de §2.1.3. La métrica de éxito de §2.0 es
@@ -1748,8 +1794,33 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   Test de que cada paso se puede saltear.
 - **error-codes:** ninguno nuevo
 - **data-model-impact:** `Organization.onboarding { step, completedSteps[], completedAt }`.
+- **cómo se cerró, y en qué se desvió del impacto que decía la tarjeta:** el progreso **se cuenta,
+  no se declara**. Cada paso mira si la cosa existe de verdad —hay sede, hay horario, hay plantilla
+  de clase, hay producto, hay código de invitación—, así que `step` y `completedSteps[]` no se
+  guardan: un checklist auto-declarado marca "clase publicada" sin que exista una clase, y el SMU
+  se entera cuando un socio abre la app y no encuentra nada. Lo único que se persiste es lo que el
+  usuario declara (qué salteó) y los dos hechos que no se pueden recalcular: cuándo terminó y
+  cuándo publicó su primera clase. **Saltear no marca hecho:** saca el paso del camino y lo deja
+  pendiente, que es lo que realmente está — una barra en 100% con el centro vacío es peor que no
+  tener barra. Vive en `Subscription`, no en la `Organization` de Better Auth: ese documento es de
+  la librería, y meterle campos propios es cómo se rompe la próxima migración de identidad.
+- **el time-to-first-class quedó medido, no estimado:** §2.0 pide menos de 30 minutos, y sin el
+  número nadie lo verifica. Se sella la primera vez que se ve una plantilla publicada y no se
+  recalcula: si se leyera con el reloj de cada consulta, la métrica diría lo que tardó en abrir la
+  pantalla. El alta guarda su propio `signedUpAt` con el reloj inyectable — `createdAt` lo escribe
+  Mongoose con el reloj de pared y ningún test puede moverlo (es el tropiezo de F1-23).
+- **el asistente va arriba del tablero, y antes del "elegí un centro":** el que recién se registra
+  no tiene ninguna sede, así que el home le mostraba un estado vacío sin salida. La pantalla del
+  primer día era justo la que no explicaba qué hacer. Cuando el onboarding termina, el bloque
+  desaparece solo: dejarlo para siempre le roba el lugar al tablero, que es lo que se mira todas
+  las mañanas.
+- **deuda declarada:** los pasos llevan a `/sedes`, `/horario`, `/productos` y `/miembros`, que son
+  las rutas del menú del DFSM y **todavía no tienen pantalla** — igual que los ítems del `AppShell`
+  desde F0-13. El asistente dice qué falta y lo mide bien; llevar de la mano hasta el formulario
+  necesita esas altas, que son de F1-06 y de lo que quede de Fase 1. La prueba real de los 30
+  minutos es del E2E de F1-31.
 
-## [ ] F1-31 · E2E de los tres caminos críticos
+## [x] F1-31 · E2E de los tres caminos críticos
 
 - **module:** ci
 - **description:** Los tres flujos que §Testing.7 declara obligatorios, en Playwright, corriendo en
@@ -1773,8 +1844,33 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   correspondiente falla.
 - **error-codes:** ninguno
 - **data-model-impact:** ninguno
+- **cómo se cerró:** los navegadores ya están instalados y el job entró al CI, con `deploy-staging`
+  colgando de él. La base es **efímera**: el arnés levanta un replica set en memoria, corre las
+  migraciones y arranca **el entrypoint de verdad** (`apps/api/src/index.ts`) — reconstruir la app
+  en el test probaría una app que no se despliega. Nunca toca staging ni producción: los tres
+  caminos escriben, y un E2E contra datos reales es uno que un día borra los de alguien.
+- **los tres se validaron rompiéndolos, como pedía el test plan:** anulando la devolución al
+  cancelar, el camino 2 falla con la captura del saldo en 7; anulando `markNoShows`, el camino 3
+  falla con `Received: "booked"`; haciendo que saltear marque hecho, el camino 1 falla en el paso
+  que ya no dice "Lo dejaste para después". Los tres se revirtieron.
+- **encontrado de paso:** el smoke pedía **cero errores de consola**, y con la API arriba empezó a
+  fallar por los 401 de un visitante sin sesión — que es el producto funcionando: un anónimo no
+  tiene packs ni reservas. Pasó a mirar errores de JavaScript (`pageerror`) y no de red; como
+  estaba, el test exigía que la API dejara pasar a cualquiera. Nunca se había visto porque hasta
+  ahora nada contestaba en el puerto 3000.
+- **también salió de acá:** `e2e/` no lo miraba nadie —ni `tsc` ni ESLint—, así que un E2E roto se
+  descubría al correrlo. Ahora `pnpm typecheck` lo incluye (`tsconfig.e2e.json`), y eso destapó de
+  entrada un `workers: undefined` que `exactOptionalPropertyTypes` no acepta.
+- **deuda declarada:** lo que va por API en los tres caminos es **lo que todavía no tiene
+  pantalla** — el alta de la cuenta, la de la sede, la de la clase, la del producto y la venta del
+  pack. Son deuda de F1-06 y F1-30; cuando esas pantallas existan, cada llamada del arnés se
+  reemplaza por sus clics y el cuerpo del test no se toca. El disparador de jobs vive en `e2e/` y
+  usa el mismo seam de reloj que los tests de integración: la ventana de check-in cierra media hora
+  después del inicio y un E2E no puede quedarse esperando. La medición real de los 30 minutos de
+  §2.0 sigue siendo una prueba manual: el camino 1 verifica que el asistente diga la verdad, no
+  cuánto tarda una persona.
 
-## [ ] F1-32 · Documentación del producto
+## [x] F1-32 · Documentación del producto
 
 - **module:** docs
 - **description:** Los cuatro documentos que pide §5: funcional, técnico, de arquitectura y uno por
@@ -1800,6 +1896,282 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   que el proyecto levante. Link check automático en CI.
 - **error-codes:** ninguno
 - **data-model-impact:** ninguno
+- **cómo se cerró:** `README.md` en la raíz —que no existía— y cuatro documentos en `docs/`:
+  [FUNCIONAL](FUNCIONAL.md) (qué hace, por rol y por módulo, sin implementación),
+  [TECNICO](TECNICO.md) (stack, cómo levantarlo, convenciones), [ARQUITECTURA](ARQUITECTURA.md)
+  (tenancy, módulos, eventos, jobs, con el diagrama y los enlaces a los ADR) y uno por aplicativo en
+  [apps/](apps/), con sus pantallas, sus roles y sus permisos.
+- **el OpenAPI ya estaba cubierto y no hizo falta tocarlo:** sale del **mismo registro de rutas** que
+  usan los guards y la suite de aislamiento, y `tests/openapi.test.ts` ya verificaba que toda ruta
+  registrada aparezca documentada. Una documentación de API que se escribe aparte es una que queda
+  desactualizada; esta no puede.
+- **la bitácora quedó completa:** las tres entradas anteriores al plan estaban sin commit porque se
+  escribieron antes de que existiera. Ahora las 54 tienen el suyo.
+- **link check automático:** `pnpm docs:links` recorre los 87 markdown del repo y falla si un enlace
+  relativo apunta a algo que no existe. Está en el CI, después del lint. Documentación con enlaces
+  rotos manda a alguien a una página que no está y le hace dudar del resto. Los enlaces externos no
+  se chequean a propósito: que un sitio ajeno esté caído no puede romper este build.
+- **deuda declarada:** la prueba de "clonar en una máquina limpia y que levante" es manual y queda
+  pendiente de una máquina limpia de verdad. Lo que sí se verificó es que cada comando, puerto y
+  ruta del documento técnico existe tal como está escrito.
+
+---
+
+# Fase 1 — deuda declarada
+
+> **No es Fase 2.** Son las pantallas del DFSM que las tarjetas de Fase 1 dejaron anotadas como
+> deuda: la API está completa y probada, pero esas operaciones hoy **no tienen pantalla**, así que
+> el centro no se puede operar sin `curl`. Están dentro del alcance del DFSM que define §5.1.2.
+>
+> Se descubrió al cerrar F1-30 (el asistente lleva a rutas que no existen), F1-06 (el botón
+> "Venderle un pack" no va a ningún lado) y F1-31 (el E2E tiene que armar el centro por API).
+>
+> El orden es de dependencia: sin sede no hay dónde poner nada.
+
+## [x] F1-33 · DFSM: sedes y salas
+
+- **module:** venues
+- **description:** El alta y la edición de la sede —con su horario, su zona y su política de
+  reserva— y sus salas. Es el primer paso del asistente y el que destraba todo lo demás.
+- **acceptance-criteria:**
+  - Dado un centro nuevo, cuando entra a Sedes, entonces puede crear la primera con nombre,
+    dirección, zona horaria y moneda.
+  - Dada una sede, cuando edita sus horarios, entonces define apertura y cierre por día de la
+    semana, y el asistente marca el paso como hecho.
+  - Dada la política de reserva, cuando la edita, entonces cambia las ventanas de reserva,
+    cancelación y check-in, con el valor por defecto explicado al lado de cada campo.
+  - Dada una sede, cuando se archiva, entonces deja de ofrecerse pero su histórico queda.
+  - Dadas las salas, cuando abre una sede, entonces ve las suyas y puede crear más con su capacidad.
+  - Dado el listado, cuando el plan ya llegó a su tope de sedes, entonces el alta lo dice con el
+    límite y el plan que lo levanta.
+- **example:** El dueño de un box entra por primera vez, crea "Box Toro Centro" con su dirección y
+  su zona, carga que abre de 6 a 22 de lunes a viernes, y el asistente le tacha dos pasos.
+- **story-points:** 5
+- **depends_on:** F1-01, F1-02, F1-30
+- **risk:** low
+- **test_plan:** Componentes: alta, edición, estados vacío/carga/error, el aviso de límite de plan.
+  Test de que la política muestra sus defaults. Auditoría axe.
+- **error-codes:** ninguno nuevo
+- **data-model-impact:** ninguno nuevo
+- **cómo se cerró:** dos pantallas, `/sedes` y `/sedes/:venueId`, más la entrada en el menú, que
+  hasta ahora apuntaba a una ruta inexistente. La configuración de la sede junta horarios, política
+  de reserva y salas: son tres cosas que se tocan juntas cuando se arma el centro.
+- **el default se explica al lado de cada regla:** la política son siete números en minutos, y sin
+  eso el SMU los deja como están sin saber qué eligió — después descubre la regla el día que un
+  socio reclama. Las ventanas se eligen de una lista ("2 horas antes"), no se escriben en minutos:
+  nadie piensa en 10.080 minutos, aunque sea lo que la API guarda.
+- **el día en blanco no abre:** un horario vacío no se manda como `00:00`. Mandarlo dejaría publicar
+  clases un día que el centro está cerrado.
+- **el tope del plan lo decide el servidor:** la pantalla muestra el error tipado tal cual, con su
+  límite y su plan. Adivinarlo en el front sería una segunda fuente de verdad que un día dice otra
+  cosa que el backend. El error va **inline en el formulario**, no en un toast: es la respuesta a lo
+  que la persona acaba de intentar, y un toast se va justo cuando lo está leyendo.
+- **la deuda del E2E se paga sola:** el camino 1 ya no crea la sede por API — la crea **por
+  pantalla**, y el resto del test no se tocó. Es exactamente lo que decía la nota de F1-31.
+
+## [x] F1-34 · DFSM: catálogo de productos
+
+- **module:** products
+- **description:** El alta y la edición de lo que el centro vende. Sin producto no hay contrato, y
+  sin contrato nadie puede reservar.
+- **acceptance-criteria:**
+  - Dado el catálogo, cuando crea un producto, entonces elige entre los siete tipos y el formulario
+    muestra solo los campos que ese tipo usa.
+  - Dado el precio, cuando lo carga, entonces lo escribe en pesos y se guarda en centavos enteros.
+  - Dado un producto, cuando lo archiva, entonces deja de venderse y los contratos vivos siguen.
+  - Dado un producto con ventas, cuando edita su precio, entonces la pantalla aclara que los
+    contratos ya vendidos conservan el suyo.
+  - Dado el listado, cuando está vacío, entonces ofrece crear el primero.
+- **example:** Publica "Pack 8 clases · 30 días · $60.000", "Libre mensual · $85.000" y "Clase
+  suelta · $9.000".
+- **story-points:** 5
+- **depends_on:** F1-07, F1-33
+- **risk:** low
+- **test_plan:** Componentes: un test por tipo de producto mostrando los campos correctos. Test de
+  que el dinero nunca se convierte en float. Auditoría axe.
+- **error-codes:** ninguno nuevo
+- **data-model-impact:** ninguno nuevo
+- **cómo se cerró:** `/productos` con el listado y el alta. **El formulario sigue al tipo**: una
+  membresía ilimitada no ofrece el campo de créditos, la limitada pide su tope y la clase de prueba
+  tiene el precio en cero y deshabilitado. Ofrecer un campo que el tipo no admite invita a cargar
+  una contradicción que después el motor de reservas tiene que desambiguar; las reglas son las
+  mismas que valida el schema compartido, acá no se duplican, se muestran.
+- **el precio se carga en pesos y viaja en centavos enteros:** `Math.round` y no `Math.trunc`,
+  porque en punto flotante `0.1 + 0.2` es `0.30000000000000004` y truncar perdería el centavo. Hay
+  test de que 75.000,50 pesos salen como `7500050`.
+- **archivar aclara qué pasa con lo vendido:** el producto sale de la venta y quienes ya lo
+  compraron siguen entrenando con lo que pagaron.
+- **encontrado de paso, dos cosas del arnés de E2E.** Con las pantallas nuevas la suite crea más
+  cuentas y empezó a chocar contra el **rate limit de auth** (§9.1), que está bien que exista: ahora
+  se puede apagar con `AUTH_RATE_LIMIT=off` y **el schema del entorno lo rechaza fuera de dev**, con
+  su test — una variable mal puesta en producción dejaría la defensa contra fuerza bruta sin efecto
+  en silencio. Y la suite pasó a correr **en serie**: los tres caminos comparten una sola base
+  efímera, así que el paralelismo no probaba nada más y agregaba fallos que dependían de quién
+  llegaba primero.
+- **la deuda del E2E se sigue pagando:** el camino 1 ya crea la sede **y el producto** por pantalla.
+
+## [x] F1-35 · DFSM: agenda y clases
+
+- **module:** schedule
+- **description:** La grilla semanal del centro, el alta de plantillas y la edición y cancelación de
+  clases. Es donde el SMU pasa el tiempo cuando arma la semana.
+- **acceptance-criteria:**
+  - Dada la agenda, cuando se abre, entonces muestra la semana por sede con cada clase, su cupo y
+    su coach.
+  - Dada una plantilla, cuando la crea, entonces define días, hora, duración, sala, categoría y
+    cupo, y la grilla se publica sola.
+  - Dada una clase, cuando la edita, entonces elige **solo esta** o **esta y las que siguen**.
+  - Dada una cancelación, cuando la confirma, entonces la pantalla dice cuántas reservas se
+    cancelan y cuántos créditos se devuelven **antes** de confirmar.
+  - Dada una clase pasada, cuando se abre, entonces no se puede editar: es el histórico.
+- **example:** Arma "Funcional lunes, miércoles y viernes 19:00, cupo 16" y la semana queda
+  publicada. El viernes cancela la de las 19:00 y a los 14 inscriptos les vuelve el crédito.
+- **story-points:** 8
+- **depends_on:** F1-12, F1-13, F1-33
+- **risk:** med
+- **test_plan:** Componentes: la grilla, el alta, el diálogo de alcance de edición y el de
+  cancelación con su conteo. Auditoría axe, prueba a 360 px.
+- **error-codes:** ninguno nuevo
+- **data-model-impact:** ninguno nuevo
+- **cómo se cerró:** `/horario` con la grilla semanal por sede —navegable hacia adelante y hacia
+  atrás—, el alta de plantillas, la edición con alcance y la cancelación con motivo.
+- **editar pregunta el alcance, y "solo esta" viene elegida:** cambiar "todas las de los lunes"
+  cuando se quería cambiar una sola reescribe la grilla de un mes. El alcance viaja en `?scope=` de
+  la plantilla, que es donde la API lo lee; sin él **no propaga**, y ese es el default que menos
+  rompe. La clase suelta no ofrece la opción: no tiene plantilla a la que propagar.
+- **cancelar dice a cuánta gente afecta antes de confirmar** y **exige el motivo**: del otro lado
+  hay socios que se organizaron para venir, y "se canceló" a secas no le sirve a nadie. El texto
+  aclara que se les devuelve el crédito.
+- **lo que ya pasó no se toca:** la clase pasada no muestra ni editar ni cancelar. Reescribir lo que
+  ocurrió deja un registro que no coincide con la realidad.
+- **encontrado de paso:** `Dialog` escribía `id="dialog-title"` **a mano**. Con dos diálogos en la
+  misma pantalla se duplicaba el id y `aria-labelledby` apuntaba al título del otro: el lector
+  anunciaba el modal equivocado. Ahora los ids se generan con `useId`, y las pantallas montan solo
+  el diálogo abierto en vez de dejar tres permanentes en el DOM.
+- **el camino 1 ya no usa la API para nada de negocio:** sede, producto y clase se cargan por
+  pantalla. Lo único que queda por API es el alta de la cuenta, que no tiene pantalla en ningún
+  lado todavía.
+
+## [x] F1-36 · DFSM: socios y códigos de invitación
+
+- **module:** members
+- **description:** El listado de socios, el alta desde el mostrador y los códigos de invitación. Es
+  el último paso del asistente y la entrada a la ficha 360.
+- **acceptance-criteria:**
+  - Dado el listado, cuando se abre, entonces filtra por estado, sede y etiqueta, y pagina por
+    cursor.
+  - Dado un socio nuevo, cuando lo carga el mostrador, entonces valida sus datos y exige tutor si
+    es menor.
+  - Dado un código de invitación, cuando lo genera, entonces define vencimiento y límite de usos, y
+    lo puede copiar para mandar al grupo.
+  - Dado un código, cuando lo revoca, entonces deja de funcionar de inmediato sin afectar a quienes
+    ya lo usaron.
+  - Dado el listado, cuando quien mira no puede ver plata, entonces no hay ninguna columna de saldo.
+- **example:** Genera un código con 50 usos que vence el 31/03, lo copia y lo manda al grupo de
+  WhatsApp. Al rato ve entrar a los socios solos.
+- **story-points:** 5
+- **depends_on:** F1-03, F1-04, F1-06
+- **risk:** low
+- **test_plan:** Componentes: listado con filtros, alta con validaciones, generación y revocación de
+  códigos. Test de que la columna de saldo no aparece sin permiso. Auditoría axe.
+- **error-codes:** ninguno nuevo
+- **data-model-impact:** ninguno nuevo
+- **cómo se cerró:** `/miembros` con el padrón, el filtro por estado, el alta desde el mostrador y
+  los códigos de invitación. Cada nombre es un enlace a su ficha 360, que era el destino que le
+  faltaba al buscador global desde F0-13.
+- **el filtro va en el pedido, no en el navegador:** filtrar en el cliente sobre una página anda
+  bien hasta el socio 51.
+- **la columna de saldo no existe si la API no manda saldos:** desde F1-06 llegan en `null` para
+  quien no tiene `billing:read`, y pintar un "$0" sería inventar un dato que además está mal.
+- **la mayoría de edad la decide el servidor:** el formulario no la calcula, muestra el error tipado
+  que contesta la API — que es la que sabe qué día es hoy.
+- **revocar un código aclara la duda que frena a cualquiera antes de tocar el botón:** deja de
+  funcionar de inmediato, y quienes ya lo usaron siguen siendo socios.
+
+## [x] F1-37 · DFSM: vender y cobrar desde el mostrador
+
+- **module:** billing
+- **description:** Vender un producto a un socio y registrar el cobro, desde la ficha. Es el CTA que
+  hoy no lleva a ningún lado y el circuito que cierra la caja del día.
+- **acceptance-criteria:**
+  - Dada la ficha de un socio, cuando toca "Venderle un pack", entonces elige el producto, ve el
+    precio y crea el contrato sin salir de la pantalla.
+  - Dada la venta, cuando se confirma, entonces queda el cargo y el saldo del socio se actualiza.
+  - Dado un cargo, cuando registra el pago, entonces elige el medio y el monto, y la caja del día
+    lo refleja.
+  - Dado quien no puede cobrar, cuando abre la ficha, entonces no ve ninguna de estas acciones —ni
+    la pantalla ni la API se las ofrecen.
+  - Dada la venta, cuando se repite el envío, entonces la clave de idempotencia evita el contrato
+    duplicado.
+- **example:** Micaela llega al mostrador, compra el pack de 8 y paga en efectivo. En la misma
+  pantalla queda el contrato activo, el cargo saldado y la caja del día actualizada.
+- **story-points:** 8
+- **depends_on:** F1-08, F1-10, F1-06, F1-34
+- **risk:** med
+- **test_plan:** Componentes: el flujo completo de venta y cobro, el caso sin permiso y el de doble
+  envío. Test de que el monto viaja en centavos enteros. Auditoría axe.
+- **error-codes:** ninguno nuevo
+- **data-model-impact:** ninguno nuevo
+- **🔴 encontrado antes de empezarla, y cambia el alcance:** vender **no es una llamada, son
+  cuatro** — crear el contrato, emitir el cargo, registrar el pago y activar el contrato —, y hoy
+  ninguna las junta: nadie escucha `contract.sold`, así que la venta no genera cargo. Encadenarlas
+  desde el navegador significa que un corte en el medio deja un contrato sin cargo, o un cargo
+  pagado con el contrato inactivo. Es plata, y §5.2.4 pide transacción.
+  **Esta tarjeta necesitaba un caso de uso nuevo en la API** —una venta de mostrador atómica, con
+  `Idempotency-Key`— antes de la pantalla. No era deuda de UI: era un hueco del backend que la
+  pantalla destapó.
+- **cómo se cerró:** `POST /api/v1/sales`. Vende, emite el cargo, registra el pago si lo hay y
+  activa el contrato, **todo en una transacción**. Es idempotente por la clave, guardada en el
+  **cargo** —la única pieza que siempre existe, porque se puede vender hoy y cobrar el viernes— con
+  su índice único y su migración. Permiso doble, `billing:charge` + `contract:create`: quien solo
+  cobra no vende, y quien solo vende no cobra. Código nuevo: `LP-BILL-422-007`.
+- **cobrar es opcional y una seña no activa:** se puede vender y cobrar el viernes; el cargo queda
+  pendiente y el contrato esperando. Parte no es todo.
+- **🔴 encontrado de paso, y era grave: las lecturas del repositorio base no viajaban con la sesión
+  de la transacción.** `create` y `update` sí, `find`, `findOne`, `count` y `list` no. Adentro de una
+  transacción, una consulta **no veía lo que esa misma transacción acababa de escribir**: la venta
+  creaba el cargo y el pago no lo encontraba para imputarlo. Es la garantía de "read your own
+  writes", y sin ella cualquier caso de uso que escriba y después lea dentro de una transacción da
+  un resultado silenciosamente equivocado.
+- **🔴 también encontrado de paso: un código de error documentado que nadie emitía.**
+  `docs/errors.md` declara `LP-SYS-400-008` para "falta el header `Idempotency-Key`", pero el guard
+  contestaba `LP-SYS-422-006` — que significa "payload inválido". Quien buscaba el documentado no
+  encontraba nada; quien encontraba el otro leía un mensaje que no describe el problema. Ahora el
+  guard emite el que está publicado, con su 400.
+- **el camino 2 del E2E se recorre entero por pantalla:** el mostrador vende desde la ficha en su
+  propia sesión de navegador y el socio reserva, cancela y mira su saldo en la WAFM. Es el único de
+  los tres caminos que cruza las dos aplicaciones.
+
+## [x] F1-38 · Landing: el alta self-service
+
+- **module:** susc
+- **description:** El formulario de registro. La API está desde F1-25 —cuenta, organización y
+  prueba de 14 días sin tarjeta— y el CTA existe, pero **no lleva a ningún lado**: hoy nadie puede
+  hacerse cliente sin `curl`. Es la puerta de entrada del producto.
+- **acceptance-criteria:**
+  - Dado un visitante, cuando toca "Probar 14 días", entonces llega a un formulario con su nombre,
+    su email, una clave y el nombre de su centro.
+  - Dado el formulario, cuando lo envía, entonces se crea la cuenta y la suscripción en prueba, y
+    queda con sesión iniciada.
+  - Dado el plan elegido en la tabla de precios, cuando llega al formulario, entonces viene
+    preseleccionado, y lo puede cambiar.
+  - Dado un email ya registrado, cuando lo usa, entonces se le dice con el error tipado y se le
+    ofrece entrar en vez de registrarse.
+  - Dada una clave corta, cuando la escribe, entonces se le dice el mínimo **antes** de enviar.
+  - Dado el alta completa, cuando termina, entonces se le explica adónde sigue y con qué usuario.
+  - Dado el formulario, cuando se prerenderiza, entonces su contenido está en el HTML: es la página
+    que tiene que rankear (§5.1.4).
+- **example:** El dueño de un box entra un martes a las 21:00 desde el celular, toca "Probar 14
+  días" en el plan Pro, carga cuatro campos y a los dos minutos está en el asistente de primeros
+  pasos de su centro.
+- **story-points:** 5
+- **depends_on:** F1-25, F1-26, F1-30
+- **risk:** med
+- **test_plan:** Componentes: alta feliz, email repetido, clave corta, plan preseleccionado. Test de
+  que el formulario sale en el HTML prerenderizado. E2E: el camino 1 arranca desde la landing.
+  Auditoría axe.
+- **error-codes:** ninguno nuevo
+- **data-model-impact:** ninguno nuevo
 
 ---
 

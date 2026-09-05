@@ -394,6 +394,58 @@ export class MemberService {
     return this.members.countActiveIn(venueId);
   }
 
+  /**
+   * La ficha como la necesita el socio para su propio perfil (F1-29). Es el
+   * puerto que consume Account, y nunca recibe un `memberId` de un parametro:
+   * quien llama lo saca de la sesion.
+   */
+  async selfViewOf(memberId: string): Promise<{
+    fullName: string;
+    email: string | null;
+    phone: string | null;
+    emergencyContact: { fullName: string; phone: string; relationship?: string } | null;
+    avatarKey: string | null;
+  } | null> {
+    const member = await this.members.findByPublicId(memberId);
+    if (!member) return null;
+
+    return {
+      fullName: `${member.firstName} ${member.lastName}`.trim(),
+      email: member.email ?? null,
+      phone: member.phone ?? null,
+      emergencyContact: member.emergencyContact ?? null,
+      avatarKey: member.avatarKey ?? null,
+    };
+  }
+
+  /** Lo que el socio puede cambiar de lo suyo. Nada del negocio. */
+  async updateSelf(
+    memberId: string,
+    patch: {
+      phone?: string | undefined;
+      email?: string | undefined;
+      emergencyContact?:
+        { fullName: string; phone: string; relationship?: string | undefined } | undefined;
+      avatarKey?: string | undefined;
+    },
+  ): Promise<void> {
+    await this.members.updateByPublicId(memberId, { $set: patch } as never);
+  }
+
+  /**
+   * Deja pedida la baja (§9.2). **No borra**: el centro tiene obligaciones
+   * sobre lo firmado y lo cobrado, y borrar en el acto las incumpliria. Queda
+   * la fecha, que es lo que hace exigible el plazo.
+   */
+  async requestDeletion(memberId: string, at: Temporal.Instant, reason?: string): Promise<void> {
+    await this.members.updateByPublicId(memberId, {
+      $set: {
+        deletionRequestedAt: toBsonDate(at),
+        ...(reason === undefined ? {} : { deletionReason: reason }),
+      },
+    } as never);
+  }
+
   /** Lo consume el guard de entitlements. Cuenta los que ocupan cupo. */
   countActive(): Promise<number> {
     return this.members.countActive();

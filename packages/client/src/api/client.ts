@@ -103,7 +103,17 @@ export function createApiClient({
     const requestId = newRequestId();
     const headers: Record<string, string> = { [REQUEST_ID_HEADER]: requestId };
 
-    if (options.body !== undefined) headers['content-type'] = 'application/json';
+    /*
+     * 🔴 Un cuerpo binario viaja tal cual. Serializarlo como JSON convertiria
+     * una foto en `{}`, y el servidor — que mira los bytes para saber que
+     * formato es — recibiria dos llaves en vez de una imagen.
+     *
+     * El `content-type` de un binario lo decide el servidor mirando el
+     * contenido, asi que aca no se declara ninguno: declararlo seria repetir lo
+     * que quien sube el archivo ya podria mentir.
+     */
+    const esBinario = isBinaryBody(options.body);
+    if (options.body !== undefined && !esBinario) headers['content-type'] = 'application/json';
     if (options.idempotencyKey) headers[IDEMPOTENCY_KEY_HEADER] = options.idempotencyKey;
 
     let response: Response;
@@ -113,7 +123,9 @@ export function createApiClient({
         headers,
         // La sesion viaja en cookie: sin esto el backend no ve al usuario.
         credentials: 'include',
-        ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+        ...(options.body === undefined
+          ? {}
+          : { body: esBinario ? (options.body as BodyInit) : JSON.stringify(options.body) }),
         ...(options.signal ? { signal: options.signal } : {}),
       });
     } catch (cause) {
@@ -149,6 +161,19 @@ export function createApiClient({
 }
 
 export type ApiClient = ReturnType<typeof createApiClient>;
+
+/**
+ * Lo que se manda sin tocar: los cuerpos que ya son bytes. Todo lo demas va
+ * como JSON, que es el 99% de los pedidos del producto.
+ */
+function isBinaryBody(body: unknown): boolean {
+  return (
+    body instanceof ArrayBuffer ||
+    ArrayBuffer.isView(body) ||
+    (typeof Blob !== 'undefined' && body instanceof Blob) ||
+    (typeof FormData !== 'undefined' && body instanceof FormData)
+  );
+}
 
 async function safeJson(response: Response): Promise<unknown> {
   try {

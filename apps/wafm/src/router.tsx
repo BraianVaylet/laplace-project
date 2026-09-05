@@ -6,7 +6,9 @@ import {
   useRouterState,
 } from '@tanstack/react-router';
 import { Home } from './Home.js';
+import { MyPacks } from './MyPacks.js';
 import { MyQr } from './MyQr.js';
+import { Profile } from './Profile.js';
 import { Notifications } from './Notifications.js';
 import { PendingWaivers } from './PendingWaivers.js';
 import { Schedule } from './Schedule.js';
@@ -21,7 +23,9 @@ import { Shell } from './Shell.js';
 const NAV_IDS: Record<string, string> = {
   '/': 'home',
   '/horario': 'schedule',
+  '/packs': 'packs',
   '/qr': 'qr',
+  '/perfil': 'profile',
 };
 
 const rootRoute = createRootRoute({
@@ -76,8 +80,22 @@ const scheduleRoute = createRoute({
   component: Schedule,
 });
 
+const packsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/packs',
+  component: MyPacks,
+});
+
+const profileRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/perfil',
+  component: Profile,
+});
+
 export const routeTree = rootRoute.addChildren([
   scheduleRoute,
+  packsRoute,
+  profileRoute,
   homeRoute,
   qrRoute,
   documentsRoute,

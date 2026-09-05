@@ -365,3 +365,59 @@ export const supportHitSchema = z.object({
 });
 
 export type SupportHit = z.infer<typeof supportHitSchema>;
+
+/**
+ * El asistente de onboarding (§2.1.3). La métrica de §2.0 es
+ * **time-to-first-class < 30 min**: el onboarding es donde se pierde el SaaS.
+ */
+export const ONBOARDING_STEP_IDS = ['venue', 'hours', 'class', 'product', 'invite'] as const;
+
+export const onboardingStepIdSchema = z.enum(ONBOARDING_STEP_IDS);
+
+export type OnboardingStepId = z.infer<typeof onboardingStepIdSchema>;
+
+/**
+ * 🔴 `done` **no lo declara el usuario: sale del estado real del centro.**
+ *
+ * Un checklist que dice "clase publicada" sin que exista una clase es una
+ * mentira que el SMU descubre en el peor momento: cuando un socio abre la app
+ * y no hay nada. Por eso saltear un paso lo marca `skipped`, no `done` — deja
+ * de estorbar en el asistente, pero sigue pendiente.
+ *
+ * `blocked` es el paso que todavía no se puede hacer porque le falta el
+ * anterior: sin sede no hay dónde poner una clase. Decirlo es más útil que
+ * dejarlo tocar y fallar.
+ */
+export const onboardingStepSchema = z.object({
+  id: onboardingStepIdSchema,
+  title: z.string(),
+  description: z.string(),
+  /** A dónde lo manda el botón del asistente, dentro del DFSM. */
+  href: z.string(),
+  required: z.boolean(),
+  done: z.boolean(),
+  skipped: z.boolean(),
+  blocked: z.boolean(),
+});
+
+export type OnboardingStep = z.infer<typeof onboardingStepSchema>;
+
+export const onboardingProgressSchema = z.object({
+  steps: z.array(onboardingStepSchema),
+  /** El paso donde el asistente se para al abrir. `null` si no queda ninguno. */
+  currentStep: onboardingStepIdSchema.nullable(),
+  /** Cuántos pasos están hechos de verdad, sobre el total. */
+  doneCount: z.number().int().min(0),
+  totalCount: z.number().int().min(0),
+  percent: z.number().int().min(0).max(100),
+  /** Cuándo quedó listo lo mínimo: una clase publicada y un producto vendible. */
+  completedAt: z.string().nullable(),
+  /**
+   * Minutos entre el alta y la primera clase publicada. Es la métrica de §2.0,
+   * medida y no estimada: sin el número, "menos de 30 minutos" es una promesa
+   * que nadie verifica.
+   */
+  timeToFirstClassMinutes: z.number().int().min(0).nullable(),
+});
+
+export type OnboardingProgress = z.infer<typeof onboardingProgressSchema>;

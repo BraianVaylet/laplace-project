@@ -1,6 +1,8 @@
 import { Temporal } from '@js-temporal/polyfill';
 import type {
   AccountStatement,
+  CounterSaleInput,
+  CounterSaleResult,
   CreateChargeInput,
   RefundPaymentInput,
   RegisterPaymentInput,
@@ -10,6 +12,7 @@ import type { AuditWriter } from '../../../audit/audit-log.js';
 import type { DomainEventBus } from '../../../events/bus.js';
 import { AppError } from '../../../http/errors.js';
 import { fromBsonDate, toBsonDate } from '../../../persistence/bson-date.js';
+import { withTransaction } from '../../../persistence/transaction.js';
 import { requireTenant, runWithTenant } from '../../../tenancy/context.js';
 import {
   allocatePayment,
@@ -39,6 +42,22 @@ export interface MemberBalanceCache {
   set(memberId: string, balanceCents: number): Promise<void>;
 }
 
+/**
+ * Lo que Billing necesita de Contracts para vender en el mostrador (F1-37).
+ *
+ * Va por interfaz y no importando su servicio (ADR-003): Billing sabe que hay
+ * alguien que vende un contrato y lo activa, no cómo lo hace.
+ */
+export interface ContractSales {
+  sell(input: {
+    memberId: string;
+    venueId: string;
+    productId: string;
+    priceCents?: number | undefined;
+  }): Promise<{ contractId: string; productName: string; priceCents: number; status: string }>;
+  activate(contractId: string): Promise<void>;
+}
+
 export interface BillingServiceDeps {
   charges: ChargeRepository;
   payments: PaymentRepository;
@@ -46,6 +65,8 @@ export interface BillingServiceDeps {
   events: DomainEventBus;
   audit: AuditWriter;
   members: MemberBalanceCache;
+  /** La venta de mostrador (F1-37). Sin esto, `sellAtCounter` no está disponible. */
+  contracts?: ContractSales | undefined;
   now?: (() => Temporal.Instant) | undefined;
 }
 
@@ -56,6 +77,7 @@ export class BillingService {
   private readonly events: DomainEventBus;
   private readonly audit: AuditWriter;
   private readonly members: MemberBalanceCache;
+  private readonly contracts: ContractSales | undefined;
   private readonly now: () => Temporal.Instant;
 
   constructor(deps: BillingServiceDeps) {
@@ -65,7 +87,110 @@ export class BillingService {
     this.events = deps.events;
     this.audit = deps.audit;
     this.members = deps.members;
+    this.contracts = deps.contracts;
     this.now = deps.now ?? (() => Temporal.Now.instant());
+  }
+
+  /**
+   * 🔴 La venta de mostrador (§2.1.16, F1-37).
+   *
+   * Vender es **una operación, no cuatro**: se crea el contrato, se emite el
+   * cargo, se registra el pago si lo hay y se activa el contrato. Todo dentro
+   * de una transacción (§5.2.4): a medias, el socio queda con un contrato sin
+   * cargo —entrena gratis— o con un cargo pagado y el contrato inactivo —pagó y
+   * no puede reservar—. Las dos son peores que un error.
+   *
+   * **Idempotente por `Idempotency-Key`**, guardada en el cargo: el reintento
+   * de una venta que falló por timeout no puede dejar dos contratos y dos
+   * cargos. El cargo es la pieza que siempre existe — se puede vender hoy y
+   * cobrar el viernes.
+   */
+  async sellAtCounter(input: CounterSaleInput, idempotencyKey: string): Promise<CounterSaleResult> {
+    const ventas = this.contracts;
+    if (!ventas) {
+      throw new AppError({
+        code: 'LP-BILL-422-007',
+        status: 422,
+        message: 'La venta de mostrador no está disponible en este entorno.',
+      });
+    }
+
+    // El reintento devuelve la venta original en vez de crear otra. La garantía
+    // real es el índice único; esto existe para no hacerle repetir el trabajo.
+    const previo = await this.charges.findByIdempotencyKey(idempotencyKey);
+    if (previo) return this.saleOf(previo);
+
+    return withTransaction(async () => {
+      const contrato = await ventas.sell({
+        memberId: input.memberId,
+        venueId: input.venueId,
+        productId: input.productId,
+        priceCents: input.priceCents,
+      });
+
+      const charge = await this.charges.create({
+        memberId: input.memberId,
+        venueId: input.venueId,
+        contractId: contrato.contractId,
+        amountCents: contrato.priceCents,
+        paidCents: 0,
+        currency: 'ARS',
+        dueAt: toBsonDate(this.now()),
+        status: 'pending',
+        description: contrato.productName,
+        idempotencyKey,
+      } as Partial<ChargeDoc>);
+
+      let payment: PaymentDoc | null = null;
+      if (input.payment) {
+        payment = await this.registerPayment(
+          {
+            memberId: input.memberId,
+            venueId: input.venueId,
+            amountCents: input.payment.amountCents,
+            currency: 'ARS',
+            method: input.payment.method,
+            chargeIds: [String(charge['publicId'])],
+            ...(input.payment.receipt === undefined ? {} : { receipt: input.payment.receipt }),
+            ...(input.payment.note === undefined ? {} : { note: input.payment.note }),
+          },
+          `${idempotencyKey}-payment`,
+        );
+      }
+
+      /*
+       * El contrato se activa cuando el cargo quedó saldado. Una seña deja el
+       * contrato esperando: el socio pagó parte, y parte no es todo.
+       */
+      const actualizado = await this.charges.findByPublicId(String(charge['publicId']));
+      const saldado = (actualizado?.paidCents ?? 0) >= charge.amountCents;
+      if (saldado && contrato.status !== 'active') {
+        await ventas.activate(contrato.contractId);
+      }
+
+      return {
+        contractId: contrato.contractId,
+        productName: contrato.productName,
+        chargeId: String(charge['publicId']),
+        amountCents: charge.amountCents,
+        paidCents: actualizado?.paidCents ?? 0,
+        paymentId: payment ? String(payment['publicId']) : null,
+        contractStatus: saldado || contrato.status === 'active' ? 'active' : 'pending_payment',
+      };
+    });
+  }
+
+  /** La venta ya registrada, reconstruida desde su cargo. */
+  private async saleOf(charge: ChargeDoc): Promise<CounterSaleResult> {
+    return {
+      contractId: charge.contractId ?? '',
+      productName: charge.description,
+      chargeId: String(charge['publicId']),
+      amountCents: charge.amountCents,
+      paidCents: charge.paidCents,
+      paymentId: null,
+      contractStatus: charge.paidCents >= charge.amountCents ? 'active' : 'pending_payment',
+    };
   }
 
   /** Genera un cargo. Sin vencimiento declarado, vence hoy. */

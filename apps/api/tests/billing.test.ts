@@ -4,7 +4,7 @@ import mongoose from 'mongoose';
 import { MongoMemoryReplSet } from 'mongodb-memory-server';
 import type { Db } from 'mongodb';
 import { Temporal } from '@js-temporal/polyfill';
-import type { AccountStatement } from '@laplace/schemas';
+import type { AccountStatement, CounterSaleResult } from '@laplace/schemas';
 import { createApp } from '../src/app.js';
 import { createAuth, type Auth } from '../src/auth/auth.js';
 import type { EmailSender } from '../src/auth/ports.js';
@@ -25,6 +25,10 @@ import { runWithTenant } from '../src/tenancy/context.js';
  * dinero sea entero en centavos de punta a punta.
  */
 const require = createRequire(import.meta.url);
+const ventaMigration =
+  require('../../../migrations/20260907090000-counter-sale-idempotency.cjs') as {
+    up(db: Db): Promise<void>;
+  };
 const migration = require('../../../migrations/20260901120000-mandatory-indexes.cjs') as {
   up(db: Db): Promise<void>;
 };
@@ -195,6 +199,7 @@ beforeAll(async () => {
   // El unico parcial `{ tenantId, idempotencyKey }` es la garantia real contra
   // el doble cobro: se prueba contra el indice de produccion.
   await migration.up(mongoose.connection.db as Db);
+  await ventaMigration.up(mongoose.connection.db as Db);
 
   auth = createAuth({
     db: mongoose.connection.db as Db,
@@ -431,7 +436,8 @@ describe('🔴 idempotencia del pago (§Testing.3)', () => {
     );
 
     // Sin la clave, el reintento de un pago que falló por timeout cobra dos veces.
-    expect(res.status).toBe(422);
+    // 400 y `LP-SYS-400-008`: falta un encabezado, el pedido está mal armado.
+    expect(res.status).toBe(400);
     expect(((await res.json()) as ErrorBody).error.message).toContain('Idempotency-Key');
   });
 
@@ -1106,5 +1112,167 @@ describe('los puertos que consume Notifications (F1-22)', () => {
     );
 
     expect(contexto).toBeNull();
+  });
+});
+
+/**
+ * 🔴 La venta de mostrador (§2.1.16, F1-37).
+ *
+ * Vender es **una operación, no cuatro**. Lo que se prueba acá es que a medias
+ * no queda nada: ni un contrato sin cargo —el socio entrena gratis— ni un cargo
+ * pagado con el contrato inactivo —pagó y no puede reservar—.
+ */
+describe('la venta de mostrador', () => {
+  async function productoDe(centro: Centro, priceCents = 6_000_000) {
+    const producto = await post<{ publicId: string }>(centro.cookie, '/api/v1/products', {
+      name: 'Pack 8 clases',
+      type: 'class_pack',
+      priceCents,
+      credits: 8,
+      durationDays: 30,
+      venueIds: [centro.venueId],
+    });
+
+    return producto.publicId;
+  }
+
+  const vender = (centro: Centro, body: Record<string, unknown>, key = nuevaClave()) =>
+    app.request('/api/v1/sales', req(centro.cookie, 'POST', body, { 'Idempotency-Key': key }));
+
+  it('deja el contrato activo, el cargo saldado y el pago registrado', async () => {
+    const centro = await centroConSocio('venta-completa');
+    const productId = await productoDe(centro);
+
+    const res = await vender(centro, {
+      memberId: centro.memberId,
+      venueId: centro.venueId,
+      productId,
+      payment: { method: 'cash', amountCents: 6_000_000 },
+    });
+    const venta = (await res.json()) as CounterSaleResult;
+
+    expect(res.status).toBe(201);
+    expect(venta.contractStatus).toBe('active');
+    expect(venta.paidCents).toBe(6_000_000);
+    expect(venta.paymentId).not.toBeNull();
+
+    // Y el saldo del socio queda en cero: cobró y quedó a mano.
+    expect((await estadoDeCuenta(centro)).balanceCents).toBe(0);
+  });
+
+  it('🔴 vender sin cobrar deja el cargo pendiente y el contrato esperando', async () => {
+    // Se lleva el pack y paga el viernes: el contrato no se activa hasta que
+    // la plata esté.
+    const centro = await centroConSocio('venta-a-credito');
+    const productId = await productoDe(centro);
+
+    const res = await vender(centro, {
+      memberId: centro.memberId,
+      venueId: centro.venueId,
+      productId,
+    });
+    const venta = (await res.json()) as CounterSaleResult;
+
+    expect(venta.contractStatus).toBe('pending_payment');
+    expect(venta.paidCents).toBe(0);
+    expect((await estadoDeCuenta(centro)).balanceCents).toBe(-6_000_000);
+  });
+
+  it('🔴 una seña no alcanza para activar: parte no es todo', async () => {
+    const centro = await centroConSocio('venta-con-senia');
+    const productId = await productoDe(centro);
+
+    const res = await vender(centro, {
+      memberId: centro.memberId,
+      venueId: centro.venueId,
+      productId,
+      payment: { method: 'cash', amountCents: 2_000_000 },
+    });
+    const venta = (await res.json()) as CounterSaleResult;
+
+    expect(venta.contractStatus).toBe('pending_payment');
+    expect(venta.paidCents).toBe(2_000_000);
+  });
+
+  it('🔴 repetir la venta con la misma clave no duplica nada', async () => {
+    /*
+     * El reintento de una venta que falló por timeout dejaría al socio con dos
+     * packs y dos cargos. La garantía es el índice único del cargo.
+     */
+    const centro = await centroConSocio('venta-idempotente');
+    const productId = await productoDe(centro);
+    const clave = nuevaClave();
+    const body = {
+      memberId: centro.memberId,
+      venueId: centro.venueId,
+      productId,
+      payment: { method: 'cash', amountCents: 6_000_000 },
+    };
+
+    const primera = (await (await vender(centro, body, clave)).json()) as CounterSaleResult;
+    const segunda = (await (await vender(centro, body, clave)).json()) as CounterSaleResult;
+
+    expect(segunda.contractId).toBe(primera.contractId);
+    expect(segunda.chargeId).toBe(primera.chargeId);
+
+    const contratos = (await (
+      await app.request('/api/v1/contracts', req(centro.cookie, 'GET'))
+    ).json()) as { items: unknown[] };
+    expect(contratos.items).toHaveLength(1);
+    expect((await estadoDeCuenta(centro)).charges).toHaveLength(1);
+  });
+
+  it('sin la clave de idempotencia, no vende', async () => {
+    const centro = await centroConSocio('venta-sin-clave');
+    const productId = await productoDe(centro);
+
+    const res = await app.request(
+      '/api/v1/sales',
+      req(centro.cookie, 'POST', {
+        memberId: centro.memberId,
+        venueId: centro.venueId,
+        productId,
+      }),
+    );
+
+    // `LP-SYS-400-008`: falta un encabezado, el pedido está mal armado.
+    expect(res.status).toBe(400);
+  });
+
+  it('🔴 si el producto no existe, no queda ni contrato ni cargo', async () => {
+    // Es lo que prueba que la operación es una sola: la transacción vuelve
+    // atrás entera.
+    const centro = await centroConSocio('venta-rota');
+
+    const res = await vender(centro, {
+      memberId: centro.memberId,
+      venueId: centro.venueId,
+      productId: 'prd_no_existe',
+    });
+
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect((await estadoDeCuenta(centro)).charges).toHaveLength(0);
+
+    const contratos = (await (
+      await app.request('/api/v1/contracts', req(centro.cookie, 'GET'))
+    ).json()) as { items: unknown[] };
+    expect(contratos.items).toHaveLength(0);
+  });
+
+  it('el precio de la promo pisa al de lista', async () => {
+    const centro = await centroConSocio('venta-con-promo');
+    const productId = await productoDe(centro);
+
+    const res = await vender(centro, {
+      memberId: centro.memberId,
+      venueId: centro.venueId,
+      productId,
+      priceCents: 4_500_000,
+      payment: { method: 'transfer', amountCents: 4_500_000 },
+    });
+    const venta = (await res.json()) as CounterSaleResult;
+
+    expect(venta.amountCents).toBe(4_500_000);
+    expect(venta.contractStatus).toBe('active');
   });
 });

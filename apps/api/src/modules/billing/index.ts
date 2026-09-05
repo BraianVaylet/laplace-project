@@ -5,7 +5,11 @@ import type { DomainEventBus } from '../../events/bus.js';
 import { toBsonDate } from '../../persistence/bson-date.js';
 import { runWithTenant } from '../../tenancy/context.js';
 import type { JobDefinition } from '../../jobs/runner.js';
-import { BillingService, type MemberBalanceCache } from './application/billing-service.js';
+import {
+  BillingService,
+  type ContractSales,
+  type MemberBalanceCache,
+} from './application/billing-service.js';
 import type { ChargeDoc } from './infrastructure/billing.model.js';
 import {
   ChargeRepository,
@@ -34,6 +38,8 @@ export interface BillingModuleDeps {
   members: MemberBalanceCache;
   /** La zona horaria de la sede. El día de la caja es el del centro (§2.1.2). */
   venues: { timeZoneOf(venueId: string): Promise<string> };
+  /** La venta de mostrador (F1-37). Sin esto, `POST /sales` contesta 422. */
+  contracts?: ContractSales | undefined;
   now?: (() => Temporal.Instant) | undefined;
 }
 
@@ -46,6 +52,7 @@ export function createBillingModule(deps: BillingModuleDeps): BillingModule {
     events: deps.events,
     audit: deps.audit,
     members: deps.members,
+    ...(deps.contracts ? { contracts: deps.contracts } : {}),
     ...(deps.now ? { now: deps.now } : {}),
   });
 

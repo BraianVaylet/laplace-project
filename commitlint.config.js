@@ -23,6 +23,8 @@ export default {
         'booking',
         'attendance',
         'members',
+        'venues',
+        'rooms',
         'products',
         'contracts',
         'billing',

@@ -12,6 +12,7 @@ import { VenueSelector, type Venue } from './VenueSelector.js';
  */
 const NAV: NavItem[] = [
   { id: 'home', label: 'Hoy', href: '/', icon: '◧' },
+  { id: 'venues', label: 'Sedes', href: '/sedes', icon: '⌂' },
   { id: 'schedule', label: 'Horario', href: '/horario', icon: '▤' },
   { id: 'members', label: 'Miembros', href: '/miembros', icon: '☰' },
   { id: 'products', label: 'Productos', href: '/productos', icon: '◫' },

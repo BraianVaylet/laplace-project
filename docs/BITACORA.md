@@ -23,6 +23,223 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-05 — F1-38: la puerta de entrada, y dos cosas que impedían entrar
+
+- **Módulo:** `susc`
+- **Tipo:** feature
+- **Commit/PR:** `317b87a` (rama `feat/phase-1-ui-debt`)
+- **Trello:** https://trello.com/c/evThfd56 (F1-38) — movida a **Completadas**
+- **Qué cambió:** la landing tiene `/empezar`: nombre, email, clave y centro, y en dos minutos
+  alguien es cliente con 14 días de prueba. El CTA de la tabla de precios ahora lleva ahí, con el
+  plan elegido en la URL. El E2E del camino 1 arranca en la landing.
+- **Por qué:** la API estaba desde F1-25 y el CTA existía, pero **nadie podía hacerse cliente sin
+  `curl`**. Era la última deuda declarada de la Fase 1.
+- **Impacto:** ninguno sobre el modelo. **Dos fixes:** el alta no dejaba el centro activo en la
+  sesión —quien se registraba entraba al DFSM y la API le contestaba 403 a todo—, y dos centros con
+  el mismo nombre no podían registrarse, porque el slug sale del nombre y el segundo chocaba con un
+  error de Better Auth crudo. Ahora se le busca un slug libre; el elegido a mano sigue chocando,
+  que es lo correcto.
+- **Pendiente:** ninguno de esta tarjeta. Queda F0-16, bloqueada esperando credenciales.
+
+## 2026-09-05 — F1-37: la venta de mostrador, y dos huecos que destapó
+
+- **Módulo:** `billing`
+- **Tipo:** feature
+- **Commit/PR:** `2ee6913` (rama `feat/phase-1-ui-debt`)
+- **Trello:** https://trello.com/c/qLGeCC1l (F1-37) — movida a **Completadas**
+- **Qué cambió:** `POST /api/v1/sales` vende un producto a un socio en **una sola operación**:
+  contrato, cargo, pago y activación, todo en una transacción y con `Idempotency-Key`. Desde la
+  ficha 360, el botón "Venderle un pack" ahora hace algo. El E2E del camino 2 recorre la venta por
+  pantalla, en la sesión del mostrador.
+- **Por qué:** era la última tarjeta de deuda de UI, y resultó no ser de UI: vender eran cuatro
+  llamadas que nadie juntaba, y encadenarlas desde el navegador dejaba contratos sin cargo o cargos
+  pagados con el contrato inactivo. Es plata: §5.2.4 pide transacción.
+- **Impacto:** ruta nueva, código de error `LP-BILL-422-007`, `idempotencyKey` en `Charge` con su
+  índice único y su migración. **Dos fixes que salieron de acá:** las lecturas del repositorio base
+  no viajaban con la sesión de la transacción —adentro de una transacción no veían lo que esa misma
+  transacción acababa de escribir—, y el guard de idempotencia emitía `LP-SYS-422-006` donde la
+  documentación declara `LP-SYS-400-008`.
+- **Pendiente:** ninguno de esta tarjeta. Queda F0-16 (staging), bloqueada esperando las
+  credenciales de Railway, Atlas y Backblaze.
+
+## 2026-09-05 — F1-36: el padrón y los códigos de invitación
+
+- **Módulo:** `members`
+- **Tipo:** feature
+- **Commit/PR:** `eb8cc3d` (rama `feat/phase-1-ui-debt`)
+- **Trello:** https://trello.com/c/zsl1KwES (F1-36) — movida a **Completadas**
+- **Qué cambió:** el DFSM tiene `/miembros`: el padrón con filtro por estado, el alta desde el
+  mostrador y los códigos de invitación con su generación y su revocación. Cada nombre enlaza a la
+  ficha 360.
+- **Por qué:** cuarta de las cinco tarjetas de deuda de UI, y el último paso del asistente de
+  primeros pasos.
+- **Impacto:** ninguno sobre la API ni sobre el modelo. La columna de saldo aparece solo si la API
+  mandó saldos: desde F1-06 llegan en `null` para quien no puede ver plata, y pintar un "$0" sería
+  inventar un dato equivocado.
+- **Pendiente:** F1-37 (vender y cobrar) **cambió de alcance**: vender son cuatro llamadas y hoy
+  ninguna las junta, así que encadenarlas desde el navegador dejaría contratos sin cargo o cargos
+  pagados con el contrato inactivo. Necesita un caso de uso atómico en la API antes que la pantalla.
+
+## 2026-09-05 — F1-35: la agenda se arma por pantalla, y los diálogos dejan de compartir id
+
+- **Módulo:** `schedule`
+- **Tipo:** feature
+- **Commit/PR:** `93ce381` (rama `feat/phase-1-ui-debt`)
+- **Trello:** https://trello.com/c/kiYLhCsp (F1-35) — movida a **Completadas**
+- **Qué cambió:** el DFSM tiene `/horario`: la grilla semanal por sede, el alta de plantillas, la
+  edición eligiendo "solo esta" o "esta y las que siguen", y la cancelación con motivo y con el
+  número de inscriptos a la vista. El E2E del camino 1 ya carga sede, producto y clase por pantalla.
+- **Por qué:** tercera de las cinco tarjetas de deuda de UI, y la más usada de las cinco: es donde
+  el SMU pasa el tiempo cuando arma la semana.
+- **Impacto:** ninguno sobre la API ni sobre el modelo. **Fix de accesibilidad en `@laplace/ui`:**
+  `Dialog` escribía `id="dialog-title"` a mano, así que con dos diálogos en pantalla el id se
+  duplicaba y `aria-labelledby` apuntaba al título del otro — el lector anunciaba el modal
+  equivocado. Ahora se generan con `useId`.
+- **Pendiente:** las dos pantallas que faltan — socios y la venta desde el mostrador (F1-36 y
+  F1-37).
+
+## 2026-09-05 — F1-34: el catálogo se carga por pantalla, y el rate limit se puede apagar solo en dev
+
+- **Módulo:** `products`
+- **Tipo:** feature
+- **Commit/PR:** `5041ba4` (rama `feat/phase-1-ui-debt`)
+- **Trello:** https://trello.com/c/tCLskxpw (F1-34) — movida a **Completadas**
+- **Qué cambió:** el DFSM tiene `/productos`: el listado y el alta de los siete tipos de §2.1.17,
+  con el formulario siguiendo al tipo elegido. El E2E del camino 1 ya crea la sede y el producto por
+  pantalla.
+- **Por qué:** segunda de las cinco tarjetas de deuda de UI. Sin producto no hay contrato, y sin
+  contrato nadie puede reservar.
+- **Impacto:** ninguno sobre el modelo de datos. **Sí sobre el entorno:** aparece `AUTH_RATE_LIMIT`,
+  que solo se puede poner en `off` con `APP_ENV=dev` — el arranque lo rechaza en staging y en prod,
+  con su test. Lo destapó el arnés de E2E, que crea decenas de cuentas desde una sola IP y chocaba
+  contra el rate limit de §9.1. La suite de E2E pasó a correr **en serie**: comparte una sola base
+  efímera, y el paralelismo solo agregaba fallos que dependían de quién llegaba primero.
+- **Pendiente:** las tres pantallas que faltan — agenda, socios y la venta desde el mostrador
+  (F1-35 a F1-37).
+
+## 2026-09-04 — F1-33: las sedes ya se cargan por pantalla
+
+- **Módulo:** `venues`
+- **Tipo:** feature
+- **Commit/PR:** `3a57eeb` (rama `feat/phase-1-ui-debt`)
+- **Trello:** https://trello.com/c/fsFloQOI (F1-33) — movida a **Completadas**
+- **Qué cambió:** el DFSM tiene `/sedes` y `/sedes/:venueId`: crear la sede, cargar sus horarios,
+  configurar su política de reserva, agregar salas y archivarla. La entrada del menú ya existía
+  desde F0-13 y no llevaba a ningún lado.
+- **Por qué:** es la primera de las cinco tarjetas de deuda de UI que dejó la Fase 1. Sin esta
+  pantalla, el centro no se puede armar sin `curl`, y el asistente de primeros pasos mandaba a una
+  ruta inexistente.
+- **Impacto:** ninguno sobre la API ni sobre el modelo de datos: todo el backend ya estaba. El E2E
+  del camino 1 ahora crea la sede **por pantalla** en vez de por API, que era la deuda que F1-31
+  había anotado.
+- **Pendiente:** las otras cuatro pantallas — productos, agenda, socios y la venta desde el
+  mostrador (F1-34 a F1-37).
+
+## 2026-09-04 — F1-32: la documentación del producto, y con eso la Fase 1 cerrada
+
+- **Módulo:** `docs`
+- **Tipo:** docs
+- **Commit/PR:** `7727b83` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/KOoe9EOR (F1-32) — movida a **Completadas**
+- **Qué cambió:** el repo tiene `README.md` —que no existía— y los cuatro documentos que pide §5:
+  funcional, técnico, de arquitectura y uno por aplicativo. Se sumó `pnpm docs:links`, que corre en
+  CI y falla si un enlace relativo de la documentación apunta a algo que no existe.
+- **Por qué:** era la última tarjeta de Fase 1, y su criterio es concreto: alguien que nunca vio el
+  repo lo clona, lee el técnico y lo levanta sin preguntar nada.
+- **Impacto:** ninguno sobre el código ni sobre el modelo de datos. El OpenAPI no hizo falta
+  tocarlo: sale del mismo registro de rutas que usan los guards, y ya tenía su test de que ninguna
+  ruta queda sin documentar. Las tres entradas de esta bitácora que estaban sin commit —las
+  anteriores al plan— quedaron completas.
+- **Pendiente:** la prueba de clonar en una máquina limpia es manual y queda para cuando haya una.
+  Se verificó que cada comando, puerto y ruta del documento técnico existe tal como está escrito.
+
+## 2026-09-04 — F1-06: la ficha 360 del socio, y la deuda que se le escapaba al coach
+
+- **Módulo:** `members`
+- **Tipo:** feature
+- **Commit/PR:** `442d7f3` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/gWV6GOZC (F1-06) — movida a **Completadas**
+- **Qué cambió:** el DFSM tiene la pantalla que más se usa: abrís un socio desde el buscador y ves
+  sus datos, su estado de cuenta, sus packs con lo que le queda, lo que tiene reservado, su
+  asistencia de los últimos 90 días, lo que firmó y las notas internas. Ruta nueva
+  `GET /api/v1/members/:id/overview` y pantalla `/miembros/:memberId`.
+- **Por qué:** era la tarjeta que quedaba de Fase 1 con todas sus dependencias cerradas, y §2.1.7
+  la describe como la pantalla más usada del producto: si obliga a navegar a otras cinco, se siente
+  lento aunque la API conteste rápido.
+- **Impacto:** ninguno sobre el modelo de datos. **Fix de seguridad:** `balanceCents` viajaba en
+  toda respuesta de socio, y esas rutas solo piden `athlete:read` — el permiso del coach. La deuda
+  de cada socio se le escapaba sin que nadie la pidiera, contra §2.1.12. Ahora sale `null` para
+  quien no tiene `billing:read`, decidido en el servidor. También se arregló `Skeleton`, que
+  descartaba en silencio el `aria-label` que le pasaban seis pantallas.
+- **Pendiente:** el botón "Venderle un pack" del estado vacío no lleva a ningún lado: la pantalla de
+  venta del DFSM sigue sin existir, igual que las altas que arrastran F1-30 y F1-31.
+
+## 2026-09-04 — F1-31: los tres caminos críticos, en Playwright y en CI
+
+- **Módulo:** `ci`
+- **Tipo:** infra
+- **Commit/PR:** `62c7b8d` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/3aLdhhHu (F1-31) — movida a **Completadas**
+- **Qué cambió:** `pnpm test:e2e` recorre los tres caminos que §Testing.7 no negocia —alta y primera
+  clase publicada, reservar/cancelar/recuperar el crédito, y asistencia con el no-show que marca el
+  job— en Chrome de escritorio y en mobile. El CI los corre en su propio job y publica capturas y
+  traces cuando algo falla; `deploy-staging` ahora depende de que pasen.
+- **Por qué:** eran el requisito de §Testing.7 y los navegadores no estaban ni instalados. Sin esto,
+  romper la devolución de crédito al cancelar no lo detectaba nadie hasta que lo dijera un socio.
+- **Impacto:** ninguno sobre el modelo de datos ni sobre la API. El arnés (`e2e/support/`) levanta un
+  Mongo **efímero** en memoria, corre las migraciones y arranca el entrypoint real de la API: nunca
+  staging ni producción. El disparador de jobs vive solo en `e2e/` — agregarle a la API una ruta
+  para correr jobs sería abrir en producción una puerta que solo necesita el test. `pnpm typecheck`
+  ahora incluye `e2e/`, que hasta hoy no miraba nadie.
+- **Pendiente:** lo que los caminos hacen por API es lo que todavía no tiene pantalla (altas del
+  DFSM y venta de packs, deuda de F1-06 y F1-30). La medición real del time-to-first-class de §2.0
+  sigue siendo una prueba manual.
+
+## 2026-09-04 — F1-30: el asistente de primeros pasos
+
+- **Módulo:** `susc`
+- **Tipo:** feature
+- **Commit/PR:** `2801f3c` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/N3mXndHu (F1-30) — movida a **Completadas**
+- **Qué cambió:** el SMU que recién se registró abre el DFSM y encuentra el camino: crear la sede,
+  cargar los horarios, publicar la primera clase, crear un producto e invitar socios, con barra de
+  progreso, la opción de dejar cualquier paso para después y la de retomarlo. Tres rutas nuevas bajo
+  `/api/v1/subscription/onboarding`.
+- **Por qué:** la métrica de §2.0 es time-to-first-class menor a 30 minutos, y el home del primer
+  día era un "elegí un centro" sin salida: el que acaba de registrarse no tiene ninguna sede.
+- **Impacto:** `Subscription` suma `signedUpAt` y `onboarding { skippedSteps, completedAt,
+firstClassPublishedAt }`. **No** guarda `step` ni `completedSteps[]` como decía la tarjeta: el
+  progreso se cuenta del estado real del centro en cada consulta, porque un checklist
+  auto-declarado marca "clase publicada" sin que exista una clase. Saltear un paso lo deja
+  pendiente, nunca hecho. Ningún código de error nuevo: el paso inventado en la URL contesta
+  `LP-SYS-422-006`, que ya es el de validación en el borde.
+- **Pendiente:** las pantallas de alta de sede, clase, producto y códigos del DFSM no existen
+  todavía, así que el asistente marca el camino pero no lleva hasta el formulario. La prueba real
+  de los 30 minutos es del E2E de F1-31.
+
+## 2026-09-04 — F1-29: lo del socio sobre lo suyo
+
+- **Módulo:** `account`
+- **Tipo:** feature
+- **Commit/PR:** `68d290d` (rama `feat/phase-1-mvp`)
+- **Trello:** https://trello.com/c/L0822vqC (F1-29) — movida a **Completadas**
+- **Qué cambió:** el socio abre la WAFM y ve sus packs —cuántas clases le quedan, hasta cuándo y en
+  qué clases valen—, edita su perfil y su contacto de emergencia, cambia su foto, se descarga todos
+  sus datos en JSON y puede pedir la baja. Seis rutas nuevas bajo `/api/v1/my/*`.
+- **Por qué:** son las dos preguntas que hoy el socio manda por WhatsApp al centro (§2.1.2), y los
+  derechos de acceso y supresión de la Ley 25.326 (§9.2), que escondidos detrás de un mail a soporte
+  no se cumplen.
+- **Impacto:** `Member` suma `avatarKey`, `deletionRequestedAt` y `deletionReason`. Ninguna ruta de
+  `/my/*` acepta un `memberId`: sale de la sesión. El tipo de la foto se decide por los **bytes**,
+  no por la extensión ni el `Content-Type` —los dos los escribe quien sube el archivo, y un SVG
+  renombrado a `.png` ejecutaría script contra el dominio que lo sirve—, con tope de 2 MB y enlace
+  firmado que vence a los 15 minutos. Códigos nuevos: `LP-ACCT-422-001` y `LP-ACCT-413-002`. Se
+  arregló además el cliente de API compartido, que serializaba todo cuerpo con `JSON.stringify` y
+  convertía cualquier archivo en `{}`.
+- **Pendiente:** Backblaze B2 no está aprovisionado (F0-16 sigue bloqueada): el almacenamiento va en
+  memoria con el mismo contrato y la misma firma HMAC, así que se reemplaza sin tocar el servicio.
+  Las preferencias de notificación quedan en la pantalla de F1-21.
+
 ## 2026-09-04 — Fix: los entitlements leían la organización por un campo que no existe
 
 - **Módulo:** `entitlements`
@@ -1723,7 +1940,7 @@ verde, gate de cobertura por criticidad cumplido.
 
 - **Módulo:** `infra`
 - **Tipo:** fix
-- **Commit/PR:** —
+- **Commit/PR:** `2f009d3` (entró con el scaffold)
 - **Trello:** —
 - **Qué cambió:** ESLint pasa a tener un único config en la raíz, con las reglas de React y la de
   fronteras de módulo aplicadas por `files`. Se eliminaron los 8 config por paquete y la raíz
@@ -1741,7 +1958,7 @@ verde, gate de cobertura por criticidad cumplido.
 
 - **Módulo:** `infra`
 - **Tipo:** infra
-- **Commit/PR:** —
+- **Commit/PR:** `2f009d3`
 - **Trello:** —
 - **Qué cambió:** el repo ya corre `pnpm lint / typecheck / test / build` en verde sobre las 5 apps
   y los 4 packages. La API levanta con `/health` y `/ready`, valida su entorno al arrancar y
@@ -1759,7 +1976,7 @@ verde, gate de cobertura por criticidad cumplido.
 
 - **Módulo:** `docs`
 - **Tipo:** decisión
-- **Commit/PR:** —
+- **Commit/PR:** `6dc2007`
 - **Trello:** —
 - **Qué cambió:** la spec pasa a vivir en `docs/spec/LAPLACE-SPEC.md` dentro del repo. Se agregan
   los ADR 000 a 003, el diccionario de errores, esta bitácora, `CLAUDE.md` y el directorio

@@ -24,9 +24,16 @@ export const requireIdempotencyKey = createMiddleware<IdempotencyEnv>(async (c, 
   const key = c.req.header(IDEMPOTENCY_HEADER)?.trim();
 
   if (key === undefined || key.length === 0) {
+    /*
+     * 🔴 `LP-SYS-400-008`, que es el código que `docs/errors.md` declara para
+     * esto. Antes salía `LP-SYS-422-006` —"revisá los datos"—, un código que
+     * significa otra cosa: quien buscaba el documentado no encontraba nada, y
+     * quien encontraba este leía un mensaje que no describe el problema. Falta
+     * un encabezado: el pedido está mal armado, y eso es un 400.
+     */
     throw new AppError({
-      code: 'LP-SYS-422-006',
-      status: 422,
+      code: 'LP-SYS-400-008',
+      status: 400,
       message: `Falta el encabezado ${IDEMPOTENCY_HEADER}.`,
       action: 'Es obligatorio en pagos, reservas y check-in: evita cobrar o reservar dos veces.',
       meta: { header: IDEMPOTENCY_HEADER },

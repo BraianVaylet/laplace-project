@@ -11,6 +11,15 @@ export interface SkeletonProps {
   className?: string;
   /** Cuantas filas dibujar. Un listado vacio y uno cargando no se ven igual. */
   rows?: number;
+  /**
+   * Que se esta cargando. **Es una prop y no un `aria-label` suelto**: TypeScript
+   * no revisa los atributos JSX con guion, asi que un `aria-label` puesto sobre
+   * este componente se descarta en silencio y nadie se entera.
+   *
+   * Importa cuando hay varios en la misma pantalla: siete "Cargando" seguidos
+   * no le dicen a nadie que se esta cargando.
+   */
+  label?: string;
 }
 
 /**
@@ -18,16 +27,16 @@ export interface SkeletonProps {
  * "esto va a ser una lista de cinco filas", que es informacion util y hace que
  * la espera se sienta mas corta.
  */
-export function Skeleton({ className, rows = 1 }: SkeletonProps) {
+export function Skeleton({ className, rows = 1, label = 'Cargando' }: SkeletonProps) {
   return (
-    <div role="status" aria-label="Cargando" className="flex flex-col gap-2">
+    <div role="status" aria-label={label} className="flex flex-col gap-2">
       {Array.from({ length: rows }, (_, index) => (
         <div
           key={index}
           className={cn('bg-surface-3 h-11 w-full animate-pulse rounded-md', className)}
         />
       ))}
-      <span className="sr-only">Cargando…</span>
+      <span className="sr-only">{label}…</span>
     </div>
   );
 }

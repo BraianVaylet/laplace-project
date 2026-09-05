@@ -128,7 +128,7 @@ export function Notifications({ client = api }: NotificationsProps = {}) {
             onRetry={() => void preferencias.refetch()}
           />
         ) : preferencias.isPending ? (
-          <Skeleton className="h-32" aria-label="Cargando tus preferencias" />
+          <Skeleton className="h-32" label="Cargando tus preferencias" />
         ) : (
           <ul className="flex flex-col gap-2">
             {preferencias.data.map((pref) => (

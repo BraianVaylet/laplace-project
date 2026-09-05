@@ -12,6 +12,8 @@ import {
   type Subscription,
   type SubscriptionPlanId,
   type HealthPanel,
+  type OnboardingProgress,
+  type OnboardingStepId,
   type SubscriberUsage,
   type SupportHit,
   type SupportQuery,
@@ -22,6 +24,7 @@ import type { AuditWriter } from '../../../audit/audit-log.js';
 import type { DomainEventBus } from '../../../events/bus.js';
 import { AppError } from '../../../http/errors.js';
 import { fromBsonDate, toBsonDate } from '../../../persistence/bson-date.js';
+import { buildOnboarding, isOnboardingComplete } from '../domain/onboarding.js';
 import { runWithTenant } from '../../../tenancy/context.js';
 import {
   assertFitsInPlan,
@@ -35,13 +38,21 @@ import {
 import type { PlanDoc, SubscriptionDoc } from '../infrastructure/susc.model.js';
 import type { PlanRepository, SubscriptionRepository } from '../infrastructure/susc.repository.js';
 import type { ErrorEventStore } from '../../../observability/error-events.js';
-import type { JobRunLookup, OrganizationCreator, PlanLimitsLookup, UsageLookup } from './ports.js';
+import type {
+  CenterSetupLookup,
+  JobRunLookup,
+  OrganizationCreator,
+  PlanLimitsLookup,
+  UsageLookup,
+} from './ports.js';
 
 export interface SuscServiceDeps {
   subscriptions: SubscriptionRepository;
   plans: PlanRepository;
   organizations: OrganizationCreator;
   usage: UsageLookup;
+  /** Lo que el centro ya cargó, para el asistente de onboarding (§2.1.3). */
+  setup: CenterSetupLookup;
   limits: PlanLimitsLookup;
   audit: AuditWriter;
   events: DomainEventBus;
@@ -73,11 +84,12 @@ export class SuscService {
     const plan = await this.planOrFail(input.planId);
     const slug = input.slug ?? slugify(input.centerName);
 
-    const { organizationId } = await this.deps.organizations.create({
-      name: input.centerName,
+    const { organizationId } = await this.createOrganization(
+      input.centerName,
       slug,
       ownerUserId,
-    });
+      input.slug !== undefined,
+    );
 
     const ahora = this.deps.now();
     const creada = await this.deps.subscriptions.create({
@@ -89,6 +101,7 @@ export class SuscService {
       timeZone: input.timeZone,
       trialEndsAt: trialEndsAt(ahora, input.timeZone),
       currentPeriodEndsAt: periodEndsAt(ahora, input.timeZone),
+      signedUpAt: ahora,
     });
 
     if (!creada) {
@@ -101,6 +114,46 @@ export class SuscService {
     }
 
     return toResponse(creada);
+  }
+
+  /**
+   * 🔴 Crea la organización, buscándole un slug libre si el derivado ya está.
+   *
+   * El slug sale del nombre del centro, y hay más de un "Box Toro" en el país.
+   * El primero que se registra no puede quedarse con el nombre: el segundo
+   * vería fallar su alta por algo que no eligió ni entiende — el slug es un
+   * detalle de la URL, no su identidad.
+   *
+   * Solo se reintenta si el slug vino **derivado**. Si lo eligió a mano, el
+   * choque es información que necesita.
+   */
+  private async createOrganization(
+    centerName: string,
+    slug: string,
+    ownerUserId: string,
+    elegido = false,
+  ): Promise<{ organizationId: string }> {
+    for (let intento = 0; intento <= (elegido ? 0 : MAX_SLUG_RETRIES); intento += 1) {
+      const candidato = intento === 0 ? slug : `${slug}-${sufijoDeSlug()}`;
+
+      try {
+        return await this.deps.organizations.create({
+          name: centerName,
+          slug: candidato,
+          ownerUserId,
+        });
+      } catch (error) {
+        if (intento === (elegido ? 0 : MAX_SLUG_RETRIES)) throw error;
+      }
+    }
+
+    // Inalcanzable: el último intento sale por `return` o por `throw`.
+    throw new AppError({
+      code: 'LP-SUSC-409-002',
+      status: 409,
+      message: 'No pudimos crear tu centro. Probá con otro nombre.',
+      meta: { slug },
+    });
   }
 
   async mine(organizationId: string): Promise<Subscription> {
@@ -280,6 +333,86 @@ export class SuscService {
     }
 
     return aplicados;
+  }
+
+  // ── Onboarding (§2.1.3) ───────────────────────────────────────────────────
+
+  /**
+   * El asistente guiado. La métrica de §2.0 es **time-to-first-class < 30 min**:
+   * es donde se pierde el SaaS.
+   *
+   * 🔴 El progreso se **cuenta**, no se declara: cada paso mira si la cosa
+   * existe de verdad. Lo único que el usuario declara es qué salteó, y saltear
+   * deja el paso pendiente, no hecho.
+   *
+   * Leerlo tiene dos efectos de escritura, y los dos son sobre hechos que no se
+   * pueden recalcular después: la fecha de la primera clase publicada —de ahí
+   * sale la métrica— y la de terminado.
+   */
+  async onboarding(organizationId: string): Promise<OnboardingProgress> {
+    const suscripcion = await this.orFail(organizationId);
+    const setup = await this.deps.setup.of(organizationId);
+    const ahora = this.deps.now();
+    const estado = suscripcion.onboarding ?? SIN_ONBOARDING;
+
+    // Se sella la primera vez que se lo ve, no cuando se publica: el módulo de
+    // agenda no conoce al de suscripciones, y atarlos por un evento para una
+    // métrica sería acoplar dos módulos por un número.
+    const primeraClase =
+      estado.firstClassPublishedAt ?? (setup.classTemplates > 0 ? toBsonDate(ahora) : null);
+
+    const terminado =
+      estado.completedAt ?? (isOnboardingComplete(setup) ? toBsonDate(ahora) : null);
+
+    if (primeraClase !== estado.firstClassPublishedAt || terminado !== estado.completedAt) {
+      await this.deps.subscriptions.update(organizationId, {
+        onboarding: {
+          skippedSteps: estado.skippedSteps,
+          completedAt: terminado,
+          firstClassPublishedAt: primeraClase,
+        },
+      });
+    }
+
+    return buildOnboarding({
+      setup,
+      skipped: estado.skippedSteps,
+      completedAt: terminado ? fromBsonDate(terminado).toString() : null,
+      signedUpAt: suscripcion.signedUpAt ? fromBsonDate(suscripcion.signedUpAt).toString() : null,
+      firstClassPublishedAt: primeraClase ? fromBsonDate(primeraClase).toString() : null,
+      now: ahora.toString(),
+    });
+  }
+
+  /**
+   * "Lo dejo para después" (§2.1.3). No marca el paso hecho: lo saca del camino
+   * del asistente y lo deja pendiente, que es lo que realmente está.
+   */
+  async skipStep(organizationId: string, stepId: OnboardingStepId): Promise<OnboardingProgress> {
+    return this.setSkipped(organizationId, (actuales) =>
+      actuales.includes(stepId) ? actuales : [...actuales, stepId],
+    );
+  }
+
+  /** Volver a un paso salteado: el criterio dice "y volver después". */
+  async resumeStep(organizationId: string, stepId: OnboardingStepId): Promise<OnboardingProgress> {
+    return this.setSkipped(organizationId, (actuales) =>
+      actuales.filter((paso) => paso !== stepId),
+    );
+  }
+
+  private async setSkipped(
+    organizationId: string,
+    cambio: (actuales: string[]) => string[],
+  ): Promise<OnboardingProgress> {
+    const suscripcion = await this.orFail(organizationId);
+    const estado = suscripcion.onboarding ?? SIN_ONBOARDING;
+
+    await this.deps.subscriptions.update(organizationId, {
+      onboarding: { ...estado, skippedSteps: cambio(estado.skippedSteps) },
+    });
+
+    return this.onboarding(organizationId);
   }
 
   // ── Datos fiscales ────────────────────────────────────────────────────────
@@ -496,6 +629,19 @@ export class SuscService {
     );
   }
 }
+
+/** El default de las suscripciones creadas antes de que existiera el asistente. */
+const SIN_ONBOARDING = {
+  skippedSteps: [] as string[],
+  completedAt: null,
+  firstClassPublishedAt: null,
+};
+
+/** Cuántas veces se prueba con otro slug antes de rendirse. */
+const MAX_SLUG_RETRIES = 3;
+
+/** Cuatro caracteres alcanzan: es un desempate, no un identificador. */
+const sufijoDeSlug = () => Math.random().toString(36).slice(2, 6);
 
 /** ¿Algo ya pasó el tope de su plan? Es la señal de upsell del panel. */
 function excedeAlgo(

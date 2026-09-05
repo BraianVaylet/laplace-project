@@ -192,14 +192,15 @@ se abre.
 
 ### BILL — Facturación del centro a sus miembros
 
-| Código            | HTTP | Significado              | Mensaje al usuario                                    |
-| ----------------- | ---- | ------------------------ | ----------------------------------------------------- |
-| `LP-BILL-402-001` | 402  | Pago rechazado           | El pago fue rechazado por el emisor.                  |
-| `LP-BILL-409-002` | 409  | Pago duplicado           | Este pago ya fue registrado.                          |
-| `LP-BILL-422-003` | 422  | Monto inválido           | El monto tiene que ser mayor a cero.                  |
-| `LP-BILL-404-004` | 404  | Cargo o pago inexistente | No encontramos ese movimiento.                        |
-| `LP-BILL-409-005` | 409  | Reembolso mayor al pago  | El reembolso no puede superar los {monto} del pago.   |
-| `LP-BILL-402-006` | 402  | Miembro en mora          | Hay {monto} de deuda vencida. Regularizá para seguir. |
+| Código            | HTTP | Significado                      | Mensaje al usuario                                        |
+| ----------------- | ---- | -------------------------------- | --------------------------------------------------------- |
+| `LP-BILL-402-001` | 402  | Pago rechazado                   | El pago fue rechazado por el emisor.                      |
+| `LP-BILL-409-002` | 409  | Pago duplicado                   | Este pago ya fue registrado.                              |
+| `LP-BILL-422-003` | 422  | Monto inválido                   | El monto tiene que ser mayor a cero.                      |
+| `LP-BILL-404-004` | 404  | Cargo o pago inexistente         | No encontramos ese movimiento.                            |
+| `LP-BILL-409-005` | 409  | Reembolso mayor al pago          | El reembolso no puede superar los {monto} del pago.       |
+| `LP-BILL-402-006` | 402  | Miembro en mora                  | Hay {monto} de deuda vencida. Regularizá para seguir.     |
+| `LP-BILL-422-007` | 422  | Venta de mostrador no disponible | La venta de mostrador no está disponible en este entorno. |
 
 ### HLTH — Salud, waivers y consentimientos
 

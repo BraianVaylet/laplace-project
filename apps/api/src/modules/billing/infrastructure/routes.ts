@@ -7,7 +7,10 @@ import {
   createChargeSchema,
   paymentSchema,
   refundPaymentSchema,
+  counterSaleResultSchema,
+  counterSaleSchema,
   registerPaymentSchema,
+  type CounterSaleInput,
   type CreateChargeInput,
   type RefundPaymentInput,
   type RegisterPaymentInput,
@@ -98,6 +101,32 @@ export function createBillingRoutes(
     },
     {
       method: 'POST',
+      path: '/api/v1/sales',
+      tenantScoped: true,
+      isolationFixture: () =>
+        Promise.resolve({
+          path: '/api/v1/sales',
+          body: { memberId: 'mem_x', venueId: 'ven_x', productId: 'prd_x' },
+        }),
+      summary: 'Venta de mostrador: contrato, cargo y cobro en una sola operación',
+      tags: ['billing'],
+      /*
+       * Vender toca las dos cosas: crea un contrato y mueve plata. Quien solo
+       * cobra no puede vender, y quien solo vende no puede cobrar.
+       */
+      permission: { billing: ['charge'], contract: ['create'] },
+      request: { body: counterSaleSchema },
+      response: { status: 201, schema: counterSaleResultSchema },
+      errorCodes: [
+        'LP-BILL-422-007',
+        'LP-BILL-409-002',
+        'LP-PROD-404-003',
+        'LP-SYS-400-008',
+        'LP-AUTH-403-002',
+      ],
+    },
+    {
+      method: 'POST',
       path: '/api/v1/payments',
       tenantScoped: true,
       isolationFixture: () =>
@@ -175,6 +204,7 @@ export function createBillingRoutes(
       '/api/v1/charges/*',
       '/api/v1/payments',
       '/api/v1/payments/*',
+      '/api/v1/sales',
     ]) {
       routes.use(path, guard);
     }
@@ -194,6 +224,20 @@ export function createBillingRoutes(
     requirePermission({ billing: ['refund'] }),
     validated<{ reason: string }, AppEnv>(voidChargeSchema, async (c, input) =>
       c.json(await service.voidCharge(c.req.param('id') as string, input.reason)),
+    ),
+  );
+
+  routes.post(
+    '/api/v1/sales',
+    requirePermission({ billing: ['charge'], contract: ['create'] }),
+    /*
+     * §5.0 la exige en pagos; acá además evita el contrato duplicado: sin la
+     * clave, el reintento de una venta que falló por timeout deja al socio con
+     * dos packs y dos cargos.
+     */
+    requireIdempotencyKey,
+    validated<CounterSaleInput, AppEnv>(counterSaleSchema, async (c, input) =>
+      c.json(await service.sellAtCounter(input, c.get('idempotencyKey') as string), 201),
     ),
   );
 

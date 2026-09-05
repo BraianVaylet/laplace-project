@@ -94,3 +94,31 @@ describe('validacion del entorno', () => {
     expect(() => loadEnv({ ...VALID, APP_ENV: 'produccion' })).toThrowError(/APP_ENV/);
   });
 });
+
+describe('🔴 el rate limit de auth (§9.1)', () => {
+  const base = {
+    MONGODB_URI: 'mongodb://localhost:27017',
+    BETTER_AUTH_SECRET: 'un-secreto-de-test-de-al-menos-32-caracteres',
+    BETTER_AUTH_URL: 'http://localhost:3000',
+  };
+
+  it('viene prendido si nadie dice nada', () => {
+    expect(loadEnv({ ...base } as NodeJS.ProcessEnv).AUTH_RATE_LIMIT).toBe('on');
+  });
+
+  it('se puede apagar en dev: lo necesita el arnés de E2E', () => {
+    const env = loadEnv({ ...base, APP_ENV: 'dev', AUTH_RATE_LIMIT: 'off' } as NodeJS.ProcessEnv);
+
+    expect(env.AUTH_RATE_LIMIT).toBe('off');
+  });
+
+  it('🔴 en staging y en prod el proceso no arranca si lo intentan apagar', () => {
+    // Es la defensa contra la fuerza bruta. Una variable mal puesta la dejaría
+    // sin efecto en silencio, que es la peor forma de perderla.
+    for (const APP_ENV of ['staging', 'prod']) {
+      expect(() =>
+        loadEnv({ ...base, APP_ENV, AUTH_RATE_LIMIT: 'off' } as NodeJS.ProcessEnv),
+      ).toThrow(/AUTH_RATE_LIMIT/);
+    }
+  });
+});

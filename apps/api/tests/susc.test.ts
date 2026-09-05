@@ -265,6 +265,39 @@ describe('el alta self-service (§2.1.3, ADR-004)', () => {
   });
 });
 
+describe('🔴 dos centros con el mismo nombre', () => {
+  it('el segundo también se puede registrar', async () => {
+    /*
+     * Hay más de un "Box Toro" en el país. El slug sale del nombre, y el
+     * primero que llega no puede quedarse con él: el segundo vería fallar su
+     * alta por un detalle de la URL que no eligió ni entiende.
+     */
+    const primero = await signUp(`tocayo-a-${++creados}@laplace.test`);
+    const segundo = await signUp(`tocayo-b-${++creados}@laplace.test`);
+    const cuerpo = { centerName: 'Box Tocayo' };
+
+    const uno = await app.request('/api/v1/subscribers', req(primero, 'POST', cuerpo));
+    const dos = await app.request('/api/v1/subscribers', req(segundo, 'POST', cuerpo));
+
+    expect(uno.status).toBe(201);
+    expect(dos.status).toBe(201);
+    expect(((await dos.json()) as Subscription).centerName).toBe('Box Tocayo');
+  });
+
+  it('🔴 el slug elegido a mano sí choca: es información que pidió', async () => {
+    // Quien lo eligió necesita enterarse de que está tomado, no recibir otro.
+    const primero = await signUp(`slug-a-${++creados}@laplace.test`);
+    const segundo = await signUp(`slug-b-${++creados}@laplace.test`);
+    const cuerpo = { centerName: 'Box Elegido', slug: `elegido-${Date.now()}` };
+
+    const uno = await app.request('/api/v1/subscribers', req(primero, 'POST', cuerpo));
+    const dos = await app.request('/api/v1/subscribers', req(segundo, 'POST', cuerpo));
+
+    expect(uno.status).toBe(201);
+    expect(dos.status).toBeGreaterThanOrEqual(400);
+  });
+});
+
 describe('el trial que se vence (§2.1.3)', () => {
   it('🔴 suspende la cuenta y NO borra nada', async () => {
     const { cookie, suscripcion } = await altaDeCentro('vence');

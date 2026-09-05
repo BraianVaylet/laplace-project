@@ -16,6 +16,14 @@ export class InviteCodeRepository extends TenantRepository<InviteCodeDoc> {
   }
 
   /**
+   * Cuantos codigos vigentes hay. Lo consulta el asistente de onboarding: uno
+   * revocado no sirve para invitar a nadie.
+   */
+  async countLive(): Promise<number> {
+    return this.count({ revokedAt: null } as FilterQuery<InviteCodeDoc>);
+  }
+
+  /**
    * 🔴 **Consulta deliberadamente NO acotada por tenant.**
    *
    * El canje ocurre antes de que la persona pertenezca a ningun centro: el

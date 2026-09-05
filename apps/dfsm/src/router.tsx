@@ -6,7 +6,13 @@ import {
   useParams,
   useRouterState,
 } from '@tanstack/react-router';
+import { Agenda } from './Agenda.js';
 import { ClassRoster } from './ClassRoster.js';
+import { MemberFile } from './MemberFile.js';
+import { Members } from './Members.js';
+import { Products } from './Products.js';
+import { VenueDetail } from './VenueDetail.js';
+import { Venues } from './Venues.js';
 import { Home } from './Home.js';
 import { Kiosk } from './Kiosk.js';
 import { Shell } from './Shell.js';
@@ -53,13 +59,72 @@ const rosterRoute = createRoute({
   },
 });
 
+/**
+ * La ficha 360 lleva el `memberId` **en la URL**: quien atiende la comparte por
+ * WhatsApp con el dueño, la deja abierta y vuelve. Nada de eso funciona si la
+ * pantalla vive en un estado de React.
+ */
+const memberRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/miembros/$memberId',
+  component: function MemberRoute() {
+    const { memberId } = useParams({ from: '/miembros/$memberId' });
+
+    return <MemberFile memberId={memberId} />;
+  },
+});
+
+const venuesRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sedes',
+  component: Venues,
+});
+
+const venueDetailRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/sedes/$venueId',
+  component: function VenueDetailRoute() {
+    const { venueId } = useParams({ from: '/sedes/$venueId' });
+
+    return <VenueDetail venueId={venueId} />;
+  },
+});
+
+const agendaRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/horario',
+  component: Agenda,
+});
+
+const membersRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/miembros',
+  component: Members,
+});
+
+const productsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/productos',
+  component: Products,
+});
+
 const kioskRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/kiosko',
   component: Kiosk,
 });
 
-export const routeTree = rootRoute.addChildren([homeRoute, rosterRoute, kioskRoute]);
+export const routeTree = rootRoute.addChildren([
+  homeRoute,
+  rosterRoute,
+  memberRoute,
+  venuesRoute,
+  venueDetailRoute,
+  membersRoute,
+  productsRoute,
+  agendaRoute,
+  kioskRoute,
+]);
 
 export const router = createRouter({ routeTree });
 

@@ -4,6 +4,7 @@ import {
   createMemberSchema,
   memberNoteResponseSchema,
   memberNoteSchema,
+  memberOverviewSchema,
   memberResponseSchema,
   memberSearchHitSchema,
   memberSearchQuerySchema,
@@ -14,6 +15,7 @@ import {
 } from '@laplace/schemas';
 import type { AppEnv } from '../../../app.js';
 import { requireOrganization, requirePermission } from '../../../auth/organization.js';
+import { authorize } from '../../../auth/permissions.js';
 import { requireSession } from '../../../auth/session.js';
 import {
   entitlementsContext,
@@ -25,6 +27,7 @@ import { registerRoutes, type IsolationFixture } from '../../../http/route-regis
 import { parseQuery, validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import type { MemberService } from '../application/member-service.js';
+import type { MemberOverviewService } from '../application/member-overview-service.js';
 import { toMemberResponse, toNoteResponse } from './member-response.js';
 
 const idParams = z.object({ id: z.string() });
@@ -40,6 +43,7 @@ export const VICTIM_MEMBER_NAME = 'Secreta';
 
 export function createMemberRoutes(
   service: MemberService,
+  overview: MemberOverviewService,
   entitlements: EntitlementsLoader,
   /** Siembra un socio del tenant víctima. La arma el módulo, que tiene el repositorio. */
   seedVictimMember: (victimTenantId: string) => Promise<string>,
@@ -184,6 +188,23 @@ export function createMemberRoutes(
     },
     {
       method: 'GET',
+      path: '/api/v1/members/:id/overview',
+      tenantScoped: true,
+      isolationFixture: subPath('/overview'),
+      summary: 'La ficha 360: contratos, próximas reservas, asistencia y waivers',
+      tags: ['members'],
+      /*
+       * 🔴 Sin plata. El estado de cuenta vive en `/statement` con
+       * `billing:read`: el coach abre esta pantalla todos los días y la deuda
+       * del socio no es asunto suyo (§2.1.12).
+       */
+      permission: { athlete: ['read'] },
+      request: { params: idParams },
+      response: { status: 200, schema: memberOverviewSchema },
+      errorCodes: ['LP-MEMB-404-003', 'LP-AUTH-403-002'],
+    },
+    {
+      method: 'GET',
       path: '/api/v1/members/:id/notes',
       tenantScoped: true,
       isolationFixture: subPath('/notes'),
@@ -224,11 +245,28 @@ export function createMemberRoutes(
     routes.use('/api/v1/members/*', guard);
   }
 
+  /*
+   * 🔴 Quien ve plata y quien no (§2.1.12).
+   *
+   * No es un permiso de ruta: el coach tiene que poder abrir la ficha —es su
+   * pantalla de trabajo— y lo que le falta es un dato, no la pantalla. Se
+   * decide acá, del lado del servidor: mandar la deuda para que el front la
+   * esconda es mandarla igual.
+   */
+  const veLaPlata = (c: { get: (key: 'org') => unknown }) =>
+    authorize((c.get('org') as { roles: string[] } | undefined)?.roles ?? [], {
+      billing: ['read'],
+    });
+
   routes.get('/api/v1/members', requirePermission({ athlete: ['read'] }), async (c) => {
     const query = listQuery.parse(c.req.query());
     const page = await service.list(query, query.cursor, query.limit);
+    const conPlata = veLaPlata(c);
 
-    return c.json({ items: page.items.map(toMemberResponse), nextCursor: page.nextCursor });
+    return c.json({
+      items: page.items.map((doc) => toMemberResponse(doc, conPlata)),
+      nextCursor: page.nextCursor,
+    });
   });
 
   /*
@@ -248,19 +286,21 @@ export function createMemberRoutes(
     // históricos: archivar a los que se fueron no debe costar plata (§2.2.1).
     requireWithinLimit('activeMembers', () => service.countActive()),
     validated(createMemberSchema, async (c, input) =>
-      c.json(toMemberResponse(await service.create(input)), 201),
+      c.json(toMemberResponse(await service.create(input), veLaPlata(c)), 201),
     ),
   );
 
   routes.get('/api/v1/members/:id', requirePermission({ athlete: ['read'] }), async (c) =>
-    c.json(toMemberResponse(await service.getByPublicId(c.req.param('id')))),
+    c.json(toMemberResponse(await service.getByPublicId(c.req.param('id')), veLaPlata(c))),
   );
 
   routes.patch(
     '/api/v1/members/:id',
     requirePermission({ athlete: ['update'] }),
     validated(updateMemberSchema, async (c, input) =>
-      c.json(toMemberResponse(await service.update(c.req.param('id') as string, input))),
+      c.json(
+        toMemberResponse(await service.update(c.req.param('id') as string, input), veLaPlata(c)),
+      ),
     ),
   );
 
@@ -268,27 +308,49 @@ export function createMemberRoutes(
     '/api/v1/members/:id/status',
     requirePermission({ athlete: ['update'] }),
     validated(changeStatusSchema, async (c, input) =>
-      c.json(toMemberResponse(await service.changeStatus(c.req.param('id') as string, input.to))),
+      c.json(
+        toMemberResponse(
+          await service.changeStatus(c.req.param('id') as string, input.to),
+          veLaPlata(c),
+        ),
+      ),
     ),
   );
 
   routes.post(
     '/api/v1/members/:id/suspend',
     requirePermission({ athlete: ['update'] }),
-    async (c) => c.json(toMemberResponse(await service.setSuspended(c.req.param('id'), true))),
+    async (c) =>
+      c.json(toMemberResponse(await service.setSuspended(c.req.param('id'), true), veLaPlata(c))),
   );
 
   routes.post(
     '/api/v1/members/:id/unsuspend',
     requirePermission({ athlete: ['update'] }),
-    async (c) => c.json(toMemberResponse(await service.setSuspended(c.req.param('id'), false))),
+    async (c) =>
+      c.json(toMemberResponse(await service.setSuspended(c.req.param('id'), false), veLaPlata(c))),
   );
 
   routes.post(
     '/api/v1/members/:id/archive',
     requirePermission({ athlete: ['archive'] }),
     async (c) =>
-      c.json(toMemberResponse(await service.changeStatus(c.req.param('id'), 'archived'))),
+      c.json(
+        toMemberResponse(await service.changeStatus(c.req.param('id'), 'archived'), veLaPlata(c)),
+      ),
+  );
+
+  routes.get(
+    '/api/v1/members/:id/overview',
+    requirePermission({ athlete: ['read'] }),
+    async (c) => {
+      const memberId = c.req.param('id');
+      // Se resuelve la ficha primero: pedir la 360 de alguien que no existe en
+      // este centro tiene que dar 404, no una pantalla llena de vacíos.
+      await service.getByPublicId(memberId);
+
+      return c.json(await overview.of(memberId));
+    },
   );
 
   routes.get('/api/v1/members/:id/notes', requirePermission({ athleteNote: ['read'] }), async (c) =>
