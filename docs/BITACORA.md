@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `susc`
 - **Tipo:** feature
-- **Commit/PR:** —
+- **Commit/PR:** `317b87a` (rama `feat/phase-1-ui-debt`)
 - **Trello:** https://trello.com/c/evThfd56 (F1-38) — movida a **Completadas**
 - **Qué cambió:** la landing tiene `/empezar`: nombre, email, clave y centro, y en dos minutos
   alguien es cliente con 14 días de prueba. El CTA de la tabla de precios ahora lleva ahí, con el
