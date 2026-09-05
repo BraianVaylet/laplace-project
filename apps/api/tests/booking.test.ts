@@ -499,7 +499,8 @@ describe('reserva', () => {
     );
 
     // El socio que toca dos veces "Reservar" gastaría dos créditos.
-    expect(res.status).toBe(422);
+    // 400 y `LP-SYS-400-008`: falta un encabezado, el pedido está mal armado.
+    expect(res.status).toBe(400);
   });
 
   it('la misma clave devuelve la misma reserva, no una segunda', async () => {

@@ -1,7 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { createApiClient } from '@laplace/client';
+import { ToastProvider } from '@laplace/ui';
 import { MemberFile } from './MemberFile.js';
 
 /**
@@ -125,7 +127,9 @@ function montar() {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemberFile memberId="mem_1" client={client} />
+      <ToastProvider>
+        <MemberFile memberId="mem_1" client={client} />
+      </ToastProvider>
     </QueryClientProvider>,
   );
 }
@@ -273,6 +277,73 @@ describe('los estados vacíos ofrecen qué hacer', () => {
     montar();
 
     expect(await screen.findByText(/No tiene nada reservado/)).toBeDefined();
+  });
+});
+
+describe('🔴 vender desde la ficha (F1-37)', () => {
+  const PRODUCTOS = {
+    items: [
+      {
+        publicId: 'prd_1',
+        name: 'Pack 8 clases',
+        type: 'class_pack',
+        priceCents: 6_000_000,
+        active: true,
+      },
+    ],
+  };
+
+  const conProductos = (url: string) =>
+    url.includes('/products') ? respuesta(PRODUCTOS) : porDefecto(url);
+
+  it('la venta es una sola llamada, no cuatro', async () => {
+    // Encadenarlas desde el navegador dejaría un contrato sin cargo, o un cargo
+    // pagado con el contrato inactivo, cada vez que se corta algo en el medio.
+    fetchMock.mockImplementation((url: string) => Promise.resolve(conProductos(String(url))));
+    montar();
+    await screen.findByText('Micaela Sosa');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Venderle un pack' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Vender' }));
+
+    await waitFor(() => {
+      const ventas = fetchMock.mock.calls.filter(([url]) => String(url).includes('/sales'));
+      expect(ventas).toHaveLength(1);
+      expect(JSON.parse(String((ventas[0]?.[1] as RequestInit).body))).toMatchObject({
+        memberId: 'mem_1',
+        productId: 'prd_1',
+      });
+    });
+  });
+
+  it('🔴 manda la clave de idempotencia: dos clics no son dos packs', async () => {
+    fetchMock.mockImplementation((url: string) => Promise.resolve(conProductos(String(url))));
+    montar();
+    await screen.findByText('Micaela Sosa');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Venderle un pack' }));
+    await userEvent.click(screen.getByRole('button', { name: 'Vender' }));
+
+    await waitFor(() => {
+      const venta = fetchMock.mock.calls.find(([url]) => String(url).includes('/sales'));
+      const headers = (venta?.[1] as RequestInit).headers as Record<string, string>;
+      expect(headers['idempotency-key']).toBeTruthy();
+    });
+  });
+
+  it('cobrar en el momento es opcional: se puede vender y cobrar después', async () => {
+    fetchMock.mockImplementation((url: string) => Promise.resolve(conProductos(String(url))));
+    montar();
+    await screen.findByText('Micaela Sosa');
+
+    await userEvent.click(screen.getByRole('button', { name: 'Venderle un pack' }));
+    await userEvent.click(screen.getByLabelText(/Cobrar ahora/));
+    await userEvent.click(screen.getByRole('button', { name: 'Vender' }));
+
+    await waitFor(() => {
+      const venta = fetchMock.mock.calls.find(([url]) => String(url).includes('/sales'));
+      expect(JSON.parse(String((venta?.[1] as RequestInit).body)).payment).toBeUndefined();
+    });
   });
 });
 

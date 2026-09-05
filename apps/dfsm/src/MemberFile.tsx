@@ -1,11 +1,14 @@
-import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import type { ReactNode } from 'react';
+import { useMutation, useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useRef, useState, type ReactNode } from 'react';
 import { Temporal } from '@js-temporal/polyfill';
 import type {
   AccountStatement,
+  CounterSaleResult,
   MemberNoteResponse,
   MemberOverview,
   MemberResponse,
+  PaymentMethod,
+  Product,
   Venue,
 } from '@laplace/schemas';
 import {
@@ -15,7 +18,19 @@ import {
   type ApiClient,
   type VenueTime,
 } from '@laplace/client';
-import { Badge, Button, Card, EmptyState, ErrorState, Skeleton } from '@laplace/ui';
+import {
+  Badge,
+  Button,
+  Card,
+  Checkbox,
+  Dialog,
+  EmptyState,
+  ErrorState,
+  FormField,
+  Select,
+  Skeleton,
+  useToast,
+} from '@laplace/ui';
 import { api } from './api.js';
 
 /**
@@ -37,6 +52,10 @@ export interface MemberFileProps {
 }
 
 export function MemberFile({ memberId, client = api }: MemberFileProps) {
+  const queryClient = useQueryClient();
+  const toast = useToast();
+  const [vender, setVender] = useState(false);
+
   const socio = useQuery({
     queryKey: ['member', memberId],
     queryFn: () => client.get<MemberResponse>(`/members/${memberId}`),
@@ -74,6 +93,38 @@ export function MemberFile({ memberId, client = api }: MemberFileProps) {
   );
   const zona: VenueTime = { timeZone: sede?.timeZone ?? 'America/Argentina/Buenos_Aires' };
 
+  const productos = useQuery({
+    queryKey: ['products'],
+    queryFn: () => client.get<{ items: Product[] }>('/products'),
+    enabled: vender,
+  });
+
+  const venta = useMutation({
+    mutationFn: (datos: { body: Record<string, unknown>; key: string }) =>
+      /*
+       * 🔴 **Una sola llamada.** Vender crea el contrato, emite el cargo,
+       * registra el pago y activa el contrato — todo del lado del servidor y en
+       * una transacción. Encadenarlas desde acá dejaría un contrato sin cargo,
+       * o un cargo pagado con el contrato inactivo, cada vez que se corte algo
+       * en el medio.
+       *
+       * La clave de idempotencia hace que dos clics no sean dos packs.
+       */
+      client.post<CounterSaleResult>('/sales', datos.body, { idempotencyKey: datos.key }),
+    onSuccess: async (resultado) => {
+      setVender(false);
+      toast.show({
+        tone: 'success',
+        message:
+          resultado.contractStatus === 'active'
+            ? `Vendimos ${resultado.productName} y quedó al día.`
+            : `Vendimos ${resultado.productName}. Queda el cargo pendiente.`,
+      });
+      await queryClient.invalidateQueries({ queryKey: ['member', memberId] });
+    },
+    onError: (error: unknown) => toast.show({ tone: 'danger', message: mensajeDe(error) }),
+  });
+
   return (
     <div className="flex flex-col gap-6">
       <Seccion
@@ -104,7 +155,7 @@ export function MemberFile({ memberId, client = api }: MemberFileProps) {
         cargando="Cargando sus packs"
         error="No pudimos traer sus packs"
       >
-        {(datos) => <Packs ficha={datos} />}
+        {(datos) => <Packs ficha={datos} onVender={() => setVender(true)} />}
       </Seccion>
 
       <Seccion
@@ -142,9 +193,141 @@ export function MemberFile({ memberId, client = api }: MemberFileProps) {
       >
         {(lista) => <Notas notas={lista} zona={zona} />}
       </Seccion>
+
+      {vender ? (
+        <VentaDialog
+          productos={productos.data?.items ?? []}
+          cargando={productos.isPending}
+          enviando={venta.isPending}
+          onClose={() => setVender(false)}
+          onVender={(body, key) => venta.mutate({ body: { ...body, memberId }, key })}
+          venueId={sede?.publicId ?? socio.data?.venueIds[0] ?? ''}
+        />
+      ) : null}
     </div>
   );
 }
+
+/**
+ * La venta de mostrador (F1-37).
+ *
+ * 🔴 **Cobrar es opcional.** Se puede vender y cobrar el viernes: el cargo
+ * queda pendiente y el contrato esperando la plata. Forzar el cobro acá
+ * obligaría al mostrador a mentir para poder cerrar la pantalla.
+ */
+function VentaDialog({
+  productos,
+  cargando,
+  enviando,
+  venueId,
+  onClose,
+  onVender,
+}: {
+  productos: Product[];
+  cargando: boolean;
+  enviando: boolean;
+  venueId: string;
+  onClose: () => void;
+  onVender: (body: Record<string, unknown>, key: string) => void;
+}) {
+  const vendibles = productos.filter((producto) => producto.active);
+  /*
+   * El elegido cae al primero mientras nadie toque el select: el catálogo llega
+   * después de abrir el diálogo, así que un estado inicial calculado sobre la
+   * lista vacía dejaría el botón muerto hasta que alguien despliegue el combo.
+   */
+  const [elegidoManual, setProductId] = useState('');
+  const productId = elegidoManual || (vendibles[0]?.publicId ?? '');
+  const [cobra, setCobra] = useState(true);
+  const [metodo, setMetodo] = useState<PaymentMethod>('cash');
+
+  /*
+   * La clave se genera una vez por apertura del diálogo, no por clic: si se
+   * generara por clic, dos clics serían dos ventas — que es justo lo que la
+   * clave viene a evitar.
+   */
+  const clave = useRef(`venta-${crypto.randomUUID()}`);
+
+  const elegido = vendibles.find((producto) => producto.publicId === productId);
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title="Venderle un pack"
+      description="Queda el contrato, el cargo y —si cobrás ahora— el pago, todo junto."
+    >
+      {cargando ? (
+        <Skeleton className="h-24" label="Cargando el catálogo" />
+      ) : vendibles.length === 0 ? (
+        <p className="text-fg-muted text-sm">
+          No hay nada para vender todavía. Creá un producto en el catálogo.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-4">
+          <FormField label="Producto" required>
+            <Select
+              options={vendibles.map((producto) => ({
+                value: producto.publicId,
+                label: `${producto.name} — ${pesos(producto.priceCents)}`,
+              }))}
+              value={productId}
+              onChange={(event) => setProductId(event.currentTarget.value)}
+            />
+          </FormField>
+
+          <Checkbox
+            label="Cobrar ahora"
+            description="Si no cobrás, el cargo queda pendiente y el contrato espera el pago."
+            checked={cobra}
+            onChange={(event) => setCobra(event.currentTarget.checked)}
+          />
+
+          {cobra ? (
+            <FormField label="Medio de pago" required>
+              <Select
+                options={MEDIOS}
+                value={metodo}
+                onChange={(event) => setMetodo(event.currentTarget.value as PaymentMethod)}
+              />
+            </FormField>
+          ) : null}
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              disabled={enviando || !elegido}
+              onClick={() =>
+                elegido &&
+                onVender(
+                  {
+                    venueId,
+                    productId: elegido.publicId,
+                    ...(cobra
+                      ? { payment: { method: metodo, amountCents: elegido.priceCents } }
+                      : {}),
+                  },
+                  clave.current,
+                )
+              }
+            >
+              {enviando ? 'Vendiendo…' : 'Vender'}
+            </Button>
+            <Button variant="secondary" onClick={onClose}>
+              Cancelar
+            </Button>
+          </div>
+        </div>
+      )}
+    </Dialog>
+  );
+}
+
+const MEDIOS = [
+  { value: 'cash', label: 'Efectivo' },
+  { value: 'transfer', label: 'Transferencia' },
+  { value: 'card', label: 'Tarjeta' },
+  { value: 'other', label: 'Otro' },
+];
 
 /**
  * Una sección con sus tres estados propios.
@@ -221,30 +404,43 @@ function Cuenta({ estado }: { estado: AccountStatement }) {
   );
 }
 
-function Packs({ ficha }: { ficha: MemberOverview }) {
+function Packs({ ficha, onVender }: { ficha: MemberOverview; onVender: () => void }) {
   if (ficha.contracts.length === 0) {
     return (
       <EmptyState
         title="Todavía no compró nada"
         description="Sin un pack o una membresía no puede reservar."
-        action={<Button>Venderle un pack</Button>}
+        action={<Button onClick={onVender}>Venderle un pack</Button>}
       />
     );
   }
 
+  /*
+   * El botón está también cuando ya tiene packs: el mostrador vende el segundo
+   * todo el tiempo, y esconderlo obligaría a irse a otra pantalla para algo que
+   * se hace con la persona enfrente.
+   */
   return (
-    <ul className="flex flex-col gap-3">
-      {ficha.contracts.map((contrato) => (
-        <li key={contrato.contractId} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-          <span className="text-fg text-sm font-medium">{contrato.productName}</span>
-          <Badge tone={contrato.status === 'active' ? 'success' : 'neutral'}>
-            {ESTADOS_CONTRATO[contrato.status] ?? contrato.status}
-          </Badge>
-          <span className="text-fg-muted text-sm">{creditosDe(contrato)}</span>
-          <span className="text-fg-muted text-sm">{vencimientoDe(contrato)}</span>
-        </li>
-      ))}
-    </ul>
+    <div className="flex flex-col gap-3">
+      <ul className="flex flex-col gap-3">
+        {ficha.contracts.map((contrato) => (
+          <li key={contrato.contractId} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-fg text-sm font-medium">{contrato.productName}</span>
+            <Badge tone={contrato.status === 'active' ? 'success' : 'neutral'}>
+              {ESTADOS_CONTRATO[contrato.status] ?? contrato.status}
+            </Badge>
+            <span className="text-fg-muted text-sm">{creditosDe(contrato)}</span>
+            <span className="text-fg-muted text-sm">{vencimientoDe(contrato)}</span>
+          </li>
+        ))}
+      </ul>
+
+      <div>
+        <Button variant="secondary" className="h-11" onClick={onVender}>
+          Venderle un pack
+        </Button>
+      </div>
+    </div>
   );
 }
 

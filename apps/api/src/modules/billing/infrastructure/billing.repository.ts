@@ -1,5 +1,5 @@
 import type { FilterQuery } from 'mongoose';
-import { TenantRepository } from '../../../tenancy/repository.js';
+import { TenantRepository, sessionOption } from '../../../tenancy/repository.js';
 import {
   ChargeModel,
   PaymentModel,
@@ -15,9 +15,20 @@ export class ChargeRepository extends TenantRepository<ChargeDoc> {
     super(ChargeModel, 'charge');
   }
 
+  /**
+   * El cargo de una venta de mostrador ya registrada (F1-37). Es lo que hace
+   * que el reintento de una venta devuelva la original en vez de crear otra.
+   */
+  async findByIdempotencyKey(key: string): Promise<ChargeDoc | null> {
+    return this.findOne({ idempotencyKey: key } as FilterQuery<ChargeDoc>);
+  }
+
   /** Todos los cargos de un socio, del mas viejo al mas nuevo. */
   async ofMember(memberId: string): Promise<ChargeDoc[]> {
+    // Con la sesión: adentro de una transacción tiene que ver el cargo que esa
+    // misma transacción acaba de crear (F1-37).
     return ChargeModel.find(this.scope({ memberId } as FilterQuery<ChargeDoc>))
+      .setOptions(sessionOption())
       .sort({ dueAt: 1 })
       .lean<ChargeDoc[]>()
       .exec();

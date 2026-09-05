@@ -48,10 +48,19 @@ export abstract class TenantRepository<TDoc extends Record<string, unknown>> {
     return scoped;
   }
 
+  /*
+   * 🔴 Las lecturas viajan con la sesión de la transacción, igual que las
+   * escrituras.
+   *
+   * Sin esto, adentro de una transacción una consulta **no ve lo que esa misma
+   * transacción acaba de escribir**: la venta de mostrador creaba el cargo y el
+   * pago no lo encontraba para imputarlo (F1-37). Es la garantía de
+   * "read your own writes", y en Mongo se pide pasando la sesión.
+   */
   async findByPublicId(id: string, includeDeleted = false): Promise<TDoc | null> {
     return this.model
       .findOne(this.scope({ publicId: id } as FilterQuery<TDoc>, includeDeleted))
-      .setOptions({ withDeleted: includeDeleted })
+      .setOptions({ withDeleted: includeDeleted, ...sessionOption() })
       .lean<TDoc>()
       .exec();
   }
@@ -59,13 +68,13 @@ export abstract class TenantRepository<TDoc extends Record<string, unknown>> {
   async findOne(filter: FilterQuery<TDoc>, includeDeleted = false): Promise<TDoc | null> {
     return this.model
       .findOne(this.scope(filter, includeDeleted))
-      .setOptions({ withDeleted: includeDeleted })
+      .setOptions({ withDeleted: includeDeleted, ...sessionOption() })
       .lean<TDoc>()
       .exec();
   }
 
   async count(filter: FilterQuery<TDoc> = {}): Promise<number> {
-    return this.model.countDocuments(this.scope(filter)).exec();
+    return this.model.countDocuments(this.scope(filter)).setOptions(sessionOption()).exec();
   }
 
   /**
@@ -89,7 +98,7 @@ export abstract class TenantRepository<TDoc extends Record<string, unknown>> {
       .find(query)
       // La opcion viaja al plugin: sin esto, el plugin vuelve a filtrar los
       // borrados y `includeDeleted` no serviria para nada.
-      .setOptions({ withDeleted: options.includeDeleted === true })
+      .setOptions({ withDeleted: options.includeDeleted === true, ...sessionOption() })
       .sort({ [sortField]: order, _id: order })
       .limit(limit + 1)
       .lean<TDoc[]>()

@@ -23,6 +23,27 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-05 — F1-37: la venta de mostrador, y dos huecos que destapó
+
+- **Módulo:** `billing`
+- **Tipo:** feature
+- **Commit/PR:** —
+- **Trello:** https://trello.com/c/qLGeCC1l (F1-37) — movida a **Completadas**
+- **Qué cambió:** `POST /api/v1/sales` vende un producto a un socio en **una sola operación**:
+  contrato, cargo, pago y activación, todo en una transacción y con `Idempotency-Key`. Desde la
+  ficha 360, el botón "Venderle un pack" ahora hace algo. El E2E del camino 2 recorre la venta por
+  pantalla, en la sesión del mostrador.
+- **Por qué:** era la última tarjeta de deuda de UI, y resultó no ser de UI: vender eran cuatro
+  llamadas que nadie juntaba, y encadenarlas desde el navegador dejaba contratos sin cargo o cargos
+  pagados con el contrato inactivo. Es plata: §5.2.4 pide transacción.
+- **Impacto:** ruta nueva, código de error `LP-BILL-422-007`, `idempotencyKey` en `Charge` con su
+  índice único y su migración. **Dos fixes que salieron de acá:** las lecturas del repositorio base
+  no viajaban con la sesión de la transacción —adentro de una transacción no veían lo que esa misma
+  transacción acababa de escribir—, y el guard de idempotencia emitía `LP-SYS-422-006` donde la
+  documentación declara `LP-SYS-400-008`.
+- **Pendiente:** ninguno de esta tarjeta. Queda F0-16 (staging), bloqueada esperando las
+  credenciales de Railway, Atlas y Backblaze.
+
 ## 2026-09-05 — F1-36: el padrón y los códigos de invitación
 
 - **Módulo:** `members`

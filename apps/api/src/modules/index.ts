@@ -245,6 +245,30 @@ export function createModules(deps: ModuleDeps) {
       set: (memberId, balanceCents) => members.service.setBalance(memberId, balanceCents),
     },
     venues: { timeZoneOf: (venueId) => venues.service.timeZoneOf(venueId) },
+    /*
+     * La venta de mostrador (F1-37). Se resuelve al atender el pedido porque
+     * Contracts se arma más abajo; el puerto evita que Billing lo importe.
+     */
+    contracts: {
+      sell: async (input) => {
+        const contrato = await contracts.service.sell({
+          memberId: input.memberId,
+          venueId: input.venueId,
+          productId: input.productId,
+          ...(input.priceCents === undefined ? {} : { priceCents: input.priceCents }),
+        });
+
+        return {
+          contractId: String(contrato['publicId']),
+          productName: contrato.productName,
+          priceCents: contrato.priceSnapshotCents,
+          status: contrato.status,
+        };
+      },
+      activate: async (contractId) => {
+        await contracts.service.changeStatus(contractId, 'active');
+      },
+    },
   });
 
   /*

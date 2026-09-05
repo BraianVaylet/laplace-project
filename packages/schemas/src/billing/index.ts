@@ -204,3 +204,51 @@ export const tillSummarySchema = z.object({
 });
 
 export type TillSummary = z.infer<typeof tillSummarySchema>;
+
+/**
+ * 🔴 La venta de mostrador (§2.1.16, F1-37).
+ *
+ * Vender **no es una llamada, son cuatro**: crear el contrato, emitir el cargo,
+ * registrar el pago y activar el contrato. Encadenarlas desde el navegador deja
+ * un contrato sin cargo, o un cargo pagado con el contrato inactivo, cada vez
+ * que se corta algo en el medio. Es plata: va en una transacción (§5.2.4).
+ *
+ * El pago es opcional. Se puede vender y cobrar después —el cargo queda
+ * pendiente y el contrato esperando el pago—, que es lo que pasa cuando alguien
+ * se lleva el pack y paga el viernes.
+ */
+export const counterSaleSchema = z.object({
+  memberId: z.string().min(1, 'Elegí el socio.'),
+  venueId: z.string().min(1, 'Elegí la sede.'),
+  productId: z.string().min(1, 'Elegí el producto.'),
+  /** Lo realmente cobrado, si difiere del precio de lista (promo, ajuste). */
+  priceCents: priceCentsSchema.optional(),
+  /** Si cobra en el momento. Sin esto, el cargo queda pendiente. */
+  payment: z
+    .object({
+      method: paymentMethodSchema,
+      /** Puede ser menor al total: una seña deja el resto pendiente. */
+      amountCents: priceCentsSchema.refine(
+        (cents) => cents > 0,
+        'El monto tiene que ser mayor a cero.',
+      ),
+      receipt: z.string().trim().max(60).optional(),
+      note: z.string().trim().max(200).optional(),
+    })
+    .optional(),
+});
+
+export type CounterSaleInput = z.infer<typeof counterSaleSchema>;
+
+export const counterSaleResultSchema = z.object({
+  contractId: z.string(),
+  productName: z.string(),
+  chargeId: z.string(),
+  amountCents: z.number().int(),
+  paidCents: z.number().int(),
+  paymentId: z.string().nullable(),
+  /** `active` si quedó saldado, `pending_payment` si falta plata. */
+  contractStatus: z.string(),
+});
+
+export type CounterSaleResult = z.infer<typeof counterSaleResultSchema>;

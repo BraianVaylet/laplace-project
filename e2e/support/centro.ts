@@ -179,6 +179,43 @@ export async function claseEn(
 }
 
 /** Un socio con cuenta propia y un pack activo, como lo vende el mostrador. */
+/** Un socio con cuenta propia, sin nada comprado. */
+export async function socioSinPack(
+  centro: Centro,
+  nombre: string,
+): Promise<{ socio: Sesion; memberId: string }> {
+  const codigo = await json<{ code: string }>(centro.smu.api, 'post', 'invite-codes', {
+    venueId: centro.venueId,
+    maxUses: 5,
+    expiresAt: '2030-12-31T00:00:00Z',
+  });
+
+  const socio = await nuevaSesion(`${unico(nombre)}@laplace.test`);
+  const canje = await json<{ memberId: string; organizationId: string }>(
+    socio.api,
+    'post',
+    'invite-codes/redeem',
+    { code: codigo.code, firstName: nombre, lastName: 'Socio' },
+  );
+  await activar(socio, canje.organizationId);
+
+  return { socio, memberId: canje.memberId };
+}
+
+/** El producto que el mostrador va a vender. */
+export async function packDe(centro: Centro, creditos = 8): Promise<string> {
+  const producto = await json<{ publicId: string }>(centro.smu.api, 'post', 'products', {
+    name: `Pack ${creditos} clases`,
+    type: 'class_pack',
+    priceCents: 6_000_000,
+    credits: creditos,
+    durationDays: 60,
+    venueIds: [centro.venueId],
+  });
+
+  return producto.publicId;
+}
+
 export async function socioConPack(
   centro: Centro,
   nombre: string,

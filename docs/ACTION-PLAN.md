@@ -19,7 +19,7 @@
 | ----------------------- | -------: | -----------: | -----: |
 | Fase 0 — Fundaciones    |       16 |           89 |     15 |
 | Fase 1 — MVP vendible   |       32 |          186 |     32 |
-| Fase 1 — deuda de UI    |        5 |           31 |      4 |
+| Fase 1 — deuda de UI    |        5 |           31 |      5 |
 | Fase 2 — Diferenciación | 7 épicas |         ~140 |      0 |
 | Fase 3 — Profundidad    | 5 épicas |         ~110 |      0 |
 | Fase 4 — Escala         | 5 épicas |          ~80 |      0 |
@@ -2087,7 +2087,7 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
 - **revocar un código aclara la duda que frena a cualquiera antes de tocar el botón:** deja de
   funcionar de inmediato, y quienes ya lo usaron siguen siendo socios.
 
-## [ ] F1-37 · DFSM: vender y cobrar desde el mostrador
+## [x] F1-37 · DFSM: vender y cobrar desde el mostrador
 
 - **module:** billing
 - **description:** Vender un producto a un socio y registrar el cobro, desde la ficha. Es el CTA que
@@ -2116,9 +2116,30 @@ cancelledSessions }` — colección nueva con su migración (`20260902160000`).
   ninguna las junta: nadie escucha `contract.sold`, así que la venta no genera cargo. Encadenarlas
   desde el navegador significa que un corte en el medio deja un contrato sin cargo, o un cargo
   pagado con el contrato inactivo. Es plata, y §5.2.4 pide transacción.
-  **Esta tarjeta necesita un caso de uso nuevo en la API** —una venta de mostrador atómica, con
-  `Idempotency-Key`— antes de la pantalla. No es deuda de UI: es un hueco del backend que la
+  **Esta tarjeta necesitaba un caso de uso nuevo en la API** —una venta de mostrador atómica, con
+  `Idempotency-Key`— antes de la pantalla. No era deuda de UI: era un hueco del backend que la
   pantalla destapó.
+- **cómo se cerró:** `POST /api/v1/sales`. Vende, emite el cargo, registra el pago si lo hay y
+  activa el contrato, **todo en una transacción**. Es idempotente por la clave, guardada en el
+  **cargo** —la única pieza que siempre existe, porque se puede vender hoy y cobrar el viernes— con
+  su índice único y su migración. Permiso doble, `billing:charge` + `contract:create`: quien solo
+  cobra no vende, y quien solo vende no cobra. Código nuevo: `LP-BILL-422-007`.
+- **cobrar es opcional y una seña no activa:** se puede vender y cobrar el viernes; el cargo queda
+  pendiente y el contrato esperando. Parte no es todo.
+- **🔴 encontrado de paso, y era grave: las lecturas del repositorio base no viajaban con la sesión
+  de la transacción.** `create` y `update` sí, `find`, `findOne`, `count` y `list` no. Adentro de una
+  transacción, una consulta **no veía lo que esa misma transacción acababa de escribir**: la venta
+  creaba el cargo y el pago no lo encontraba para imputarlo. Es la garantía de "read your own
+  writes", y sin ella cualquier caso de uso que escriba y después lea dentro de una transacción da
+  un resultado silenciosamente equivocado.
+- **🔴 también encontrado de paso: un código de error documentado que nadie emitía.**
+  `docs/errors.md` declara `LP-SYS-400-008` para "falta el header `Idempotency-Key`", pero el guard
+  contestaba `LP-SYS-422-006` — que significa "payload inválido". Quien buscaba el documentado no
+  encontraba nada; quien encontraba el otro leía un mensaje que no describe el problema. Ahora el
+  guard emite el que está publicado, con su 400.
+- **el camino 2 del E2E se recorre entero por pantalla:** el mostrador vende desde la ficha en su
+  propia sesión de navegador y el socio reserva, cancela y mira su saldo en la WAFM. Es el único de
+  los tres caminos que cruza las dos aplicaciones.
 
 ---
 

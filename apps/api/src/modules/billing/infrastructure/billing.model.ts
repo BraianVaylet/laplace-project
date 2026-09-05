@@ -24,6 +24,12 @@ export interface ChargeDoc extends Record<string, unknown> {
   dueAt: Date;
   status: string;
   description: string;
+  /**
+   * La clave de la **venta de mostrador** que lo originó (F1-37). Va en el
+   * cargo y no en el pago porque el cargo es la única pieza que siempre existe:
+   * se puede vender hoy y cobrar el viernes.
+   */
+  idempotencyKey?: string | null;
 }
 
 const chargeSchema = new Schema<ChargeDoc>(
@@ -37,6 +43,7 @@ const chargeSchema = new Schema<ChargeDoc>(
     dueAt: { type: Date, required: true },
     status: { type: String, required: true, default: 'pending' },
     description: { type: String, required: true },
+    idempotencyKey: { type: String, required: false, default: null },
   },
   { collection: COLLECTIONS.charge },
 );

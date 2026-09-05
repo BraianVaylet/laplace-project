@@ -597,8 +597,9 @@ describe('check-in manual', () => {
       req(centro.cookie, 'POST', {}),
     );
 
-    expect(res.status).toBe(422);
-    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-SYS-422-006');
+    // 400 y `LP-SYS-400-008`: falta un encabezado, el pedido está mal armado.
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-SYS-400-008');
   });
 
   it('el socio en mora no entra si el centro no lo permite', async () => {
