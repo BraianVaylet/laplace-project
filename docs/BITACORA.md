@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `schedule`
 - **Tipo:** feature
-- **Commit/PR:** —
+- **Commit/PR:** `93ce381` (rama `feat/phase-1-ui-debt`)
 - **Trello:** https://trello.com/c/kiYLhCsp (F1-35) — movida a **Completadas**
 - **Qué cambió:** el DFSM tiene `/horario`: la grilla semanal por sede, el alta de plantillas, la
   edición eligiendo "solo esta" o "esta y las que siguen", y la cancelación con motivo y con el
