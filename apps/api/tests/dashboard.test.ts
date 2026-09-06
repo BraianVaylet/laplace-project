@@ -551,6 +551,44 @@ describe('aislamiento de tenant', () => {
   });
 });
 
+describe('el socio del mismo centro', () => {
+  /*
+   * El tablero estaba gateado con `classSession.read`, que el socio también
+   * tiene —lo necesita para ver la agenda desde la WAFM—. Pidiendo
+   * `/api/v1/dashboard?venueId=` se llevaba el panel de alertas entero: los
+   * nombres de sus compañeros, quiénes dejaron de venir y a quiénes les vence
+   * el pack. El aislamiento por tenant no lo tapa: es su propio centro.
+   */
+  it('🔴 NO abre el tablero del centro ni ve a sus compañeros', async () => {
+    const centro = await centroListo('socio-tablero');
+    await socio(centro, 'Secreto');
+    const cookie = await staffDe(centro, 'member');
+
+    const res = await app.request(
+      `/api/v1/dashboard?venueId=${centro.venueId}`,
+      req(cookie, 'GET'),
+    );
+    const texto = await res.text();
+
+    expect(res.status).toBe(403);
+    expect(JSON.parse(texto).error.code).toBe('LP-AUTH-403-002');
+    expect(texto).not.toContain('Secreto');
+  });
+
+  it('el mostrador del mismo centro sí lo abre y sí los ve', async () => {
+    const centro = await centroListo('mostrador-tablero');
+    await socio(centro, 'Secreto');
+    const frontDesk = await staffDe(centro, 'front_desk');
+
+    const { res, body } = await tablero(centro, frontDesk);
+
+    expect(res.status).toBe(200);
+    expect(alertaDe(body, 'inactive_members')?.items.map((item) => item.label)).toContain(
+      'Secreto Prueba',
+    );
+  });
+});
+
 describe('la ruta queda cubierta por la suite de F0-05', () => {
   it('trae su fixture de ataque', () => {
     const ruta = allRegisteredRoutes().find((route) => route.path === '/api/v1/dashboard');

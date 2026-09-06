@@ -48,8 +48,16 @@ export function createMetricsRoutes(
        * El coach SÍ entra: el tablero operativo es su pantalla de trabajo. Lo
        * que no ve es la plata, y eso se decide adentro del handler — no con un
        * permiso que le cerraría la puerta entera (§2.1.12).
+       *
+       * 🔴 Se gatea con `athlete.read` y no con `classSession.read`, que es lo
+       * que tenía: el socio también tiene `classSession.read` —lo necesita para
+       * ver la agenda desde la WAFM—, así que pidiendo
+       * `/api/v1/dashboard?venueId=` se llevaba el panel de alertas entero, con
+       * los nombres de sus compañeros, quiénes dejaron de venir y a quiénes les
+       * vence el pack. El aislamiento por tenant no lo tapa: es su propio
+       * centro. `athlete.read` lo tiene todo el staff y ningún socio.
        */
-      permission: { classSession: ['read'] },
+      permission: { athlete: ['read'] },
       request: { query: dashboardQuerySchema },
       response: { status: 200, schema: dashboardSchema },
       errorCodes: ['LP-AUTH-403-002', 'LP-SYS-404-002'],
@@ -108,7 +116,7 @@ export function createMetricsRoutes(
     routes.use('/api/v1/dashboard', guard);
   }
 
-  routes.get('/api/v1/dashboard', requirePermission({ classSession: ['read'] }), async (c) => {
+  routes.get('/api/v1/dashboard', requirePermission({ athlete: ['read'] }), async (c) => {
     const query = parseQuery(dashboardQuerySchema, c.req.query());
     const org = c.get('org') as unknown as { roles: string[] } | undefined;
 
