@@ -23,6 +23,30 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-04 — Fix: un filtro mal escrito respondía 500 en vez de 422
+
+- **Módulo:** `billing`, `booking`, `contracts`, `members`, `notifications`, `products`, `rooms`,
+  `schedule`, `venues`, `waivers`
+- **Tipo:** fix
+- **Commit/PR:** —
+- **Trello:** —
+- **Qué cambió:** los 13 listados que validaban la query string con `schema.parse(c.req.query())`
+  pasan a usar `parseQuery()`. Escribir `?limit=0` o `?limit=abc` ahora responde **422** con
+  `LP-SYS-422-006` y el nombre del campo que está mal, en vez del **500** con `LP-SYS-500-001` que
+  respondían antes.
+- **Por qué:** un `ZodError` pelado le llega al handler global como un fallo no manejado, así que lo
+  trataba como error de servidor. El usuario que se equivocaba tipeando un filtro veía "se rompió
+  algo" y no tenía forma de saber qué corregir; de paso, cada tipeo ajeno ensuciaba el panel de
+  soporte con un 500 falso. El helper correcto ya existía desde F1-24 y estaba usado en un solo
+  lugar (el buscador de Members).
+- **Impacto:** ninguno sobre el modelo de datos ni sobre la spec. Cambia el status y el código de
+  error de un caso que ya era un error: de `500 / LP-SYS-500-001` a `422 / LP-SYS-422-006`. No hay
+  códigos de error nuevos. Las 13 rutas declaran ahora `LP-SYS-422-006` en su `RouteSpec`, así que
+  el OpenAPI lo documenta. Cada módulo tocado sumó su test de integración de query inválida.
+- **Pendiente:** ninguno para este fix. No queda ningún `.parse(c.req.query())` en
+  `apps/api/src/modules/`. Queda afuera, por ser previo y ajeno: `GET /api/v1/dashboard` y
+  `PATCH /api/v1/class-templates/:id` ya devolvían `LP-SYS-422-006` y no lo declaran en su spec.
+
 ## 2026-09-04 — Fix: los entitlements leían la organización por un campo que no existe
 
 - **Módulo:** `entitlements`

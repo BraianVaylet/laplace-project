@@ -20,7 +20,7 @@ import {
   type EntitlementsLoader,
 } from '../../../entitlements/middleware.js';
 import { registerRoutes, type IsolationFixture } from '../../../http/route-registry.js';
-import { validated } from '../../../http/validate.js';
+import { parseQuery, validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import type { ProductService } from '../application/product-service.js';
 
@@ -64,7 +64,7 @@ export function createProductRoutes(
       permission: { product: ['read'] },
       request: { query: listQuery },
       response: { status: 200, schema: paginatedSchema(productSchema) },
-      errorCodes: ['LP-AUTH-403-002', 'LP-ENTL-403-002'],
+      errorCodes: ['LP-AUTH-403-002', 'LP-ENTL-403-002', 'LP-SYS-422-006'],
     },
     {
       method: 'POST',
@@ -148,7 +148,7 @@ export function createProductRoutes(
   }
 
   routes.get('/api/v1/products', requirePermission({ product: ['read'] }), async (c) => {
-    const query = listQuery.parse(c.req.query());
+    const query = parseQuery(listQuery, c.req.query());
 
     /*
      * El socio ve el catálogo público; el staff ve todo. Se decide por el

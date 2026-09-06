@@ -506,6 +506,26 @@ describe('el panel de cumplimiento (§2.1.20)', () => {
   });
 });
 
+/*
+ * Una query mal escrita es error del que la escribe, no del servidor: tiene que
+ * volver 422 con el código del envelope (§5.0). El 500 genérico le dice al
+ * usuario "se rompió algo" cuando lo único que pasa es que el filtro está mal.
+ */
+describe('una query inválida vuelve 422, no 500', () => {
+  it('un `limit` fuera de rango en el panel se rechaza con LP-SYS-422-006', async () => {
+    const centro = await centroListo('cumplimiento-query-invalida');
+    const doc = await publicar(centro);
+
+    const res = await app.request(
+      `/api/v1/legal-documents/${doc.publicId}/compliance?limit=0`,
+      req(centro.cookie, 'GET'),
+    );
+
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-SYS-422-006');
+  });
+});
+
 describe('aislamiento de tenant', () => {
   it('el atacante no ve los documentos del otro centro', async () => {
     const victima = await centroListo('waivers-victima');

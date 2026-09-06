@@ -838,6 +838,31 @@ describe('el registro de entregas (§2.1.14)', () => {
   });
 });
 
+/*
+ * Una query mal escrita es error del que la escribe, no del servidor: tiene que
+ * volver 422 con el código del envelope (§5.0). El 500 genérico le dice al
+ * usuario "se rompió algo" cuando lo único que pasa es que el filtro está mal.
+ */
+describe('una query inválida vuelve 422, no 500', () => {
+  it('un `limit` que no es número en la campana se rechaza con LP-SYS-422-006', async () => {
+    const { cookie } = await nuevoCentro('query-invalida');
+
+    const res = await app.request('/api/v1/notifications?limit=abc', req(cookie, 'GET'));
+
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-SYS-422-006');
+  });
+
+  it('un `limit` fuera de rango en el registro de entregas se rechaza igual', async () => {
+    const { cookie } = await nuevoCentro('query-invalida-entregas');
+
+    const res = await app.request('/api/v1/notification-deliveries?limit=0', req(cookie, 'GET'));
+
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-SYS-422-006');
+  });
+});
+
 describe('aislamiento de tenant', () => {
   it('el atacante no ve los avisos del otro centro', async () => {
     const victima = await centroListo('ntf-victima');

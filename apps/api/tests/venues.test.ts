@@ -351,6 +351,22 @@ describe('limite del plan', () => {
   });
 });
 
+/*
+ * Una query mal escrita es error del que la escribe, no del servidor: tiene que
+ * volver 422 con el código del envelope (§5.0). El 500 generico le dice al
+ * usuario "se rompio algo" cuando lo unico que pasa es que el filtro esta mal.
+ */
+describe('una query invalida vuelve 422, no 500', () => {
+  it('un `limit` fuera de rango se rechaza con LP-SYS-422-006', async () => {
+    const { cookie } = await nuevoCentro('query-invalida');
+
+    const res = await app.request('/api/v1/venues?limit=0', json(cookie));
+
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-SYS-422-006');
+  });
+});
+
 describe('aislamiento de tenant', () => {
   /** Dos centros distintos, cada uno con su sede. */
   async function dosCentros() {

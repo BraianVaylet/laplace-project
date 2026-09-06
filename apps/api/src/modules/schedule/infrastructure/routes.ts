@@ -33,7 +33,7 @@ import {
   type EntitlementsLoader,
 } from '../../../entitlements/middleware.js';
 import { registerRoutes, type IsolationFixture } from '../../../http/route-registry.js';
-import { validated } from '../../../http/validate.js';
+import { parseQuery, validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import type { ScheduleService } from '../application/schedule-service.js';
 
@@ -76,7 +76,7 @@ export function createScheduleRoutes(
       permission: { classSession: ['read'] },
       request: { query: paginationQuerySchema },
       response: { status: 200, schema: paginatedSchema(classTemplateSchema) },
-      errorCodes: ['LP-AUTH-403-002', 'LP-ENTL-403-002'],
+      errorCodes: ['LP-AUTH-403-002', 'LP-ENTL-403-002', 'LP-SYS-422-006'],
     },
     {
       method: 'POST',
@@ -297,7 +297,7 @@ export function createScheduleRoutes(
     '/api/v1/class-templates',
     requirePermission({ classSession: ['read'] }),
     async (c) => {
-      const query = paginationQuerySchema.parse(c.req.query());
+      const query = parseQuery(paginationQuerySchema, c.req.query());
       const venueId = c.req.query('venueId');
 
       return c.json(await service.listTemplates(venueId, query.cursor, query.limit));
@@ -340,7 +340,7 @@ export function createScheduleRoutes(
   );
 
   routes.get('/api/v1/sessions', requirePermission({ classSession: ['read'] }), async (c) => {
-    const query = agendaQuery.parse(c.req.query());
+    const query = parseQuery(agendaQuery, c.req.query());
 
     return c.json(
       await service.agenda(
