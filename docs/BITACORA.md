@@ -28,8 +28,8 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 - **Módulo:** `billing`, `booking`, `contracts`, `members`, `notifications`, `products`, `rooms`,
   `schedule`, `venues`, `waivers`
 - **Tipo:** fix
-- **Commit/PR:** —
-- **Trello:** —
+- **Commit/PR:** `fda644b` — [PR #6](https://github.com/BraianVaylet/laplace-project/pull/6)
+- **Trello:** — (salió de una revisión del handler de errores, no de una tarjeta)
 - **Qué cambió:** los 13 listados que validaban la query string con `schema.parse(c.req.query())`
   pasan a usar `parseQuery()`. Escribir `?limit=0` o `?limit=abc` ahora responde **422** con
   `LP-SYS-422-006` y el nombre del campo que está mal, en vez del **500** con `LP-SYS-500-001` que
