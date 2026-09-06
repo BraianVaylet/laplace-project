@@ -18,7 +18,7 @@ import {
   type EntitlementsLoader,
 } from '../../../entitlements/middleware.js';
 import { registerRoutes } from '../../../http/route-registry.js';
-import { validated } from '../../../http/validate.js';
+import { parseQuery, validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import { complianceToCsv } from '../domain/compliance-csv.js';
 import type { WaiverService } from '../application/waiver-service.js';
@@ -103,7 +103,7 @@ export function createWaiverRoutes(
       permission: { waiver: ['publish'] },
       request: { params: idParams, query: complianceQuery },
       response: { status: 200, schema: paginatedSchema(complianceEntrySchema) },
-      errorCodes: ['LP-SYS-404-002', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-SYS-404-002', 'LP-AUTH-403-002', 'LP-SYS-422-006'],
     },
   ]);
 
@@ -158,7 +158,7 @@ export function createWaiverRoutes(
     '/api/v1/legal-documents/:id/compliance',
     requirePermission({ waiver: ['publish'] }),
     async (c) => {
-      const query = complianceQuery.parse(c.req.query());
+      const query = parseQuery(complianceQuery, c.req.query());
       const documentId = c.req.param('id') as string;
 
       if (query.format === 'csv') {

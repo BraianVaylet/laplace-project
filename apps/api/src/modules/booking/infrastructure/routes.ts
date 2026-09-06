@@ -23,7 +23,7 @@ import {
 import { AppError } from '../../../http/errors.js';
 import { requireIdempotencyKey } from '../../../http/idempotency.js';
 import { registerRoutes, type IsolationFixture } from '../../../http/route-registry.js';
-import { validated } from '../../../http/validate.js';
+import { parseQuery, validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import type { BookingService } from '../application/booking-service.js';
 
@@ -56,7 +56,7 @@ export function createBookingRoutes(
       permission: { booking: ['read'] },
       request: { query: paginationQuerySchema },
       response: { status: 200, schema: paginatedSchema(bookingSchema) },
-      errorCodes: ['LP-AUTH-403-002', 'LP-ENTL-403-002'],
+      errorCodes: ['LP-AUTH-403-002', 'LP-ENTL-403-002', 'LP-SYS-422-006'],
     },
     {
       method: 'POST',
@@ -199,7 +199,7 @@ export function createBookingRoutes(
   };
 
   routes.get('/api/v1/bookings', requirePermission({ booking: ['read'] }), async (c) => {
-    const query = paginationQuerySchema.parse(c.req.query());
+    const query = parseQuery(paginationQuerySchema, c.req.query());
 
     /*
      * 🔴 `?memberId=` es SOLO para el staff.

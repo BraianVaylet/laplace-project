@@ -26,7 +26,7 @@ import {
   type EntitlementsLoader,
 } from '../../../entitlements/middleware.js';
 import { registerRoutes } from '../../../http/route-registry.js';
-import { validated } from '../../../http/validate.js';
+import { parseQuery, validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import type { NotificationService } from '../application/notification-service.js';
 
@@ -57,7 +57,7 @@ export function createNotificationRoutes(
       permission: { notification: ['read'] },
       request: { query: notificationListQuerySchema },
       response: { status: 200, schema: paginatedSchema(notificationSchema) },
-      errorCodes: ['LP-AUTH-403-002'],
+      errorCodes: ['LP-AUTH-403-002', 'LP-SYS-422-006'],
     },
     {
       method: 'GET',
@@ -181,7 +181,7 @@ export function createNotificationRoutes(
       permission: { notification: ['viewDeliveryLog'] },
       request: { query: deliveryLogQuery },
       response: { status: 200, schema: paginatedSchema(deliveryLogEntrySchema) },
-      errorCodes: ['LP-AUTH-403-002'],
+      errorCodes: ['LP-AUTH-403-002', 'LP-SYS-422-006'],
     },
   ]);
 
@@ -209,7 +209,7 @@ export function createNotificationRoutes(
   }
 
   routes.get('/api/v1/notifications', requirePermission({ notification: ['read'] }), async (c) => {
-    const query = notificationListQuerySchema.parse(c.req.query());
+    const query = parseQuery(notificationListQuerySchema, c.req.query());
 
     return c.json(await service.inboxOf(c.get('userId') as string, query));
   });
@@ -276,7 +276,7 @@ export function createNotificationRoutes(
     '/api/v1/notification-deliveries',
     requirePermission({ notification: ['viewDeliveryLog'] }),
     async (c) => {
-      const query = deliveryLogQuery.parse(c.req.query());
+      const query = parseQuery(deliveryLogQuery, c.req.query());
 
       return c.json(
         await service.deliveryLog(

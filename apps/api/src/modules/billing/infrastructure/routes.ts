@@ -22,7 +22,7 @@ import {
 } from '../../../entitlements/middleware.js';
 import { requireIdempotencyKey } from '../../../http/idempotency.js';
 import { registerRoutes, type IsolationFixture } from '../../../http/route-registry.js';
-import { validated } from '../../../http/validate.js';
+import { parseQuery, validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import type { BillingService } from '../application/billing-service.js';
 import { tillToCsv } from '../domain/billing.js';
@@ -142,7 +142,7 @@ export function createBillingRoutes(
       permission: { billing: ['read'] },
       request: { params: z.object({ venueId: z.string() }), query: tillQuery },
       response: { status: 200, schema: tillSummarySchema },
-      errorCodes: ['LP-SYS-404-002', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-SYS-404-002', 'LP-AUTH-403-002', 'LP-SYS-422-006'],
     },
     {
       method: 'GET',
@@ -222,7 +222,7 @@ export function createBillingRoutes(
     requirePermission({ billing: ['read'] }),
     async (c) => {
       const venueId = c.req.param('venueId');
-      const { date, format } = tillQuery.parse(c.req.query());
+      const { date, format } = parseQuery(tillQuery, c.req.query());
       const timeZone = await venues.timeZoneOf(venueId);
 
       // El dia es el DEL CENTRO: calculado en UTC, la caja de un centro argentino
