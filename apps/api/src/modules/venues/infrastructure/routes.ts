@@ -18,7 +18,7 @@ import {
 } from '../../../entitlements/middleware.js';
 import { AppError } from '../../../http/errors.js';
 import { registerRoutes, type IsolationFixture } from '../../../http/route-registry.js';
-import { validated } from '../../../http/validate.js';
+import { parseQuery, validated } from '../../../http/validate.js';
 import { runWithTenant } from '../../../tenancy/context.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import type { VenueService } from '../application/venue-service.js';
@@ -188,7 +188,7 @@ export function createVenueRoutes(service: VenueService, entitlements: Entitleme
   }
 
   routes.get('/api/v1/venues', requirePermission({ venue: ['read'] }), async (c) => {
-    const query = paginationQuerySchema.parse(c.req.query());
+    const query = parseQuery(paginationQuerySchema, c.req.query());
     return c.json(await service.list(query.cursor, query.limit));
   });
 

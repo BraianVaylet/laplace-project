@@ -22,7 +22,7 @@ import {
 } from '../../../entitlements/middleware.js';
 import { requireIdempotencyKey } from '../../../http/idempotency.js';
 import { registerRoutes, type IsolationFixture } from '../../../http/route-registry.js';
-import { validated } from '../../../http/validate.js';
+import { parseQuery, validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import type { BillingService } from '../application/billing-service.js';
 import { tillToCsv } from '../domain/billing.js';
@@ -82,7 +82,7 @@ export function createBillingRoutes(
       permission: { billing: ['charge'] },
       request: { body: createChargeSchema },
       response: { status: 201, schema: chargeSchema },
-      errorCodes: ['LP-BILL-422-003', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-BILL-422-003', 'LP-AUTH-403-002'],
     },
     {
       method: 'POST',
@@ -94,7 +94,7 @@ export function createBillingRoutes(
       permission: { billing: ['refund'] },
       request: { params: idParams, body: voidChargeSchema },
       response: { status: 200, schema: chargeSchema },
-      errorCodes: ['LP-BILL-404-004', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-BILL-404-004', 'LP-AUTH-403-002'],
     },
     {
       method: 'POST',
@@ -110,7 +110,7 @@ export function createBillingRoutes(
       permission: { billing: ['collect'] },
       request: { body: registerPaymentSchema },
       response: { status: 201, schema: paymentSchema },
-      errorCodes: ['LP-BILL-409-002', 'LP-BILL-422-003', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-BILL-409-002', 'LP-BILL-422-003', 'LP-AUTH-403-002'],
     },
     {
       method: 'POST',
@@ -126,7 +126,7 @@ export function createBillingRoutes(
       permission: { billing: ['refund'] },
       request: { params: idParams, body: refundPaymentSchema },
       response: { status: 200, schema: paymentSchema },
-      errorCodes: ['LP-BILL-404-004', 'LP-BILL-409-005', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-BILL-404-004', 'LP-BILL-409-005', 'LP-AUTH-403-002'],
     },
     {
       method: 'GET',
@@ -222,7 +222,7 @@ export function createBillingRoutes(
     requirePermission({ billing: ['read'] }),
     async (c) => {
       const venueId = c.req.param('venueId');
-      const { date, format } = tillQuery.parse(c.req.query());
+      const { date, format } = parseQuery(tillQuery, c.req.query());
       const timeZone = await venues.timeZoneOf(venueId);
 
       // El dia es el DEL CENTRO: calculado en UTC, la caja de un centro argentino

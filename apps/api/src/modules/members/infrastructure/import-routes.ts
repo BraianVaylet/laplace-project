@@ -78,7 +78,7 @@ export function createImportRoutes(
       permission: { athlete: ['import'] },
       request: { body: confirmImportSchema },
       response: { status: 200, schema: importResultSchema },
-      errorCodes: ['LP-MEMB-409-001', 'LP-ENTL-403-001', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-MEMB-409-001', 'LP-ENTL-403-001', 'LP-AUTH-403-002'],
     },
   ]);
 

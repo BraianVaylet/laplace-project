@@ -16,7 +16,7 @@ import {
   type EntitlementsLoader,
 } from '../../../entitlements/middleware.js';
 import { registerRoutes, type IsolationFixture } from '../../../http/route-registry.js';
-import { validated } from '../../../http/validate.js';
+import { parseQuery, validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import type { RoomService } from '../application/room-service.js';
 
@@ -83,7 +83,7 @@ export function createRoomRoutes(
       permission: { room: ['create'] },
       request: { body: createRoomSchema },
       response: { status: 201, schema: roomSchema },
-      errorCodes: ['LP-SCHD-404-008', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-SCHD-404-008', 'LP-AUTH-403-002'],
     },
     {
       method: 'GET',
@@ -107,7 +107,7 @@ export function createRoomRoutes(
       permission: { room: ['update'] },
       request: { params: idParams, body: updateRoomSchema },
       response: { status: 200, schema: roomSchema },
-      errorCodes: ['LP-SYS-404-002', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-SYS-404-002', 'LP-AUTH-403-002'],
     },
     {
       method: 'POST',
@@ -169,7 +169,7 @@ export function createRoomRoutes(
   }
 
   routes.get('/api/v1/rooms', requirePermission({ room: ['read'] }), async (c) => {
-    const query = listQuery.parse(c.req.query());
+    const query = parseQuery(listQuery, c.req.query());
     return c.json(await service.list(query.venueId, query.cursor, query.limit));
   });
 

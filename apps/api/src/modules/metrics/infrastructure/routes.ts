@@ -70,7 +70,7 @@ export function createMetricsRoutes(
       permission: { businessMetrics: ['read'] },
       request: { query: metricsQuerySchema },
       response: { status: 200, schema: metricsRangeSchema },
-      errorCodes: ['LP-AUTH-403-002', 'LP-SYS-422-006', 'LP-SYS-404-002'],
+      errorCodes: ['LP-AUTH-403-002', 'LP-SYS-404-002'],
     },
     {
       method: 'POST',
@@ -88,7 +88,7 @@ export function createMetricsRoutes(
       permission: { businessMetrics: ['read'] },
       request: { body: recomputeMetricsSchema },
       response: { status: 200, schema: recomputeResultSchema },
-      errorCodes: ['LP-AUTH-403-002', 'LP-SYS-422-006', 'LP-SYS-404-002'],
+      errorCodes: ['LP-AUTH-403-002', 'LP-SYS-404-002'],
     },
   ]);
 

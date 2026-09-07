@@ -80,7 +80,6 @@ export function createAttendanceRoutes(
         'LP-ATTD-422-002',
         'LP-ATTD-403-003',
         'LP-BOOK-403-005',
-        'LP-SYS-422-006',
       ],
     },
     {
@@ -96,6 +95,12 @@ export function createAttendanceRoutes(
       permission: { attendance: ['checkIn'] },
       request: { params: sessionParams },
       response: { status: 200, schema: bulkCheckInResultSchema },
+      /*
+       * El 422 va a mano porque acá no lo tira la validación del payload —
+       * no hay `query` ni `body` que validar — sino el `Idempotency-Key`
+       * faltante o mal formado (`http/idempotency.ts`). El generador solo
+       * deduce el que viene de la forma de la ruta.
+       */
       errorCodes: ['LP-BOOK-404-006', 'LP-AUTH-403-002', 'LP-SYS-422-006'],
     },
     {
@@ -125,13 +130,7 @@ export function createAttendanceRoutes(
       permission: { attendance: ['checkIn'] },
       request: { body: redeemQrSchema },
       response: { status: 200, schema: checkInResultSchema },
-      errorCodes: [
-        'LP-ATTD-422-004',
-        'LP-ATTD-404-005',
-        'LP-ATTD-422-002',
-        'LP-ATTD-403-003',
-        'LP-SYS-422-006',
-      ],
+      errorCodes: ['LP-ATTD-422-004', 'LP-ATTD-404-005', 'LP-ATTD-422-002', 'LP-ATTD-403-003'],
     },
     {
       method: 'POST',
@@ -154,7 +153,6 @@ export function createAttendanceRoutes(
         'LP-ATTD-403-003',
         'LP-CTRT-402-001',
         'LP-CTRT-402-002',
-        'LP-SYS-422-006',
       ],
     },
   ]);

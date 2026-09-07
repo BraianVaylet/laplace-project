@@ -86,7 +86,7 @@ export function createMemberRoutes(
       permission: { athlete: ['read'] },
       request: { query: memberSearchQuerySchema },
       response: { status: 200, schema: z.array(memberSearchHitSchema) },
-      errorCodes: ['LP-AUTH-403-002', 'LP-SYS-422-006'],
+      errorCodes: ['LP-AUTH-403-002'],
     },
     {
       method: 'POST',
@@ -102,13 +102,7 @@ export function createMemberRoutes(
       permission: { athlete: ['create'] },
       request: { body: createMemberSchema },
       response: { status: 201, schema: memberResponseSchema },
-      errorCodes: [
-        'LP-MEMB-409-001',
-        'LP-MEMB-422-004',
-        'LP-ENTL-403-001',
-        'LP-SYS-422-006',
-        'LP-AUTH-403-002',
-      ],
+      errorCodes: ['LP-MEMB-409-001', 'LP-MEMB-422-004', 'LP-ENTL-403-001', 'LP-AUTH-403-002'],
     },
     {
       method: 'GET',
@@ -205,7 +199,7 @@ export function createMemberRoutes(
       permission: { athleteNote: ['write'] },
       request: { params: idParams, body: memberNoteSchema },
       response: { status: 201, schema: memberNoteResponseSchema },
-      errorCodes: ['LP-MEMB-404-003', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-MEMB-404-003', 'LP-AUTH-403-002'],
     },
   ]);
 
@@ -225,7 +219,7 @@ export function createMemberRoutes(
   }
 
   routes.get('/api/v1/members', requirePermission({ athlete: ['read'] }), async (c) => {
-    const query = listQuery.parse(c.req.query());
+    const query = parseQuery(listQuery, c.req.query());
     const page = await service.list(query, query.cursor, query.limit);
 
     return c.json({ items: page.items.map(toMemberResponse), nextCursor: page.nextCursor });

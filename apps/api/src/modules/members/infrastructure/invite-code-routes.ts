@@ -17,7 +17,7 @@ import {
   type EntitlementsLoader,
 } from '../../../entitlements/middleware.js';
 import { registerRoutes, type IsolationFixture } from '../../../http/route-registry.js';
-import { validated } from '../../../http/validate.js';
+import { parseQuery, validated } from '../../../http/validate.js';
 import { fromBsonDate } from '../../../persistence/bson-date.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import type { InviteCodeService } from '../application/invite-code-service.js';
@@ -75,7 +75,7 @@ export function createInviteCodeRoutes(
       permission: { athlete: ['create'] },
       request: { body: createInviteCodeSchema },
       response: { status: 201, schema: inviteCodeSchema },
-      errorCodes: ['LP-MEMB-422-005', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-MEMB-422-005', 'LP-AUTH-403-002'],
     },
     {
       method: 'POST',
@@ -104,7 +104,7 @@ export function createInviteCodeRoutes(
       tags: ['members'],
       request: { body: redeemInviteCodeSchema },
       response: { status: 200, schema: redeemResultSchema },
-      errorCodes: ['LP-MEMB-422-005', 'LP-SYS-422-006', 'LP-AUTH-401-005'],
+      errorCodes: ['LP-MEMB-422-005', 'LP-AUTH-401-005'],
     },
   ]);
 
@@ -136,7 +136,7 @@ export function createInviteCodeRoutes(
   }
 
   routes.get('/api/v1/invite-codes', requirePermission({ athlete: ['create'] }), async (c) => {
-    const query = paginationQuerySchema.parse(c.req.query());
+    const query = parseQuery(paginationQuerySchema, c.req.query());
     const page = await service.list(query.cursor, query.limit);
 
     return c.json({

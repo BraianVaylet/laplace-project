@@ -21,7 +21,7 @@ import {
   type EntitlementsLoader,
 } from '../../../entitlements/middleware.js';
 import { registerRoutes, type IsolationFixture } from '../../../http/route-registry.js';
-import { validated } from '../../../http/validate.js';
+import { parseQuery, validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import type { ContractService } from '../application/contract-service.js';
 
@@ -79,13 +79,7 @@ export function createContractRoutes(
       permission: { contract: ['create'] },
       request: { body: sellContractSchema },
       response: { status: 201, schema: contractSchema },
-      errorCodes: [
-        'LP-PROD-404-003',
-        'LP-PROD-409-002',
-        'LP-PROD-422-001',
-        'LP-SYS-422-006',
-        'LP-AUTH-403-002',
-      ],
+      errorCodes: ['LP-PROD-404-003', 'LP-PROD-409-002', 'LP-PROD-422-001', 'LP-AUTH-403-002'],
     },
     {
       method: 'GET',
@@ -135,13 +129,7 @@ export function createContractRoutes(
       permission: { contract: ['freeze'] },
       request: { params: idParams, body: freezeContractSchema },
       response: { status: 200, schema: contractSchema },
-      errorCodes: [
-        'LP-CTRT-404-005',
-        'LP-CTRT-422-004',
-        'LP-CTRT-422-006',
-        'LP-SYS-422-006',
-        'LP-AUTH-403-002',
-      ],
+      errorCodes: ['LP-CTRT-404-005', 'LP-CTRT-422-004', 'LP-CTRT-422-006', 'LP-AUTH-403-002'],
     },
     {
       method: 'POST',
@@ -166,7 +154,7 @@ export function createContractRoutes(
       permission: { contract: ['adjust'] },
       request: { params: idParams, body: adjustCreditsSchema },
       response: { status: 200, schema: contractSchema },
-      errorCodes: ['LP-CTRT-404-005', 'LP-CTRT-422-004', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-CTRT-404-005', 'LP-CTRT-422-004', 'LP-AUTH-403-002'],
     },
   ]);
 
@@ -186,7 +174,7 @@ export function createContractRoutes(
   }
 
   routes.get('/api/v1/contracts', requirePermission({ contract: ['read'] }), async (c) => {
-    const query = listQuery.parse(c.req.query());
+    const query = parseQuery(listQuery, c.req.query());
 
     return c.json(await service.list(query, query.cursor, query.limit));
   });

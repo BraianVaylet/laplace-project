@@ -41,6 +41,16 @@ const routes: RouteSpec[] = [
     request: { query: z.object({ cursor: z.string().optional(), limit: z.coerce.number() }) },
     response: { status: 200, schema: z.object({ items: z.array(memberSchema) }) },
   },
+  {
+    method: 'POST',
+    path: '/api/v1/members/:id/check-in',
+    tenantScoped: true,
+    summary: 'Check-in de un miembro',
+    tags: ['members'],
+    request: { params: z.object({ id: z.string() }), body: z.object({ note: z.string() }) },
+    response: { status: 200, schema: memberSchema },
+    errorCodes: ['LP-SYS-422-006', 'LP-AUTH-403-002'],
+  },
 ];
 
 const doc = () => generateOpenApiDocument(routes, options);
@@ -182,6 +192,54 @@ describe('el envelope de error, en todas las rutas', () => {
         '$ref',
       ),
     ).toBe('#/components/schemas/ApiError');
+  });
+});
+
+describe('el 422 de entrada invalida se deduce de la forma de la ruta', () => {
+  it('la que declara query lo documenta sin declararlo: GET /members no trae ni un errorCode', () => {
+    expect(dig(operation('/api/v1/members', 'get'), 'responses', '422', 'description')).toContain(
+      'LP-SYS-422-006',
+    );
+  });
+
+  it('la que declara body, tambien', () => {
+    expect(dig(operation('/api/v1/members', 'post'), 'responses', '422', 'description')).toContain(
+      'LP-SYS-422-006',
+    );
+  });
+
+  it('la que solo tiene params no lo documenta: ahi no hay entrada que validar', () => {
+    const responses = operation('/api/v1/members/:id', 'get')['responses'] as Record<
+      string,
+      unknown
+    >;
+
+    expect(responses['422']).toBeUndefined();
+  });
+
+  it('declararlo igual a mano no lo repite en la descripcion', () => {
+    const description = dig(
+      operation('/api/v1/members/:id/check-in', 'post'),
+      'responses',
+      '422',
+      'description',
+    ) as string;
+
+    expect(description.match(/LP-SYS-422-006/g)).toHaveLength(1);
+  });
+
+  it('convive con los codigos 422 propios del modulo', () => {
+    const description = dig(
+      operation('/api/v1/members/:id/check-in', 'post'),
+      'responses',
+      '422',
+      'description',
+    ) as string;
+
+    expect(description).toContain('LP-SYS-422-006');
+    expect(
+      dig(operation('/api/v1/members/:id/check-in', 'post'), 'responses', '403'),
+    ).toBeDefined();
   });
 });
 

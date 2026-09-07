@@ -33,7 +33,7 @@ import {
   type EntitlementsLoader,
 } from '../../../entitlements/middleware.js';
 import { registerRoutes, type IsolationFixture } from '../../../http/route-registry.js';
-import { validated } from '../../../http/validate.js';
+import { parseQuery, validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import type { ScheduleService } from '../application/schedule-service.js';
 
@@ -45,6 +45,9 @@ const agendaQuery = z.object({
   from: z.string().datetime({ offset: true }),
   to: z.string().datetime({ offset: true }),
 });
+
+/** Los cierres son por sede: sin `venueId` no hay nada que listar. */
+const closureQuery = z.object({ venueId: z.string().min(1, 'Elegí la sede.') });
 
 /** Nombre de la clase sembrada por los fixtures. No puede salir en ninguna respuesta ajena. */
 export const VICTIM_TEMPLATE_NAME = 'Clase del otro centro';
@@ -99,7 +102,7 @@ export function createScheduleRoutes(
       permission: { classSession: ['create'] },
       request: { body: createClassTemplateSchema },
       response: { status: 201, schema: classTemplateSchema },
-      errorCodes: ['LP-SCHD-422-004', 'LP-SCHD-404-008', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-SCHD-422-004', 'LP-SCHD-404-008', 'LP-AUTH-403-002'],
     },
     {
       method: 'GET',
@@ -158,7 +161,7 @@ export function createScheduleRoutes(
       permission: { classSession: ['read'] },
       request: { query: agendaQuery },
       response: { status: 200, schema: z.array(classSessionSchema) },
-      errorCodes: ['LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-AUTH-403-002'],
     },
     {
       method: 'POST',
@@ -181,7 +184,7 @@ export function createScheduleRoutes(
       permission: { classSession: ['create'] },
       request: { body: createSessionSchema },
       response: { status: 201, schema: classSessionSchema },
-      errorCodes: ['LP-SCHD-409-003', 'LP-SCHD-404-008', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-SCHD-409-003', 'LP-SCHD-404-008', 'LP-AUTH-403-002'],
     },
     {
       method: 'PATCH',
@@ -208,7 +211,7 @@ export function createScheduleRoutes(
       permission: { classSession: ['cancel'] },
       request: { params: idParams, body: cancelSessionSchema },
       response: { status: 200, schema: classSessionSchema },
-      errorCodes: ['LP-BOOK-404-006', 'LP-SCHD-422-005', 'LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-BOOK-404-006', 'LP-SCHD-422-005', 'LP-AUTH-403-002'],
     },
     {
       method: 'GET',
@@ -221,9 +224,9 @@ export function createScheduleRoutes(
       summary: 'Feriados y cierres de una sede',
       tags: ['schedule'],
       permission: { classSession: ['read'] },
-      request: { query: z.object({ venueId: z.string() }) },
+      request: { query: closureQuery },
       response: { status: 200, schema: z.array(venueClosureSchema) },
-      errorCodes: ['LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-AUTH-403-002'],
     },
     {
       method: 'POST',
@@ -239,7 +242,7 @@ export function createScheduleRoutes(
       permission: { classSession: ['cancel'] },
       request: { body: createClosureSchema },
       response: { status: 201, schema: venueClosureSchema },
-      errorCodes: ['LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-AUTH-403-002'],
     },
     {
       method: 'POST',
@@ -255,7 +258,7 @@ export function createScheduleRoutes(
       permission: { classSession: ['create'] },
       request: { body: duplicateWeekSchema },
       response: { status: 200, schema: duplicateWeekResultSchema },
-      errorCodes: ['LP-SYS-422-006', 'LP-AUTH-403-002'],
+      errorCodes: ['LP-AUTH-403-002'],
     },
     {
       method: 'GET',
@@ -297,7 +300,7 @@ export function createScheduleRoutes(
     '/api/v1/class-templates',
     requirePermission({ classSession: ['read'] }),
     async (c) => {
-      const query = paginationQuerySchema.parse(c.req.query());
+      const query = parseQuery(paginationQuerySchema, c.req.query());
       const venueId = c.req.query('venueId');
 
       return c.json(await service.listTemplates(venueId, query.cursor, query.limit));
@@ -340,7 +343,7 @@ export function createScheduleRoutes(
   );
 
   routes.get('/api/v1/sessions', requirePermission({ classSession: ['read'] }), async (c) => {
-    const query = agendaQuery.parse(c.req.query());
+    const query = parseQuery(agendaQuery, c.req.query());
 
     return c.json(
       await service.agenda(
@@ -392,7 +395,7 @@ export function createScheduleRoutes(
   );
 
   routes.get('/api/v1/closures', requirePermission({ classSession: ['read'] }), async (c) => {
-    const venueId = z.string().min(1).parse(c.req.query('venueId'));
+    const { venueId } = parseQuery(closureQuery, c.req.query());
 
     return c.json(await service.listClosures(venueId));
   });
