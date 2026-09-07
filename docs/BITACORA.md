@@ -27,7 +27,7 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 - **Módulo:** `api`
 - **Tipo:** fix
-- **Commit/PR:** —
+- **Commit/PR:** `d4bba06` — [PR #7](https://github.com/BraianVaylet/laplace-project/pull/7)
 - **Trello:** —
 - **Qué cambió:** el OpenAPI generado ya documenta la respuesta `422 LP-SYS-422-006` en **toda**
   ruta que declara `request.query` o `request.body`: el generador la deduce de la forma del
