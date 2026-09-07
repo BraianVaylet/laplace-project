@@ -23,6 +23,31 @@ No se registra: refactors internos sin impacto observable ni cambios de formato.
 
 ---
 
+## 2026-09-06 — Fix: el OpenAPI no documentaba el 422 de entrada inválida
+
+- **Módulo:** `api`
+- **Tipo:** fix
+- **Commit/PR:** `d4bba06` — [PR #7](https://github.com/BraianVaylet/laplace-project/pull/7)
+- **Trello:** —
+- **Qué cambió:** el OpenAPI generado ya documenta la respuesta `422 LP-SYS-422-006` en **toda**
+  ruta que declara `request.query` o `request.body`: el generador la deduce de la forma del
+  `RouteSpec` en vez de esperar que cada ruta la repita a mano en `errorCodes`. Además, las 14
+  rutas que validaban su query con `schema.parse(c.req.query())` pasaron a `parseQuery()`: un
+  filtro mal escrito responde 422 y no 500.
+- **Por qué:** `GET /api/v1/dashboard` y `PATCH /api/v1/class-templates/:id` devolvían 422 sin
+  declararlo. Al revisar el resto aparecieron 34 de 104 rutas registradas en la misma situación —
+  un tercio de la API —, así que el problema no era el olvido puntual sino pedirle a cada ruta que
+  repita un dato que ya está en su propio spec. En el camino se vio que la mitad de esas rutas
+  ni siquiera devolvía el 422 prometido: `schema.parse()` a secas tira un `ZodError` pelado y el
+  handler global lo trata como fallo no manejado, así que un `?limit=999` respondía 500.
+- **Impacto:** ninguno sobre el modelo de datos ni sobre el contrato de la API — no hay códigos de
+  error nuevos. Cambia el status de 14 endpoints que leen filtros de la query: ante una query
+  inválida ahora responden 422 y antes respondían 500.
+  `errorCodes` deja de llevar `LP-SYS-422-006` en las rutas donde se deduce; queda a mano solo
+  donde no sale de la forma de la ruta, como `POST /api/v1/sessions/:sessionId/check-in-all`, que
+  lo devuelve por el `Idempotency-Key`.
+- **Pendiente:** ninguno.
+
 ## 2026-09-04 — Fix: los entitlements leían la organización por un campo que no existe
 
 - **Módulo:** `entitlements`

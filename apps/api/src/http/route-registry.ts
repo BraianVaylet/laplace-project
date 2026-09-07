@@ -46,7 +46,14 @@ export interface RouteSpec {
       }
     | undefined;
   response?: { status: number; schema: ZodType } | undefined;
-  /** Codigos de `docs/errors.md` que esta ruta puede devolver. */
+  /**
+   * Codigos de `docs/errors.md` que esta ruta puede devolver **y que no se
+   * deducen de su forma**.
+   *
+   * `LP-SYS-422-006` no va aca cuando la ruta declara `request.query` o
+   * `request.body`: el generador lo agrega solo (`openapi/generate.ts`).
+   * Repetirlo a mano se olvidaba y la doc terminaba mintiendo por omision.
+   */
   errorCodes?: readonly ErrorCode[] | undefined;
 }
 

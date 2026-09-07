@@ -219,7 +219,7 @@ export function createSauRoutes(service: SuscService) {
       tags: ['susc'],
       request: { query: supportQuerySchema },
       response: { status: 200, schema: z.array(supportHitSchema) },
-      errorCodes: ['LP-AUTH-403-002', 'LP-SYS-422-006'],
+      errorCodes: ['LP-AUTH-403-002'],
     },
     {
       method: 'PUT',

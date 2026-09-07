@@ -1,5 +1,5 @@
 import { z, type ZodType } from 'zod';
-import { apiErrorSchema } from '@laplace/schemas';
+import { apiErrorSchema, type ErrorCode } from '@laplace/schemas';
 import type { RouteSpec } from '../http/route-registry.js';
 
 /**
@@ -63,6 +63,31 @@ function parametersFor(spec: RouteSpec): JsonObject[] {
   return parameters;
 }
 
+/**
+ * Lo que devuelve toda validacion de entrada: `parseQuery` para la query y
+ * `validated` para el body (`http/validate.ts`).
+ */
+const INVALID_INPUT_CODE = 'LP-SYS-422-006' satisfies ErrorCode;
+
+/**
+ * Los codigos que la ruta declara, mas los que se deducen de su forma.
+ *
+ * `LP-SYS-422-006` sale del spec y no de cada `errorCodes` a mano: una ruta que
+ * declara `query` o `body` valida esa entrada, y por lo tanto puede
+ * rechazarla con 422. Repetirlo a mano se olvidaba — cuando se corrigio, un
+ * tercio de las rutas registradas no lo declaraba y su doc mentia por omision.
+ *
+ * Es aditivo: los codigos que no se deducen de la forma de la ruta —
+ * `LP-SYS-422-006` por `Idempotency-Key` faltante, sin ir mas lejos — se siguen
+ * declarando a mano, y el `Set` evita que salgan repetidos.
+ */
+function errorCodesOf(spec: RouteSpec): ErrorCode[] {
+  const declared = spec.errorCodes ?? [];
+  const validatesInput = spec.request?.query !== undefined || spec.request?.body !== undefined;
+
+  return [...new Set(validatesInput ? [...declared, INVALID_INPUT_CODE] : declared)];
+}
+
 function responsesFor(spec: RouteSpec): JsonObject {
   const responses: JsonObject = {};
 
@@ -79,7 +104,7 @@ function responsesFor(spec: RouteSpec): JsonObject {
    * los codigos que esa ruta puede devolver escritos en la descripcion: es lo
    * que le permite a soporte saber que esperar sin leer el codigo.
    */
-  const codes = spec.errorCodes ?? [];
+  const codes = errorCodesOf(spec);
   const byStatus = new Map<string, string[]>();
 
   for (const code of codes) {

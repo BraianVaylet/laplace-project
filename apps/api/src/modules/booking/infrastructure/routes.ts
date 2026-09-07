@@ -23,7 +23,7 @@ import {
 import { AppError } from '../../../http/errors.js';
 import { requireIdempotencyKey } from '../../../http/idempotency.js';
 import { registerRoutes, type IsolationFixture } from '../../../http/route-registry.js';
-import { validated } from '../../../http/validate.js';
+import { parseQuery, validated } from '../../../http/validate.js';
 import { tenantContext } from '../../../tenancy/middleware.js';
 import type { BookingService } from '../application/booking-service.js';
 
@@ -76,7 +76,6 @@ export function createBookingRoutes(
         'LP-BOOK-422-003',
         'LP-CTRT-402-001',
         'LP-CTRT-402-002',
-        'LP-SYS-422-006',
         'LP-AUTH-403-002',
       ],
     },
@@ -199,7 +198,7 @@ export function createBookingRoutes(
   };
 
   routes.get('/api/v1/bookings', requirePermission({ booking: ['read'] }), async (c) => {
-    const query = paginationQuerySchema.parse(c.req.query());
+    const query = parseQuery(paginationQuerySchema, c.req.query());
 
     /*
      * 🔴 `?memberId=` es SOLO para el staff.

@@ -266,6 +266,20 @@ describe('lectura y edicion', () => {
     expect(body.items).toHaveLength(1);
     expect(body.items[0]?.name).toBe('Box Toro Centro');
   });
+
+  /*
+   * 🔴 Un filtro mal escrito es culpa de quien pide, no del servidor: antes
+   * `schema.parse(c.req.query())` tiraba un ZodError pelado y el handler global
+   * lo devolvia como 500. La doc de la ruta promete 422.
+   */
+  it('un limit fuera de rango se rechaza con 422, no con un 500', async () => {
+    const { cookie } = await nuevoCentro('limit-invalido');
+
+    const res = await app.request('/api/v1/venues?limit=999', json(cookie));
+
+    expect(res.status).toBe(422);
+    expect(((await res.json()) as ErrorBody).error.code).toBe('LP-SYS-422-006');
+  });
 });
 
 describe('archivar y reactivar', () => {
